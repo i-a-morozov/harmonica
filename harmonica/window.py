@@ -6,7 +6,6 @@ Initialize Window class instance.
 
 import torch
 
-
 class Window:
     """
     Returns
@@ -70,9 +69,7 @@ class Window:
 
     """
 
-    def __init__(
-        self, length: int = 1024, name: str = None, order: float = None, **kwargs
-    ) -> None:
+    def __init__(self, length: int = 1024, name: str = None, order: float = None, **kwargs) -> None:
         self.length = length
         self.data = torch.ones(length, **kwargs)
         self.dtype = self.data.dtype
@@ -82,9 +79,8 @@ class Window:
         if name != None and order != None:
             self.set_data(name=name, order=order)
 
-    def set_data(
-        self, *, name: str = None, order: float = None, tensor: torch.Tensor = None
-    ) -> None:
+
+    def set_data(self, *, name: str = None, order: float = None, tensor: torch.Tensor = None) -> None:
         """
         Set (new) window data for given name and order or input tensor with matching length.
 
@@ -109,9 +105,7 @@ class Window:
         if tensor == None and name != None and order != None:
             self.name = name
             self.order = order
-            type.__getattribute__(self.__class__, self.name)(
-                self.length, self.order, self.data
-            )
+            type.__getattribute__(self.__class__, self.name)(self.length, self.order, self.data)
             return
 
         if tensor != None and self.data.shape == tensor.shape:
@@ -120,6 +114,7 @@ class Window:
 
         raise Exception(f"WINDOW: wrong input arguments in set_data.")
 
+
     @property
     def total(self) -> torch.Tensor:
         """
@@ -127,6 +122,7 @@ class Window:
 
         """
         return torch.sum(self.data)
+
 
     @staticmethod
     @torch.jit.script
@@ -150,25 +146,14 @@ class Window:
         None
 
         """
-        pi = 2.0 * torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
-        num = (
-            2.0 ** order
-            * torch.exp(
-                torch.lgamma(
-                    torch.tensor(1.0 + order, dtype=data.dtype, device=data.device)
-                )
-            )
-            ** 2
-        )
-        den = torch.exp(
-            torch.lgamma(
-                torch.tensor(1.0 + 2.0 * order, dtype=data.dtype, device=data.device)
-            )
-        )
-        factor = num / den
-        torch.linspace(0.0, (length - 1.0) / length, length, out=data)
-        torch.cos(2.0 * pi * (data - 0.5), out=data)
+        pi = 2.0*torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
+        num = 2.0**order*torch.exp(torch.lgamma(torch.tensor(1.0 + order, dtype=data.dtype, device=data.device)))**2
+        den = torch.exp(torch.lgamma(torch.tensor(1.0 + 2.0*order, dtype=data.dtype, device=data.device)))
+        factor = num/den
+        torch.linspace(0.0, (length - 1.0)/length, length, out=data)
+        torch.cos(2.0*pi*(data - 0.5), out=data)
         data.add_(1.0).pow_(order).mul_(factor)
+
 
     @staticmethod
     @torch.jit.script
@@ -192,14 +177,15 @@ class Window:
         None
 
         """
-        pi = 2.0 * torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
-        factor = 1.0 / torch.i0(pi * order)
+        pi = 2.0*torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
+        factor = 1.0/torch.i0(pi*order)
         torch.linspace(0.0, (length - 1.0) / length, length, out=data)
         data.sub_(0.5).pow_(2.0).mul_(-4.0).add_(1.0)
         torch.sqrt(data, out=data)
-        data.mul_(pi * order)
+        data.mul_(pi*order)
         torch.i0(data, out=data)
         data.mul_(factor)
+
 
     @classmethod
     def from_cosine(cls, length: int, order: float, **kwargs) -> "Window":
@@ -222,6 +208,7 @@ class Window:
         """
         return Window(length, "cosine_window", order, **kwargs)
 
+
     @classmethod
     def from_kaiser(cls, length: int, order: float, **kwargs) -> "Window":
         """
@@ -243,6 +230,7 @@ class Window:
         """
         return Window(length, "kaiser_window", order, **kwargs)
 
+
     def __repr__(self) -> str:
         """
         String representation.
@@ -250,12 +238,14 @@ class Window:
         """
         return f"{self.__class__.__name__}{self.length, self.name, self.order}"
 
+
     def __len__(self) -> int:
         """
         Window length.
 
         """
         return self.length
+
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         """
@@ -274,9 +264,8 @@ class Window:
         """
         return self.data[idx]
 
-    def __call__(
-        self, *, name: str = None, order: float = None, tensor: torch.Tensor = None
-    ) -> None:
+
+    def __call__(self, *, name: str = None, order: float = None, tensor: torch.Tensor = None) -> None:
         """
         Set (new) window data for given name and order or input tensor with matching length.
 
@@ -304,7 +293,6 @@ class Window:
 
 def main():
     pass
-
 
 if __name__ == "__main__":
     main()
