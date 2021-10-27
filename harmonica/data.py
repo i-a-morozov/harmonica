@@ -443,9 +443,7 @@ class Data:
 
         """
         self.source = "epics"
-        data = numpy.array(epics.caget_many(self.pv_list, count=count)).reshape(
-            self.size, -1
-        )
+        data = numpy.array(epics.caget_many(self.pv_list, count=count)).reshape(self.size, -1)
         if data.shape == (self.size, count):
             if self.pv_rise != None:
                 for i, value in enumerate(data):
