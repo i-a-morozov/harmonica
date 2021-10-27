@@ -1,0 +1,758 @@
+#softIoc -d virtual_tbt.db
+record(waveform, "TEST:STP2:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP2:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP2:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:STP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP2:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP2:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP2:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP3:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP3:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP3:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP5:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP5:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP5:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP6:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP6:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP6:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP7:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP7:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP7:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP8:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP8:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP8:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP9:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP9:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP9:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SIP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SIP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SIP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SIP2:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SIP2:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SIP2:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP10:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP10:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP10:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP11:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP11:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP11:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP12:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP12:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP12:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP13:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP13:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP13:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP14:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP14:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP14:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP15:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP15:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP15:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP16:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP16:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP16:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SRP17:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP17:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SRP17:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SEP5:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP5:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP5:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SEP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SEP3:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP3:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP3:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SEP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:SEP0:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP0:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:SEP0:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NEP0:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP0:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP0:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NEP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NEP3:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP3:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP3:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NEP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NEP5:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP5:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NEP5:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP17:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP17:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP17:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP16:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP16:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP16:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP15:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP15:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP15:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP14:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP14:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP14:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP13:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP13:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP13:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP12:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP12:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP12:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP11:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP11:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP11:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP10:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP10:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP10:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NIP3:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NIP3:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NIP3:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NIP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NIP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NIP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP9:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP9:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP9:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP8:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP8:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP8:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP7:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP7:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP7:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP6:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP6:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP6:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP5:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP5:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP5:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP3:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP3:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP3:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP2:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP2:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP2:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NRP1:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP1:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NRP1:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NTP4:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP4:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP4:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NTP2:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP2:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP2:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:NTP0:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP0:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:NTP0:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}record(waveform, "TEST:STP0:turns_x-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP0:turns_z-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "TEST:STP0:turns_i-I") {
+    field(DESC, "BPM")
+    field(NELM, "8192")
+    field(FTVL, "DOUBLE")
+}
