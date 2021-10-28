@@ -220,7 +220,8 @@ class Data:
 
     @staticmethod
     @torch.jit.script
-    def generate_harmonics(tensor: torch.Tensor, mean: torch.Tensor, frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor) -> None:
+    def generate_harmonics(tensor: torch.Tensor, mean: torch.Tensor,
+                           frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor) -> None:
         """
         Generate tensor from harmonics.
 
@@ -276,7 +277,8 @@ class Data:
 
 
     @classmethod
-    def from_harmonics(cls, size: int, window: "Window", mean: torch.Tensor, frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor, std: torch.Tensor = None) -> "Data":
+    def from_harmonics(cls, size: int, window: "Window", mean: torch.Tensor,
+                       frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor, std: torch.Tensor = None) -> "Data":
         """
         Generate Data instance from given harmonics parameters.
 
@@ -468,7 +470,8 @@ class Data:
 
 
     @classmethod
-    def from_epics(cls, size: int, window: "Window", pv_list: list, pv_rise: list = None, shift: int = 0, count: int = LIMIT) -> "Data":
+    def from_epics(cls, size: int, window: "Window",
+                   pv_list: list, pv_rise: list = None, shift: int = 0, count: int = LIMIT) -> "Data":
         """
         Generate Data instance from epics.
 
@@ -501,7 +504,8 @@ class Data:
         return out
 
 
-    def make_matrix(self, idx: int, length: int, shift: int, name: str = None, order: float = None) -> "Data":
+    def make_matrix(self, idx: int, length: int,
+                    shift: int, name: str = None, order: float = None) -> "Data":
         """
         Generate matrix from signal (from work).
 

@@ -257,7 +257,8 @@ class Frequency():
 
     @staticmethod
     @torch.jit.script
-    def ffrft_get(length:int, data:torch.Tensor, trig:torch.Tensor, work:torch.Tensor, table:torch.Tensor) -> None:
+    def ffrft_get(length:int, data:torch.Tensor, trig:torch.Tensor,
+                  work:torch.Tensor, table:torch.Tensor) -> None:
         """
         FFRFT computation (staticmethod).
 
@@ -544,7 +545,7 @@ class Frequency():
 
     def task_mixed_spectrum(self, *, length:int=1024, window:bool=True, f_range:tuple=(None, None),
                             name:str='cosine_window', order:float=1.0, normalize:bool=True,
-                            position:list=None, log:bool=False) -> tuple:
+                            position:list=None, log:bool=False, **kwargs) -> tuple:
         """
         Compute normalized mixed spectrum for given range.
 
@@ -608,7 +609,7 @@ class Frequency():
             data = data.work.cpu().numpy().flatten()
             time = numpy.array([position + i for i in range(1, 1 + length)]).flatten()
             grid = 2.0*numpy.pi*numpy.linspace(f_min, f_max, len(time) + 1)
-            spectrum = numpy.abs(nufft.nufft1d3(time, data, grid))
+            spectrum = numpy.abs(nufft.nufft1d3(time, data, grid, **kwargs))
             grid /= 2.0*numpy.pi
             spectrum /= numpy.max(spectrum)
 
@@ -623,7 +624,7 @@ class Frequency():
 
     def task_mixed_frequency(self, *, length:int=1024, window:bool=True, f_range:tuple=(None, None),
                              name:str='cosine_window', order:float=1.0, normalize:bool=True,
-                             position:list=None) -> torch.Tensor:
+                             position:list=None, **kwargs) -> torch.Tensor:
         """
         Estimate frequency using mixed TbT data.
 
@@ -679,7 +680,7 @@ class Frequency():
             data = data.work.cpu().numpy().flatten()
             time = numpy.array([position + i for i in range(1, 1 + length)]).flatten()
             grid = 2.0*numpy.pi*numpy.linspace(f_min, f_max, len(time) + 1)
-            spectrum = numpy.abs(nufft.nufft1d3(time, data, grid))
+            spectrum = numpy.abs(nufft.nufft1d3(time, data, grid, **kwargs))
             f1 = grid[numpy.argmax(spectrum)]/(2*numpy.pi)
             grid = 2.0*numpy.pi*numpy.linspace(f1 - rate/len(time), f1 + rate/len(time), len(time) + 1)
             spectrum = numpy.abs(nufft.nufft1d3(time, data, grid))

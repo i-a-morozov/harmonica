@@ -4,13 +4,17 @@ Utility constants & functions.
 """
 
 # Number of BPMs
-NBPM = 54
+BPM = 54
 
 # Maximum allowed number of turns to read from PVs
 LIMIT = 8192
 
 # Ring circumference
 LENGTH = 366.075015600006
+
+# Model tunes
+QX = 8.53688309873731
+QZ = 7.57677562060534
 
 # BPM PV name generator
 def pv_make(name: str, plane: str, test: bool = False) -> str:
