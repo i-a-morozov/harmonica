@@ -1,6 +1,6 @@
 """
-usage: hs_frequency_shift [-h] [-p {x,z}] [-l LENGTH] [-t TURN] [--shift SHIFT] [-s BPM [BPM ...] | -o BPM [BPM ...]] [-r] [-f] [-c | -n] [--print]
-                          [--mean | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--min MIN] [--max MAX]
+usage: hs_frequency_shift [-h] -p {x,z} [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
+                          [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX]
                           [-m {fft,ffrft,parabola}] [--flip] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
 
 Print/save/plot frequency data for selected plane and BPMs using shifts.
@@ -10,27 +10,28 @@ optional arguments:
   -p {x,z}, --plane {x,z}
                         data plane
   -l LENGTH, --length LENGTH
-                        total number of turns to use (integer)
-  -t TURN, --turn TURN  sample length (integer)
+                        number of turns to use (integer)
+  --load LOAD           number of turns to load (integer)
   --shift SHIFT         shift step (integer)
-  -s BPM [BPM ...], --skip BPM [BPM ...]
-                        space separated list of valid BPM names to skip
-  -o BPM [BPM ...], --only BPM [BPM ...]
-                        space separated list of valid BPM names to use
-  -r, --rise            flag to use rise data (drop first turns)
+  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
+  --only BPM [BPM ...]  space separated list of valid BPM names to use
+  -o OFFSET, --offset OFFSET
+                        rise offset for all BPMs
+  -r, --rise            flag to use rise data from file (drop first turns)
   -f, --file            flag to save data
   -c, --csv             flag to save data as CSV
   -n, --numpy           flag to save data as NUMPY
   --print               flag to print data
   --mean                flag to remove mean
+  --median              flag to remove median
   --normalize           flag to normalize data
   -w, --window          flag to apply window
   --name {cosine_window,kaiser_window}
                         window type
   --order ORDER         window order parameter (float >= 0.0)
   --pad PAD             number of zeros to pad (integer)
-  --min MIN             min frequency (float)
-  --max MAX             max frequency (float)
+  --f_min F_MIN         min frequency value (float)
+  --f_max F_MAX         max frequency value (float)
   -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
                         frequency estimation method
   --flip                flag to flip frequency around 1/2
@@ -44,14 +45,15 @@ optional arguments:
 # Parse arguments
 import argparse
 parser = argparse.ArgumentParser(prog='hs_frequency_shift', description='Print/save/plot frequency data for selected plane and BPMs using shifts.')
-parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='total number of turns to use (integer)', default=1024)
-parser.add_argument('-t', '--turn', type=int, help='sample length (integer)', default=512)
+parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', required=True)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=512)
+parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=2048)
 parser.add_argument('--shift', type=int, help='shift step (integer)', default=8)
 select = parser.add_mutually_exclusive_group()
-select.add_argument('-s', '--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
-select.add_argument('-o', '--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
-parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
+select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
+select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
+parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
+parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data from file (drop first turns)')
 parser.add_argument('-f', '--file', action='store_true', help='flag to save data')
 save = parser.add_mutually_exclusive_group()
 save.add_argument('-c', '--csv', action='store_true', help='flag to save data as CSV')
@@ -59,13 +61,14 @@ save.add_argument('-n', '--numpy', action='store_true', help='flag to save data 
 parser.add_argument('--print', action='store_true', help='flag to print data')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
+transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-w', '--window', action='store_true', help='flag to apply window')
 parser.add_argument('--name', choices=('cosine_window', 'kaiser_window'), help='window type', default='cosine_window')
 parser.add_argument('--order', type=float, help='window order parameter (float >= 0.0)', default=1.0)
 parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', default=0)
-parser.add_argument('--min', type=float, help='min frequency (float)', default=0.0)
-parser.add_argument('--max', type=float, help='max frequency (float)', default=0.5)
+parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
+parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
@@ -94,15 +97,15 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit(f'error: CUDA is not avalible')
 
-# Check and set frequency range & padding
-f_min = args.min
-f_max = args.max
+# Check and set frequency range
+f_min = args.f_min
+f_max = args.f_max
 if not (0.0 <= f_min <= 0.5):
-  exit(f'error: MIN = {f_min}, MIN should be in (0.0, 0.5)')
+  exit(f'error: {f_min=}, should be in (0.0, 0.5)')
 if not (0.0 <= f_max <= 0.5):
-  exit(f'error: MAX = {f_max}, MAX should be in (0.0, 0.5)')
+  exit(f'error: {f_max=}, should be in (0.0, 0.5)')
 if f_max < f_min:
-  exit(f'error: (MIN, MAX) = {f_min, f_max}, MAX should be greater than MIN')
+  exit(f'error: {f_max=} should be greater than {f_min=}')
 
 # Import BPM data
 try:
@@ -137,23 +140,53 @@ if not bpm:
 pv_list = [pv_make(name, args.plane, args.test) for name in bpm]
 pv_rise = [*bpm.values()]
 
+# Check length
+length = args.load
+if length < 0 or length > LIMIT:
+  exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
+
+# Check offset
+offset = args.offset
+if offset < 0:
+  exit(f'error: {offset=}, expected a positive value')
+if length + offset > LIMIT:
+  exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
+
+# Check rise
+if args.rise:
+  rise = min(pv_rise)
+  if rise < 0:
+    exit(f'error: rise values are expected to be positive')
+  rise = max(pv_rise)
+  if length + offset + rise > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
+else:
+  rise = 0
+
+# Check sample length
+if args.length > length:
+  exit(f'error: requested sample length {args.length} should be less than {length}')
+
 # Load TbT data
 size = len(bpm)
-length = min(args.length, LIMIT)
-count = min(length + max(pv_rise) if args.rise else length, LIMIT)
-win = Window(length, name=args.name, order=args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, count=count)
+count = length + offset + rise
+win = Window(length, dtype=dtype, device=device)
+tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
   tbt.window_remove_mean()
 
+# Remove median
+if args.median:
+  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize(window=True)
 
 # Generate shifted TbT data
-data = torch.cat([tbt.make_matrix(idx, args.turn, args.shift).data for idx in range(len(bpm))])
+data = torch.cat([tbt.make_matrix(idx, args.length, args.shift).data for idx in range(len(bpm))])
 size, length = data.shape
 step = size//len(bpm)
 win = Window(length, name=args.name, order=args.order, dtype=dtype, device=device)
@@ -190,7 +223,8 @@ if args.plot:
   for i, name in enumerate(bpm):
     df = pandas.concat([df, pandas.DataFrame({'step':range(1, step + 1), 'bpm':name, 'frequency':frequency[i]})])
   from plotly.express import scatter
-  plot = scatter(df, x='step', y='frequency', color='bpm', title=TIME, opacity=0.75, marginal_y='box')
+  title = f'{TIME}: Frequency (shift)<br>sample={args.length} & shift={args.shift}'
+  plot = scatter(df, x='step', y='frequency', color='bpm', title=title, opacity=0.75, marginal_y='box')
   plot.show()
 
 # Print data

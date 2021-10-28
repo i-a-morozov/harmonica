@@ -1,21 +1,21 @@
 """
-usage: hs_tbt_all [-h] [-p {x,z}] [-t TURN] [-l LENGTH] [-s BPM [BPM ...] | -o BPM [BPM ...]] [-r] [--beta_min BETA_MIN] [--beta_max BETA_MAX] [-f]
-                  [-c | -n] [--print] [--mean | --normalize] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
+usage: hs_tbt_all [-h] -p {x,z} [-l LENGTH] [--load LOAD] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [--beta_min BETA_MIN] [--beta_max BETA_MAX] [-f]
+                  [-c | -n] [--print] [--mean | --median | --normalize] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
 
-Print/save/plot mixed tbt data for selected BPMs and plane.
+Print/save/plot mixed TbT data for selected BPMs and plane.
 
 optional arguments:
   -h, --help            show this help message and exit
   -p {x,z}, --plane {x,z}
                         data plane
-  -t TURN, --turn TURN  number of turns to print/save/plot (integer)
   -l LENGTH, --length LENGTH
-                        total number of turns to load (integer)
-  -s BPM [BPM ...], --skip BPM [BPM ...]
-                        space separated list of valid BPM names to skip
-  -o BPM [BPM ...], --only BPM [BPM ...]
-                        space separated list of valid BPM names to use
-  -r, --rise            flag to use rise data (drop first turns)
+                        number of turns to print/save/plot (integer)
+  --load LOAD           number of turns to load (integer)
+  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
+  --only BPM [BPM ...]  space separated list of valid BPM names to use
+  -o OFFSET, --offset OFFSET
+                        rise offset for all BPMs
+  -r, --rise            flag to use rise data from file (drop first turns)
   --beta_min BETA_MIN   min beta threshold value for x or z
   --beta_max BETA_MAX   max beta threshold value for x or z
   -f, --file            flag to save data
@@ -23,6 +23,7 @@ optional arguments:
   -n, --numpy           flag to save data as NUMPY
   --print               flag to print data
   --mean                flag to remove mean
+  --median              flag to remove median
   --normalize           flag to normalize data
   --plot                flag to plot data
   --device {cpu,cuda}   data device
@@ -33,14 +34,15 @@ optional arguments:
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_tbt_all', description='Print/save/plot mixed tbt data for selected BPMs and plane.')
-parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', default='x')
-parser.add_argument('-t', '--turn', type=int, help='number of turns to print/save/plot (integer)', default=1)
-parser.add_argument('-l', '--length', type=int, help='total number of turns to load (integer)', default=1024)
+parser = argparse.ArgumentParser(prog='hs_tbt_all', description='Print/save/plot mixed TbT data for selected BPMs and plane.')
+parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', required=True)
+parser.add_argument('-l', '--length', type=int, help='number of turns to print/save/plot (integer)', default=4)
+parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=1024)
 select = parser.add_mutually_exclusive_group()
-select.add_argument('-s', '--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
-select.add_argument('-o', '--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
-parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
+select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
+select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
+parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
+parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data from file (drop first turns)')
 parser.add_argument('--beta_min', type=float, help='min beta threshold value for x or z', default=0.0E+0)
 parser.add_argument('--beta_max', type=float, help='max beta threshold value for x or z', default=1.0E+3)
 parser.add_argument('-f', '--file', action='store_true', help='flag to save data')
@@ -50,6 +52,7 @@ save.add_argument('-n', '--numpy', action='store_true', help='flag to save data 
 parser.add_argument('--print', action='store_true', help='flag to print data')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
+transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -101,6 +104,14 @@ if args.only:
       if not name in (name.upper() for name in args.only):
         bpm.pop(name)
 
+# Check beta values
+if args.beta_min < 0:
+  exit(f'error: min beta threshold {args.beta_min} should be positive')
+if args.beta_max < 0:
+  exit(f'error: max beta threshold {args.beta_max} should be positive')
+if args.beta_min > args.beta_max:
+  exit(f'error: max beta threshold {args.beta_max} should be greater than min beta threshold {args.beta_min}')
+
 # Filter for given range
 for name in bpm.copy():
     if args.plane == 'x':
@@ -121,29 +132,59 @@ position = numpy.array([df[name]["S"] for name in bpm])
 pv_list = [pv_make(name, args.plane, args.test) for name in bpm]
 pv_rise = [*bpm.values()]
 
+# Check load length
+length = args.load
+if length < 0 or length > LIMIT:
+  exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
+
+# Check offset
+offset = args.offset
+if offset < 0:
+  exit(f'error: {offset=}, expected a positive value')
+if length + offset > LIMIT:
+  exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
+
+# Check rise
+if args.rise:
+  rise = min(pv_rise)
+  if rise < 0:
+    exit(f'error: rise values are expected to be positive')
+  rise = max(pv_rise)
+  if length + offset + rise > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
+else:
+  rise = 0
+
 # Load TbT data
 size = len(bpm)
-length = min(args.length, LIMIT)
-count = min(length + max(pv_rise) if args.rise else length, LIMIT)
+count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, count=count)
+tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
   tbt.window_remove_mean()
 
+# Remove median
+if args.median:
+  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+
 # Normalize
 if args.normalize:
   tbt.normalize(window=True)
 
+# Check mixed length
+if args.length < 0 or args.length > args.load:
+  exit(f'error: requested length {args.length} is expected to be positive and less than load length {args.load}')
+
 # Generate mixed data
-tbt = tbt.make_signal(args.turn)
+tbt = tbt.make_signal(args.length)
 
 # Convert to numpy
 data, *_ = tbt.to_numpy()
-name = [name for name in bpm] * args.turn
-turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.turn)]).flatten()
-time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.turn)]).flatten()
+name = [name for name in bpm] * args.length
+turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
+time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
 
 # Clean
 del win, tbt
@@ -158,7 +199,7 @@ if args.plot:
   df['time'] = time
   df['data'] = data
   from plotly.express import line
-  plot = line(df, x='time', y='data', color='turn', hover_data=['turn', 'name'], title=TIME, markers=True)
+  plot = line(df, x='time', y='data', color='turn', hover_data=['turn', 'name'], title=f'{TIME}: TbT (mixed)', markers=True)
   plot.show()
 
 # Print data
