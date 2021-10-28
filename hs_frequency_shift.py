@@ -170,7 +170,7 @@ if args.length > length:
 # Load TbT data
 size = len(bpm)
 count = length + offset + rise
-win = Window(length, dtype=dtype, device=device)
+win = Window(length, args.name, args.order, dtype=dtype, device=device)
 tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
@@ -183,7 +183,7 @@ if args.median:
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize(window=args.window)
 
 # Generate shifted TbT data
 data = torch.cat([tbt.make_matrix(idx, args.length, args.shift).data for idx in range(len(bpm))])

@@ -204,7 +204,7 @@ if args.length > length:
 # Load TbT data
 size = len(bpm)
 count = length + offset + rise
-win = Window(length, dtype=dtype, device=device)
+win = Window(length, args.name, args.order, dtype=dtype, device=device)
 tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
@@ -217,7 +217,7 @@ if args.median:
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize(window=args.window)
 
 # Number of steps
 step = range(1 if args.shift <= 0 else 1 + (length - args.length) // args.shift)
@@ -225,7 +225,7 @@ step = range(1 if args.shift <= 0 else 1 + (length - args.length) // args.shift)
 # Loop over steps
 shift = args.shift
 length = args.length
-win = Window(length, dtype=dtype, device=device)
+win = Window(length, args.name, args.order, dtype=dtype, device=device)
 tbt_shift = Data(size, win)
 f = Frequency(tbt_shift)
 result = []
