@@ -1,8 +1,8 @@
 """
 Data module.
 Generate, save and load TbT data.
-Data normalization.
 Apply window to data.
+Data normalization.
 
 """
 
@@ -123,6 +123,10 @@ class Data:
         Remove window weighted mean. Result in work.
     window_apply(self) -> None
         Apply window. Result in work.
+    mean(self) -> torch.Tensor
+        Return mean.
+    median(self) -> torch.Tensor
+        Return median.
     normalize(self, window:bool=False) -> None
         Normalize (standardize). Result in work.
     to_tensor(self) -> torch.Tensor
@@ -137,14 +141,14 @@ class Data:
         String representation.
     __len__(self) -> int
         Return number of signals. TbT size.
-    __getitem__(self, idx: int) -> torch.Tensor
+    __getitem__(self, idx:int) -> torch.Tensor
         Return signal for given index or PV name if epics.
     __call__(self, shift:int=0, count:int=LIMIT) -> None
         Reload epics data. Reset work.
 
     """
 
-    def __init__(self, size: int, window: "Window") -> None:
+    def __init__(self, size:int, window:'Window') -> None:
         self.size = size
         self.window = window
         self.length = self.window.length
@@ -152,7 +156,7 @@ class Data:
         self.device = self.window.device
         self.data = torch.zeros((self.size, self.length), dtype=self.dtype, device=self.device)
         self.work = torch.clone(self.data)
-        self.source = "empty"
+        self.source = 'empty'
         self.file_name = None
         self.pv_name = None
         self.pv_rise = None
@@ -166,7 +170,7 @@ class Data:
         self.work.copy_(self.data)
 
 
-    def set_data(self, tensor: torch.Tensor) -> None:
+    def set_data(self, tensor:torch.Tensor) -> None:
         """
         Copy input tensor with matching shape to data and reset work.
 
@@ -185,11 +189,11 @@ class Data:
             self.reset()
             return
 
-        raise Exception(f"DATA: expected shape {self.data.shape}, got {tensor.shape} on input.")
+        raise Exception(f'DATA: expected shape {self.data.shape}, got {tensor.shape} on input.')
 
 
     @classmethod
-    def from_tensor(cls, window: "Window", tensor: torch.Tensor) -> "Data":
+    def from_tensor(cls, window:'Window', tensor:torch.Tensor) -> 'Data':
         """
         Generate Data instance from given window (length) and tensor (size x length).
 
@@ -210,18 +214,18 @@ class Data:
         size, length = tensor.shape
 
         if length != window.length:
-            raise Exception(f"DATA: expected length {window.length}, got {length} on input.")
+            raise Exception(f'DATA: expected length {window.length}, got {length} on input.')
 
         out = cls(size, window)
-        out.source = "tensor"
+        out.source = 'tensor'
         out.set_data(tensor)
         return out
 
 
     @staticmethod
     @torch.jit.script
-    def generate_harmonics(tensor: torch.Tensor, mean: torch.Tensor,
-                           frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor) -> None:
+    def generate_harmonics(tensor:torch.Tensor, mean:torch.Tensor,
+                           frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor) -> None:
         """
         Generate tensor from harmonics.
 
@@ -248,13 +252,13 @@ class Data:
         size, length = tensor.shape
         pi = 2.0*torch.acos(torch.zeros(1, dtype=tensor.dtype, device=tensor.device))
         time = 2.0*pi*frequency*torch.linspace(1, length, length, dtype=tensor.dtype, device=tensor.device)
-        torch.sum(c_amp * torch.cos(time) + s_amp * torch.sin(time), 1, out=tensor)
+        torch.sum(c_amp*torch.cos(time) + s_amp*torch.sin(time), 1, out=tensor)
         tensor.add_(mean)
 
 
     @staticmethod
     @torch.jit.script
-    def add_noise(tensor: torch.Tensor, std: torch.Tensor) -> None:
+    def add_noise(tensor:torch.Tensor, std:torch.Tensor) -> None:
         """
         Add normal noise.
 
@@ -277,8 +281,8 @@ class Data:
 
 
     @classmethod
-    def from_harmonics(cls, size: int, window: "Window", mean: torch.Tensor,
-                       frequency: torch.Tensor, c_amp: torch.Tensor, s_amp: torch.Tensor, std: torch.Tensor = None) -> "Data":
+    def from_harmonics(cls, size:int, window:'Window', mean:torch.Tensor,
+                       frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor, std:torch.Tensor=None) -> 'Data':
         """
         Generate Data instance from given harmonics parameters.
 
@@ -313,7 +317,7 @@ class Data:
         return out
 
 
-    def save_data(self, file_name: str) -> None:
+    def save_data(self, file_name:str) -> None:
         """
         Save data to file (numpy).
 
@@ -332,7 +336,7 @@ class Data:
         numpy.save(file_name, self.data.detach().cpu().numpy())
 
 
-    def load_data(self, file_name: str) -> None:
+    def load_data(self, file_name:str) -> None:
         """
         Load data from file (numpy). Reset work.
 
@@ -348,16 +352,16 @@ class Data:
         """
         data = numpy.load(file_name)
         if (self.size, self.length) == data.shape:
-            self.source = "file"
+            self.source = 'file'
             self.data.copy_(torch.tensor(data))
             self.reset()
             return
         else:
-            raise Exception(f"DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.")
+            raise Exception(f'DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.')
 
 
     @classmethod
-    def from_file(cls, size: int, window: "Window", file_name: str) -> "Data":
+    def from_file(cls, size:int, window:'Window', file_name:str) -> 'Data':
         """
         Generate Data instance from file (numpy).
 
@@ -384,7 +388,7 @@ class Data:
 
 
     @staticmethod
-    def pv_get(pv_name: str, count: int = None, **kwargs) -> torch.Tensor:
+    def pv_get(pv_name:str, count:int=None, **kwargs) -> torch.Tensor:
         """
         Get PV value as tensor.
 
@@ -407,7 +411,7 @@ class Data:
 
 
     @staticmethod
-    def pv_put(pv_name: str, tensor: torch.Tensor) -> None:
+    def pv_put(pv_name:str, tensor:torch.Tensor) -> None:
         """
         Put tensor to PV.
 
@@ -426,7 +430,7 @@ class Data:
         epics.caput(pv_name, tensor.cpu().numpy())
 
 
-    def load_epics(self, shift: int = 0, count: int = LIMIT) -> None:
+    def load_epics(self, shift:int=0, count:int=LIMIT) -> None:
         """
         Get data from PVs. Reset work.
 
@@ -444,7 +448,7 @@ class Data:
         None
 
         """
-        self.source = "epics"
+        self.source = 'epics'
         data = numpy.array(epics.caget_many(self.pv_list, count=count)).reshape(self.size, -1)
         if data.shape == (self.size, count):
             if self.pv_rise != None:
@@ -456,7 +460,7 @@ class Data:
             self.reset()
             return
 
-        raise Exception(f"DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.")
+        raise Exception(f'DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.')
 
 
     def save_epics(self) -> None:
@@ -470,8 +474,8 @@ class Data:
 
 
     @classmethod
-    def from_epics(cls, size: int, window: "Window",
-                   pv_list: list, pv_rise: list = None, shift: int = 0, count: int = LIMIT) -> "Data":
+    def from_epics(cls, size:int, window:'Window',
+                   pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT) -> 'Data':
         """
         Generate Data instance from epics.
 
@@ -504,8 +508,7 @@ class Data:
         return out
 
 
-    def make_matrix(self, idx: int, length: int,
-                    shift: int, name: str = None, order: float = None) -> "Data":
+    def make_matrix(self, idx:int, length:int, shift:int, name:str=None, order:float=None) -> 'Data':
         """
         Generate matrix from signal (from work).
 
@@ -528,17 +531,17 @@ class Data:
 
         """
         array = self.work[idx]
-        size = 1 + (len(array) - length) // shift
+        size = 1 + (len(array) - length)//shift
         window = Window(length, name, order, dtype=self.dtype, device=self.device)
         out = Data(size, window)
-        out.source = "tensor"
+        out.source = 'tensor'
         for i in range(size):
             out.data[i].copy_(array[i*shift : i*shift + length])
         out.reset()
         return out
 
 
-    def make_signal(self, length: int, name: str = None, order: float = None) -> "Data":
+    def make_signal(self, length:int, name:str=None, order:float=None) -> 'Data':
         """
         Generate mixed signal (from work).
 
@@ -558,7 +561,7 @@ class Data:
         """
         window = Window(length*self.size, name, order, dtype=self.dtype, device=self.device)
         out = Data(1, window)
-        out.source = "tensor"
+        out.source = 'tensor'
         out.data.copy_(self.work[:, :length].T.flatten())
         out.reset()
         return out
@@ -597,7 +600,41 @@ class Data:
         self.work.mul_(self.window.data)
 
 
-    def normalize(self, window: bool = False) -> None:
+    def mean(self) -> torch.Tensor:
+        """
+        Return mean.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        ----------
+        torch.Tensor
+            mean values for each signal
+
+        """
+        return torch.mean(self.work, 1).reshape(-1, 1)
+
+
+    def median(self) -> torch.Tensor:
+        """
+        Return median.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        ----------
+        torch.Tensor
+            median values for each signal
+
+        """
+        return torch.median(self.work, 1).values.reshape(-1, 1)
+
+
+    def normalize(self, window:bool = False) -> None:
         """
         Normalize (standardize). Result in work.
 
@@ -611,7 +648,7 @@ class Data:
         None
 
         """
-        mean = self.window_mean().reshape(-1, 1) if window else torch.mean(self.work, 1).reshape(-1, 1)
+        mean = self.window_mean().reshape(-1, 1) if window else self.mean()
         std = torch.std(self.work, 1).reshape(-1, 1)
         self.work.sub_(mean).div_(std)
 
@@ -655,12 +692,12 @@ class Data:
         Return data as dict if epics.
 
         """
-        if self.source == "epics":
+        if self.source == 'epics':
             name = self.pv_list
             data = self.to_numpy()
             return {pv: signal for pv, signal in zip(name, data)}
 
-        raise Exception(f"DATA: expected source epics, got {self.source} on input.")
+        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
 
 
     def to_data_frame(self) -> pandas.DataFrame:
@@ -668,17 +705,17 @@ class Data:
         Return data as data frame if epics.
 
         """
-        if self.source == "epics":
+        if self.source == 'epics':
             frame = pandas.DataFrame()
             name = self.pv_list
             data = self.to_numpy()
-            for i in range(len(name)):
+            for pv, value in zip(name, data):
                 frame = pandas.concat(
-                    [frame, pandas.DataFrame({"PV": name[i], "DATA": data[i]})]
+                    [frame, pandas.DataFrame({"PV": pv, 'DATA': value})]
                 )
             return frame
 
-        raise Exception(f"DATA: expected source epics, got {self.source} on input.")
+        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
 
 
     def __repr__(self) -> str:
@@ -686,7 +723,7 @@ class Data:
         String representation.
 
         """
-        return f"{self.__class__.__name__}{self.size, self.window}"
+        return f'{self.__class__.__name__}{self.size, self.window}'
 
 
     def __len__(self) -> int:
@@ -697,7 +734,7 @@ class Data:
         return self.size
 
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
+    def __getitem__(self, idx:int) -> torch.Tensor:
         """
         Return signal for given index or PV name if epics.
 
@@ -705,25 +742,25 @@ class Data:
         if type(idx) == int:
             return self.data[idx]
 
-        if self.source == "epics" and type(idx) == str:
+        if self.source == 'epics' and type(idx) == str:
             if idx in self.pv_list:
                 return self[self.pv_list.index(idx)]
 
 
-    def __call__(self, shift: int = 0, count: int = LIMIT) -> None:
+    def __call__(self, shift:int=0, count:int=LIMIT) -> None:
         """
         Reload epics data. Reset work.
 
         """
-        if self.source == "epics":
+        if self.source == 'epics':
             self.load_epics(shift=shift, count=count)
             return
 
-        raise Exception(f"DATA: expected source epics, got {self.source} on input.")
+        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
 
 
 def main():
     pass
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

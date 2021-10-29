@@ -62,7 +62,7 @@ class Window:
         String representation.
     __len__(self) -> int
         Window length.
-    __getitem__(self, idx: int) -> torch.Tensor:
+    __getitem__(self, idx:int) -> torch.Tensor:
         Return window data at given index.
     __call__(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None
         Set (new) window data for given name and order or input tensor with matching length. Invoke set_data.
@@ -80,7 +80,7 @@ class Window:
             self.set_data(name=name, order=order)
 
 
-    def set_data(self, *, name: str = None, order: float = None, tensor: torch.Tensor = None) -> None:
+    def set_data(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None:
         """
         Set (new) window data for given name and order or input tensor with matching length.
 
@@ -112,7 +112,7 @@ class Window:
             self.data.copy_(tensor)
             return
 
-        raise Exception(f"WINDOW: wrong input arguments in set_data.")
+        raise Exception(f'WINDOW: wrong input arguments in set_data.')
 
 
     @property
@@ -126,7 +126,7 @@ class Window:
 
     @staticmethod
     @torch.jit.script
-    def cosine_window(length: int, order: float, data: torch.Tensor) -> None:
+    def cosine_window(length:int, order:float, data:torch.Tensor) -> None:
         """
         Cosine window generator (staticmethod).
 
@@ -157,7 +157,7 @@ class Window:
 
     @staticmethod
     @torch.jit.script
-    def kaiser_window(length: int, order: float, data: torch.Tensor) -> None:
+    def kaiser_window(length:int, order:float, data:torch.Tensor) -> None:
         """
         Kaiser window generator (staticmethod).
 
@@ -188,7 +188,7 @@ class Window:
 
 
     @classmethod
-    def from_cosine(cls, length: int, order: float, **kwargs) -> "Window":
+    def from_cosine(cls, length:int, order:float, **kwargs) -> "Window":
         """
         Create Window instance using cosine window (classmethod).
 
@@ -210,7 +210,7 @@ class Window:
 
 
     @classmethod
-    def from_kaiser(cls, length: int, order: float, **kwargs) -> "Window":
+    def from_kaiser(cls, length:int, order:float, **kwargs) -> "Window":
         """
         Create Window instance using kaise window (classmethod).
 
@@ -236,7 +236,7 @@ class Window:
         String representation.
 
         """
-        return f"{self.__class__.__name__}{self.length, self.name, self.order}"
+        return f'{self.__class__.__name__}{self.length, self.name, self.order}'
 
 
     def __len__(self) -> int:
@@ -247,7 +247,7 @@ class Window:
         return self.length
 
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
+    def __getitem__(self, idx:int) -> torch.Tensor:
         """
         Return window data at given index.
 
@@ -265,7 +265,7 @@ class Window:
         return self.data[idx]
 
 
-    def __call__(self, *, name: str = None, order: float = None, tensor: torch.Tensor = None) -> None:
+    def __call__(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None:
         """
         Set (new) window data for given name and order or input tensor with matching length.
 
@@ -294,5 +294,5 @@ class Window:
 def main():
     pass
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -37,4 +37,10 @@ def pv_make(name: str, plane: str, test: bool = False) -> str:
     None
 
     """
-    return f"TEST:{name}:turns_{plane}-I" if test else f"VEPP4:{name}:turns_{plane}-I"
+    return f'TEST:{name}:turns_{plane}-I' if test else f'VEPP4:{name}:turns_{plane}-I'
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()
