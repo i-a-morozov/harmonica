@@ -230,6 +230,8 @@ if args.flip:
 # Scale
 if args.log:
   data = numpy.log10(data)
+  if args.average:
+    mean_data = numpy.log10(mean_data)
 
 # Plot
 if args.plot:
