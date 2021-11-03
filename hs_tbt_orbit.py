@@ -169,9 +169,21 @@ if args.plot:
   df['position'] = position
   df['data'] = orbit
   from plotly.express import line
-  plot = line(df, x='position', y='data', hover_data=['name'], title=f'{TIME}: TbT (orbit)', markers=True)
+  plot = line(
+    df,
+    x='position',
+    y='data',
+    hover_data=['name'],
+    title=f'{TIME}: TbT (orbit)',
+    markers=True)
   plot.update_layout(xaxis = dict(tickmode='array', tickvals=df['position'], ticktext=df['name']))
-  plot.show()
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
 
 # Print data
 if args.print:

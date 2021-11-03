@@ -234,9 +234,15 @@ if device == 'cuda':
 
 # Plot
 if args.plot:
-    from plotly.express import scatter
-    plot = scatter(x=grid, y=data, title=f'{TIME}: Spectrum (mixed)', labels={'x': 'frequency', 'y': f'dtft({args.plane})'})
-    plot.show()
+  from plotly.express import scatter
+  plot = scatter(x=grid, y=data, title=f'{TIME}: Spectrum (mixed)', labels={'x': 'frequency', 'y': f'dtft({args.plane})'})
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
 
 # Print data
 if args.print:

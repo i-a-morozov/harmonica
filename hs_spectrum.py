@@ -239,15 +239,42 @@ if args.plot:
   for i, name in enumerate(bpm):
     df = pandas.concat([df, pandas.DataFrame({'frequency':grid, 'bpm':name, f"dtft({args.plane})":data[i]})])
   from plotly.express import scatter
-  plot = scatter(df, x='frequency', y=f"dtft({args.plane})", color='bpm', title=f'{TIME}: Spectrum', opacity=0.75)
-  plot.show()
+  plot = scatter(
+    df,
+    x='frequency',
+    y=f"dtft({args.plane})",
+    color='bpm',
+    title=f'{TIME}: Spectrum',
+    opacity=0.75)
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
   if args.map:
     from plotly.express import imshow
-    plot = imshow(data, labels=dict(x="frequency", y="bpm", color=f"dtft({args.plane})"), x=grid, y=[*bpm.keys()], aspect=0.5, title=f'{TIME}: Spectrum (map)')
+    plot = imshow(
+      data,
+      labels=dict(x="frequency", y="bpm", color=f"dtft({args.plane})"),
+      x=grid,
+      y=[*bpm.keys()],
+      aspect=0.5,
+      title=f'{TIME}: Spectrum (map)')
     plot.show()
   if args.average:
-    plot = scatter(x=mean_grid, y=mean_data, title=f'{TIME}: Spectrum (average)')
-    plot.show()
+    plot = scatter(
+      x=mean_grid,
+      y=mean_data,
+      title=f'{TIME}: Spectrum (average)')
+    config = {
+      'toImageButtonOptions': {'height':None, 'width':None},
+      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+      'scrollZoom': True
+    }
+    plot.show(config=config)
 
 # Print data
 if args.print:

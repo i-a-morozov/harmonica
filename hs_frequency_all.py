@@ -258,7 +258,13 @@ if args.plot:
   from plotly.express import scatter
   title = f'{TIME}: Frequency (all)<br>sample={args.length} & shift={args.shift}'
   plot = scatter(df, x='step', y='frequency', color='case', title=title, opacity=0.75, marginal_y='box')
-  plot.show()
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
 
 # Print data
 if args.print:

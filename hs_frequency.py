@@ -209,7 +209,13 @@ if args.plot:
   plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
   plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
   plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
-  plot.show()
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
 
 # Print data
 if args.print:

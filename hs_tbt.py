@@ -158,7 +158,7 @@ if device == 'cuda':
   torch.cuda.empty_cache()
 
 # Set turns
-turn = numpy.linspace(0, length-1, length, dtype=numpy.int32)
+turn = numpy.linspace(0, length - 1, length, dtype=numpy.int32)
 
 # Plot
 if args.plot:
@@ -166,12 +166,31 @@ if args.plot:
   for i, name in enumerate(bpm):
     df = pandas.concat([df, pandas.DataFrame({'turn':turn, 'bpm':name, args.plane:data[i]})])
   from plotly.express import scatter
-  plot = scatter(df, x='turn', y=args.plane, color='bpm', title=f'{TIME}: TbT', opacity=0.75, marginal_y='box')
-  plot.show()
+  plot = scatter(
+    df,
+    x='turn',
+    y=args.plane,
+    color='bpm',
+    title=f'{TIME}: TbT',
+    opacity=0.75,
+    marginal_y='box')
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
   if args.box:
     from plotly.express import box
     plot = box(df, x='bpm', y=args.plane, title=f'{TIME}: TbT (box)')
-    plot.show()
+    config = {
+      'toImageButtonOptions': {'height':None, 'width':None},
+      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+      'scrollZoom': True
+    }
+    plot.show(config=config)
 
 # Print data
 if args.print:

@@ -199,8 +199,21 @@ if args.plot:
   df['time'] = time
   df['data'] = data
   from plotly.express import line
-  plot = line(df, x='time', y='data', color='turn', hover_data=['turn', 'name'], title=f'{TIME}: TbT (mixed)', markers=True)
-  plot.show()
+  plot = line(
+    df,
+    x='time',
+    y='data',
+    color='turn',
+    hover_data=['turn', 'name'],
+    title=f'{TIME}: TbT (mixed)',
+    markers=True)
+  config = {
+    'toImageButtonOptions': {'height':None, 'width':None},
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+    'scrollZoom': True
+  }
+  plot.show(config=config)
 
 # Print data
 if args.print:
