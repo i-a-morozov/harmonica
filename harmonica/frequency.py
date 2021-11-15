@@ -613,7 +613,7 @@ class Frequency():
             grid /= 2.0*numpy.pi
             spectrum /= numpy.max(spectrum)
 
-        if self.device.type != 'cpu':
+        if self.device.type != 'cpu' and position is None:
             del data
             del frequency
             torch.cuda.synchronize()
@@ -693,7 +693,7 @@ class Frequency():
             f3 = f1 - rate/len(time) + 2*index*rate/len(time)**2
             result = torch.tensor([f1, f2, f3], dtype=self.dtype, device=self.device)
 
-        if self.device.type != 'cpu':
+        if self.device.type != 'cpu' and position is None:
             del data
             del frequency
             torch.cuda.synchronize()
