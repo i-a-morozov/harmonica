@@ -146,6 +146,12 @@ class Frequency():
     __call__(self, task='parabola', *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
         Compute spectrum and frequency using selected method.
         Optionaly reload TbT data (if epics), apply window and pass other parameters.
+    mod(x: float, y:float, d:float=0.0) -> float
+        Return the remainder on division of x by y with offset d.
+    harmonics(cls, order:int, basis:list, *, limit:float=1.0, offset:float=-0.5) -> dict
+        Generate list of harmonics up to given order for list of given basis frequencies.
+    identify(cls, order:int, basis:list, frequencies:list, *, limit:float=1.0, offset:float=-0.5) -> dict
+        Identify list of frequencies up to maximum order for given frequency basis.
 
     """
 
@@ -752,6 +758,90 @@ class Frequency():
             self.task_parabola(reload=reload, window=window, f_range=f_range, center=center, span=span, shift=shift, count=count)
             self.frequency.copy_(self.parabola_frequency)
             return
+
+
+    @staticmethod
+    def mod(x: float, y:float, d:float=0.0) -> float:
+        """
+        Return the remainder on division of x by y with offset d.
+
+        """
+        return x - y*(x - d)//y
+
+
+    @classmethod
+    def harmonics(cls, order:int, basis:list, *,
+                  limit:float=1.0, offset:float=-0.5) -> dict:
+        """
+        Generate list of harmonics up to given order for list of given basis frequencies.
+
+        Parameters
+        ----------
+        order: int
+            harmonic order
+        basis: list
+            frequency basis
+        limit: float
+            mod parameter
+        offset: float
+            mod parameter
+
+        Returns
+        -------
+        dict:
+            harmonics
+
+        """
+        table = {}
+        from itertools import product
+        for combo in product(range(-order, order + 1), repeat=len(basis)):
+            if sum(map(abs, combo)) > order:
+                continue
+            first, *_ = combo
+            if first < 0:
+                continue
+            frequency = numpy.sum(basis*numpy.array(combo))
+            if first == 0 and frequency <= 0.0:
+                continue
+            table[combo] = abs(cls.mod(frequency, limit, offset))
+        keys = sorted(table, key=lambda x: sum(map(abs, x)))
+        return {key: table[key] for key in keys}
+
+
+    @classmethod
+    def identify(cls, order:int, basis:list, frequencies:list, *,
+                 limit:float=1.0, offset:float=-0.5) -> dict:
+        """
+        Identify list of frequencies up to maximum order for given frequency basis.
+
+        Parameters
+        ----------
+        order: int
+            harmonic order
+        basis: list
+            frequency basis
+        frequencies: list
+            list of frequencies to identify
+        limit: float
+            mod parameter
+        offset: float
+            mod parameter
+
+        Returns
+        -------
+        dict:
+            closest harmonics
+
+        """
+        table = cls.harmonics(order, basis, limit=limit, offset=offset)
+        out = {}
+        for frequency in frequencies:
+            data = []
+            for combo, harmonic in table.items():
+                data.append((combo, harmonic, frequency, abs(frequency - harmonic)))
+            key, *value = min(data, key=lambda x: x[-1])
+            out[key] = value
+        return out
 
 
 def main():
