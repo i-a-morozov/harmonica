@@ -141,6 +141,8 @@ class Frequency():
         Compute normalized mixed spectrum for given range.
     task_mixed_frequency(self, *, length:int=1024, window:bool=True, f_range:tuple=(None, None), name:str='cosine_window', order:float=1.0, position:list=None) -> torch.Tensor
         Estimate frequency using mixed TbT data.
+    task_fit(self, *, window:bool=True, size:int=50, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor
+        Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
     __repr__(self) -> str
         String representation.
     __call__(self, task='parabola', *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
@@ -336,7 +338,7 @@ class Frequency():
         None
 
         """
-        if not self.ffrft_flag or span:
+        if not self.ffrft_flag or span != None:
             self.ffrft_set_spectrum(span=span)
 
         if center:
@@ -706,6 +708,102 @@ class Frequency():
             torch.cuda.empty_cache()
 
         return result
+
+    def task_fit(self, *, window:bool=True, size:int=32, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor:
+        """
+        Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
+
+        Note, statsmodels module is required.
+
+        Note, spectra and frequencies should be precomputed using ffrft or parabola methods.
+
+        For fit, DTFT amplitudes for points around the expected maximum location are computed.
+        Optionaly, error propagation can be used to estimate each amplitude standard error.
+        Poins from FFRFT grid are used, i.e. have same separation as for FFRFT grid.
+
+        Note, size value (number of points) has strong effect on error estimation.
+        Frequency range (2*size/length**2) used for fitting should not be to small.
+        A fraction of DFT bin size (1/length) can be used.
+        In general size should be increased for larger signal length.
+        Size selection is also effected by window, i.e. local peak shape.
+
+        OLS and WLS give similar results, while OLS is much faster to compute.
+
+        Parameters
+        ----------
+        window: bool
+            flag to apply window
+        size: int
+            number of points to use
+        mode: str
+            fit mode (ols or wls)
+        std: torch.Tensor
+            noise std for each signal for wls mode
+
+        Returns
+        -------
+        torch.Tensor:
+            fiited frequency value and error estimation for each signal in TbT
+
+        """
+        try:
+            from statsmodels.api import OLS, WLS
+        except ModuleNotFoundError:
+            raise Exception(f'FREQUENCY: statsmodels not found')
+
+        length = 0 if std == None else len(std)
+
+        if mode == 'wls' and length == 0:
+            raise Exception(f'FREQUENCY: invalid std argument for WLS mode')
+
+        value, error = [], []
+
+        if window:
+            self.data.window_apply()
+
+        time = 2.0*numpy.pi*torch.linspace(1, self.length, self.length, dtype=self.dtype, device=self.device)
+
+        for idx, signal in enumerate(self.data.work):
+
+            mbin = self.ffrft_bin[idx].to(torch.int32)
+            grid = self.ffrft_get_grid(idx)
+            grid = grid[mbin - size : mbin + size]
+
+            if mode == 'wls':
+                signal.requires_grad_(True)
+                matrix = std[idx]**2 + torch.zeros(self.length, dtype=self.dtype, device=self.device)
+                matrix = torch.diag(matrix)
+
+            X, y, w = [], [], []
+
+            for frequency in grid:
+
+                X.append([frequency.cpu().item()**2, frequency.cpu().item(), 1.0])
+
+                c = 2.0/self.data.window.total*torch.sum(torch.cos(frequency*time)*signal)
+                s = 2.0/self.data.window.total*torch.sum(torch.sin(frequency*time)*signal)
+                a = torch.log10(torch.sqrt(c*c + s*s))
+                y.append(a.cpu().item())
+
+                if mode == 'wls':
+                    a.backward()
+                    grad = signal.grad
+                    w.append(1/torch.dot(grad, torch.matmul(matrix, grad)).detach().cpu().item())
+                    signal.grad = None
+
+            out = OLS(y, X).fit() if mode == 'ols' else WLS(y, X, weights=numpy.array(w)).fit()
+            c_x, c_y, c_z = out.params
+            s_x, s_y, s_z = out.bse
+            value.append(-c_y/(2.0*c_x))
+            error.append(1.0/(2.0*c_x**2)*numpy.sqrt(c_y**2*s_x**2+c_x**2*s_y**2))
+
+        if window:
+            self.data.reset()
+
+        value = torch.tensor(value, dtype=self.dtype, device=self.device)
+        error = torch.tensor(error, dtype=self.dtype, device=self.device)
+
+        return torch.stack([value, error]).T
 
 
     def __repr__(self) -> str:
