@@ -1,6 +1,6 @@
 """
 usage: hs_noise [-h] -p {x,z,i} [-l LENGTH] [--limit LIMIT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                [--mean | --median | --normalize] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
+                [--mean | --median | --normalize] [--std] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
 
 TbT data noise estimation for selected BPMs and plane.
 
@@ -23,6 +23,7 @@ optional arguments:
   --mean                flag to remove mean
   --median              flag to remove median
   --normalize           flag to normalize data
+  --std                 flag to estimate noise with std
   --plot                flag to plot data
   --device {cpu,cuda}   data device
   --dtype {float32,float64}
@@ -50,6 +51,7 @@ transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
+parser.add_argument('--std', action='store_true', help='flag to estimate noise with std')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -152,7 +154,11 @@ if args.normalize:
 
 # Estimate rank & noise
 flt = Filter(tbt)
-rnk, std = flt.estimate_noise(limit=args.limit, cpu=True)
+if args.std:
+  rnk = -torch.ones(len(bpm), dtype=torch.int32, device=device)
+  std = torch.std(tbt.work, 1)
+else:
+  rnk, std = flt.estimate_noise(limit=args.limit, cpu=True)
 
 # Clean
 del win, tbt, flt

@@ -48,7 +48,7 @@ import argparse
 parser = argparse.ArgumentParser(prog='hs_frequency_all', description='Compute mixed frequency for selected plane and BPMs with optional shifts.')
 parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', required=True)
 parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=128)
-parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=256)
+parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=128)
 parser.add_argument('--shift', type=int, help='shift step (integer)', default=0)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
@@ -165,7 +165,7 @@ if args.nufft:
     if args.plane == 'x':
       tune = QX
       case = 'FX'
-    if args.plane == 'y':
+    if args.plane == 'z':
       tune = QZ
       case = 'FZ'
     position = numpy.array([df[name][case] for name in df])
