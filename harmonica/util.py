@@ -39,6 +39,23 @@ def pv_make(name: str, plane: str, test: bool = False) -> str:
     """
     return f'TEST:{name}:turns_{plane}-I' if test else f'VEPP4:{name}:turns_{plane}-I'
 
+
+def fst(array):
+    x, *_ = array
+    return x
+
+def lst(array):
+    *_, x = array
+    return x
+
+def rst(array):
+    *x, _ = array
+    return x
+
+def mst(array):
+    _, *x = array
+    return x
+
 def main():
     pass
 

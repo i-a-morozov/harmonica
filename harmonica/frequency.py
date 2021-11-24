@@ -864,7 +864,7 @@ class Frequency():
         Return the remainder on division of x by y with offset d.
 
         """
-        return x - y*(x - d)//y
+        return x - ((x - d) - (x - d) % y)
 
 
     @classmethod
