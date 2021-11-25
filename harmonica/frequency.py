@@ -154,6 +154,10 @@ class Frequency():
         Generate list of harmonics up to given order for list of given basis frequencies.
     identify(cls, order:int, basis:list, frequencies:list, *, limit:float=1.0, offset:float=-0.5) -> dict
         Identify list of frequencies up to maximum order for given frequency basis.
+    autocorrelation(data:torch.Tensor) -> torch.Tensor
+        Compute the autocorrelation for a given batch of signals.
+    dht(data:torch.Tensor) -> torch.Tensor
+        Compute discrete Hilbert transform for a given batch of signals.
 
     """
 
@@ -939,6 +943,65 @@ class Frequency():
                 data.append((combo, harmonic, frequency, abs(frequency - harmonic)))
             key, *value = min(data, key=lambda x: x[-1])
             out[key] = value
+        return out
+
+
+    @staticmethod
+    def autocorrelation(data:torch.Tensor) -> torch.Tensor:
+        """
+        Compute the autocorrelation for a given batch of signals.
+
+        Note, signals are assumed to have zero mean.
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            batch of input signals
+
+        Returns
+        -------
+        torch.Tensor
+            autocorrelation of input signals
+
+        """
+        dtype = data.dtype
+        device = data.device
+        size, length = data.shape
+        out = torch.view_as_real(torch.fft.rfft(data, n=2*length)).pow_(2).sum(-1)
+        out = torch.fft.irfft(out, n=2*length)
+        out = out[:, :length]
+        out = out/torch.tensor(range(length, 0, -1), dtype=dtype, device=device)
+        out = out/out[:, :1]
+        return out
+
+
+    @staticmethod
+    def dht(data:torch.Tensor) -> torch.Tensor:
+        """
+        Compute discrete Hilbert transform for a given batch of signals.
+
+        Envelope can be computed as out.abs()
+        Instantaneous frequency can be computed as (out[:-1]*out[1:].conj()).angle()/(2.0*numpy.pi)
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            batch of input signals
+
+        Returns
+        -------
+        torch.Tensor
+            dht of input signals
+
+        """
+        dtype = data.dtype
+        device = data.device
+        size, length = data.shape
+        pad = torch.ones(length, dtype=dtype, device=device)
+        length = length // 2
+        pad[1:length] = 2.0
+        pad[1 + length:] = 0.0
+        out = data - 1j*torch.imag(torch.fft.ifft(torch.fft.fft(data)*pad))
         return out
 
 
