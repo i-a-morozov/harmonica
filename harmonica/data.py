@@ -470,7 +470,7 @@ class Data:
         pv_list attibute should be defined.
 
         """
-        epics.caput_many(self.pv_list, self.data.cpu().numpy())
+        epics.caput_many(self.pv_list, self.work.cpu().numpy())
 
 
     @classmethod
