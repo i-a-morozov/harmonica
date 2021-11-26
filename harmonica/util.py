@@ -17,7 +17,7 @@ QX = 8.53688309873731
 QZ = 7.57677562060534
 
 # BPM PV name generator
-def pv_make(name: str, plane: str, test: bool = False) -> str:
+def pv_make(name: str, plane: str, flag: bool = False) -> str:
     """
     Generate PV name (str) for given BPM name (str) and plane (str).
 
@@ -29,15 +29,15 @@ def pv_make(name: str, plane: str, test: bool = False) -> str:
         BPM name
     plane: str
         selected plane (x, z or i)
-    test: bool
-        flag to use test PV names, replace prefix
+    flag: bool
+        flag to use harmonica PV names, replace prefix
 
     Returns
     -------
     None
 
     """
-    return f'TEST:{name}:turns_{plane}-I' if test else f'VEPP4:{name}:turns_{plane}-I'
+    return f'HARMONICA:{name}:turns_{plane}-I' if flag else f'VEPP4:{name}:turns_{plane}-I'
 
 
 def fst(array):
