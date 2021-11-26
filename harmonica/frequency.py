@@ -143,6 +143,8 @@ class Frequency():
         Estimate frequency using mixed TbT data.
     task_fit(self, *, window:bool=True, size:int=50, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor
         Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
+    task_shift(self, length:int, shift:int, *, task:str='parabola', window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None) -> torch.Tensor
+        Estimate frequency using shifted signals.
     __repr__(self) -> str
         String representation.
     __call__(self, task='parabola', *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
@@ -713,6 +715,7 @@ class Frequency():
 
         return result
 
+
     def task_fit(self, *, window:bool=True, size:int=32, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor:
         """
         Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
@@ -808,6 +811,43 @@ class Frequency():
         error = torch.tensor(error, dtype=self.dtype, device=self.device)
 
         return torch.stack([value, error]).T
+
+
+    def task_shift(self, length:int, shift:int, *, task:str='parabola', window:bool=True,
+                   f_range:tuple=(None, None), center:float=None, span:float=None) -> torch.Tensor:
+        """
+        Estimate frequency using shifted signals.
+
+        Parameters
+        ----------
+        length: int
+            shifted signal length
+        shift: int
+            shift step
+        window: bool
+            flag to apply window
+        f_range: tuple
+            frequency range in (0.0, 0.5)
+        center: float
+            center frequency
+        span: float
+            frequency span in (0.0, 0.5)
+
+        Returns
+        -------
+        torch.Tensor
+            frequencies for shifted signals grouped by signal
+
+        """
+        data = torch.cat([self.data.make_matrix(idx, length, shift).data for idx in range(self.size)])
+        size, length = data.shape
+        step = size//self.size
+        order = self.data.window.order if window else 0.0
+        win = self.data.window.__class__(length, self.data.window.name, order=order, dtype=self.dtype, device=self.device)
+        data = self.data.__class__.from_tensor(win, data)
+        out = Frequency(data)
+        out(task, window=window, f_range=f_range, center=center, span=span)
+        return out.frequency.reshape(self.size, -1)
 
 
     def __repr__(self) -> str:
@@ -981,7 +1021,7 @@ class Frequency():
         Compute discrete Hilbert transform for a given batch of signals.
 
         Envelope can be computed as out.abs()
-        Instantaneous frequency can be computed as (out[:-1]*out[1:].conj()).angle()/(2.0*numpy.pi)
+        Instantaneous frequency can be computed as (out[:, :-1]*out[:, 1:].conj()).angle()/(2.0*numpy.pi)
 
         Parameters
         ----------
