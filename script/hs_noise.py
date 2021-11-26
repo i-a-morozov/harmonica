@@ -179,7 +179,7 @@ if args.plot:
   df['std'] = std.cpu()
   from plotly.express import bar
   title = f'{TIME}: Noise'
-  plot = bar(df, x='bpm', y='std', color='rnk', title=title)
+  plot = bar(df, x='bpm', y='std', color='rnk', category_orders={'bpm':df['bpm']}, title=title)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
