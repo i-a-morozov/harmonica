@@ -1,62 +1,62 @@
 """
-usage: hs_noise [-h] -p {x,z,i} [-l LENGTH] [--limit LIMIT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                [--mean | --median | --normalize] [--std] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
+usage: hs_tbt_orbit [-h] [-p {x,z,i}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [--beta_min BETA_MIN] [--beta_max BETA_MAX] [-f]
+                    [-c | -n] [--print] [--median] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
-TbT data noise estimation for selected BPMs and plane.
+Print/save/plot TbT orbit data for selected BPMs and plane.
 
 optional arguments:
   -h, --help            show this help message and exit
   -p {x,z,i}, --plane {x,z,i}
                         data plane
   -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --limit LIMIT         number of columns to use (integer)
+                        total number of turns to average (integer)
   --skip BPM [BPM ...]  space separated list of valid BPM names to skip
   --only BPM [BPM ...]  space separated list of valid BPM names to use
   -o OFFSET, --offset OFFSET
                         rise offset for all BPMs
   -r, --rise            flag to use rise data from file (drop first turns)
+  --beta_min BETA_MIN   min beta threshold value for x or z
+  --beta_max BETA_MAX   max beta threshold value for x or z
   -f, --file            flag to save data
   -c, --csv             flag to save data as CSV
   -n, --numpy           flag to save data as NUMPY
   --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  --std                 flag to estimate noise with std
+  --median              flag to compute as median instead of mean
   --plot                flag to plot data
+  --harmonica           flag to use harmonica PV names for input
   --device {cpu,cuda}   data device
   --dtype {float32,float64}
                         data type
-  --test                flag to use test PV names
 """
+
+# Input arguments flag
+import sys
+sys.path.append('..')
+_, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_noise', description='TbT data noise estimation for selected BPMs and plane.')
-parser.add_argument('-p', '--plane', choices=('x', 'z', 'i'), help='data plane', required=True)
-parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=512)
-parser.add_argument('--limit', type=int, help='number of columns to use (integer)', default=32)
+parser = argparse.ArgumentParser(prog='hs_tbt_orbit', description='Print/save/plot TbT orbit data for selected BPMs and plane.')
+parser.add_argument('-p', '--plane', choices=('x', 'z', 'i'), help='data plane', default='x')
+parser.add_argument('-l', '--length', type=int, help='total number of turns to average (integer)', default=1024)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
 parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
 parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data from file (drop first turns)')
+parser.add_argument('--beta_min', type=float, help='min beta threshold value for x or z', default=0.0E+0)
+parser.add_argument('--beta_max', type=float, help='max beta threshold value for x or z', default=1.0E+3)
 parser.add_argument('-f', '--file', action='store_true', help='flag to save data')
 save = parser.add_mutually_exclusive_group()
 save.add_argument('-c', '--csv', action='store_true', help='flag to save data as CSV')
 save.add_argument('-n', '--numpy', action='store_true', help='flag to save data as NUMPY')
 parser.add_argument('--print', action='store_true', help='flag to print data')
-transform = parser.add_mutually_exclusive_group()
-transform.add_argument('--mean', action='store_true', help='flag to remove mean')
-transform.add_argument('--median', action='store_true', help='flag to remove median')
-transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
-parser.add_argument('--std', action='store_true', help='flag to estimate noise with std')
+parser.add_argument('--median', action='store_true', help='flag to compute as median instead of mean')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-parser.add_argument('--test', action='store_true', help='flag to use test PV names')
-args = parser.parse_args()
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
 import epics
@@ -67,7 +67,6 @@ from datetime import datetime
 from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
-from harmonica.filter import Filter
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
@@ -80,12 +79,12 @@ if device == 'cuda' and not torch.cuda.is_available():
 
 # Import BPM data
 try:
-  df = pandas.read_json('bpm.json')
+  df = pandas.read_json('../bpm.json')
 except ValueError:
   exit(f'error: problem loading bpm.json')
 
 # Process BPM data
-bpm = {name: int(df[name]['RISE']) for name in df if df[name]['FLAG']}
+bpm = {name: int(df[name]['RISE']) for name in df if df[name]['FLAG'] and df[name]['JOIN']}
 
 # Check & remove skipped
 if args.skip:
@@ -103,15 +102,35 @@ if args.only:
       if not name in (name.upper() for name in args.only):
         bpm.pop(name)
 
+# Check beta values
+if args.beta_min < 0:
+  exit(f'error: min beta threshold {args.beta_min} should be positive')
+if args.beta_max < 0:
+  exit(f'error: max beta threshold {args.beta_max} should be positive')
+if args.beta_min > args.beta_max:
+  exit(f'error: max beta threshold {args.beta_max} should be greater than min beta threshold {args.beta_min}')
+
+# Filter for given range
+for name in bpm.copy():
+    if args.plane == 'x':
+      if not (args.beta_min <= df[name]['BX'] <= args.beta_max):
+        bpm.pop(name)
+    if args.plane == 'z':
+      if not (args.beta_min <= df[name]['BZ'] <= args.beta_max):
+        bpm.pop(name)
+
 # Check BPM list
 if not bpm:
   exit(f'error: BPM list is empty')
 
+# Set BPM positions
+position = numpy.array([df[name]["S"] for name in bpm])
+
 # Generate pv names
-pv_list = [pv_make(name, args.plane, args.test) for name in bpm]
+pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
-# Check length
+# Check load length
 length = args.length
 if length < 0 or length > LIMIT:
   exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
@@ -140,41 +159,30 @@ count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
 tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
-# Remove mean
-if args.mean:
-  tbt.window_remove_mean()
-
-# Remove median
-if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
-
-# Normalize
-if args.normalize:
-  tbt.normalize(window=True)
-
-# Estimate rank & noise
-flt = Filter(tbt)
-if args.std:
-  rnk = -torch.ones(len(bpm), dtype=torch.int32, device=device)
-  std = torch.std(tbt.work, 1)
-else:
-  rnk, std = flt.estimate_noise(limit=args.limit, cpu=True)
+# Compute orbit
+orbit = torch.median(tbt.data, 1).values.cpu().numpy() if args.median else torch.mean(tbt.data, 1).cpu().numpy()
 
 # Clean
-del win, tbt, flt
+del win, tbt
 if device == 'cuda':
   torch.cuda.empty_cache()
 
 # Plot
 if args.plot:
   df = pandas.DataFrame()
-  df['bpm'] = [*bpm.keys()]
-  df['rnk'] = rnk.cpu()
-  df['rnk'] = df['rnk'].astype(str)
-  df['std'] = std.cpu()
-  from plotly.express import bar
-  title = f'{TIME}: Noise'
-  plot = bar(df, x='bpm', y='std', color='rnk', title=title)
+  df['name'] = bpm
+  df['position'] = position
+  df['s'] = position
+  df[args.plane] = orbit
+  from plotly.express import line
+  plot = line(
+    df,
+    x='position',
+    y=args.plane,
+    hover_data=['s'],
+    title=f'{TIME}: TbT (orbit)',
+    markers=True)
+  plot.update_layout(xaxis = dict(tickmode='array', tickvals=df['position'], ticktext=df['name']))
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -185,13 +193,16 @@ if args.plot:
 
 # Print data
 if args.print:
-  fmt = '{:>6}' * 2 + '{:>18.9}'
-  print(fmt.format('BPM', 'RNK', 'STD'))
-  for name, rank, sigma in zip(bpm, rnk, std):
-    print(fmt.format(name, rank, sigma))
+  fmt = '{:>6}' + '{:>18.9}' + '{:>18.9}'
+  print(fmt.format('BPM', 'S', args.plane.upper()))
+  for i in range(size):
+    print(fmt.format([*bpm.keys()][i], position[i], orbit[i]))
 
 # Save to file
+data = numpy.array([position, orbit])
 if args.file and args.numpy:
-  numpy.save(f'noise{TIME}.npy', std.cpu())
+  filename = f'tbt_orbit_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  numpy.save(filename, data)
 if args.file and args.csv:
-  numpy.savetxt(f'noise{TIME}.csv', std.cpu(), delimiter=',')
+  filename = f'tbt_orbit_plane_{args.plane}_length_{args.length}_time_{TIME}.csv'
+  numpy.savetxt(filename, data.transpose(), delimiter=',')

@@ -1,9 +1,9 @@
 """
-usage: hs_frequency_shift [-h] -p {x,z} [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                          [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX]
-                          [-m {fft,ffrft,parabola}] [--flip] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
+usage: hs_spectrum [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
+                   [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [--log] [--flip] [--plot] [--map] [--average]
+                   [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
-Print/save/plot frequency data for selected plane and BPMs using shifts.
+Print/save/plot amplitude spectrum data for selected plane and BPMs.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -11,8 +11,6 @@ optional arguments:
                         data plane
   -l LENGTH, --length LENGTH
                         number of turns to use (integer)
-  --load LOAD           number of turns to load (integer)
-  --shift SHIFT         shift step (integer)
   --skip BPM [BPM ...]  space separated list of valid BPM names to skip
   --only BPM [BPM ...]  space separated list of valid BPM names to use
   -o OFFSET, --offset OFFSET
@@ -32,23 +30,27 @@ optional arguments:
   --pad PAD             number of zeros to pad (integer)
   --f_min F_MIN         min frequency value (float)
   --f_max F_MAX         max frequency value (float)
-  -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
-                        frequency estimation method
-  --flip                flag to flip frequency around 1/2
+  --log                 flag to apply log10 to amplitude spectra
+  --flip                flag to flip spectra around 1/2
   --plot                flag to plot data
+  --map                 flag to plot heat map
+  --average             flag to plot average spectrum
+  --harmonica           flag to use harmonica PV names for input
   --device {cpu,cuda}   data device
   --dtype {float32,float64}
                         data type
-  --test                flag to use test PV names
 """
+
+# Input arguments flag
+import sys
+sys.path.append('..')
+_, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_frequency_shift', description='Print/save/plot frequency data for selected plane and BPMs using shifts.')
-parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', required=True)
-parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=512)
-parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=2048)
-parser.add_argument('--shift', type=int, help='shift step (integer)', default=8)
+parser = argparse.ArgumentParser(prog='hs_spectrum', description='Print/save/plot amplitude spectrum data for selected plane and BPMs.')
+parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', default='x')
+parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=1024)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -69,13 +71,15 @@ parser.add_argument('--order', type=float, help='window order parameter (float >
 parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', default=0)
 parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
-parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
-parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
+parser.add_argument('--log', action='store_true', help='flag to apply log10 to amplitude spectra')
+parser.add_argument('--flip', action='store_true', help='flag to flip spectra around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--map', action='store_true', help='flag to plot heat map')
+parser.add_argument('--average', action='store_true', help='flag to plot average spectrum')
+parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-parser.add_argument('--test', action='store_true', help='flag to use test PV names')
-args = parser.parse_args()
+args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
 import epics
@@ -97,7 +101,7 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit(f'error: CUDA is not avalible')
 
-# Check and set frequency range
+# Check and set frequency range & padding
 f_min = args.f_min
 f_max = args.f_max
 if not (0.0 <= f_min <= 0.5):
@@ -106,10 +110,12 @@ if not (0.0 <= f_max <= 0.5):
   exit(f'error: {f_max=}, should be in (0.0, 0.5)')
 if f_max < f_min:
   exit(f'error: {f_max=} should be greater than {f_min=}')
+if (f_min, f_max) != (0.0, 0.5) and args.pad != 0:
+  exit(f'error: (f_min, f_max) should be used without padding')
 
 # Import BPM data
 try:
-  df = pandas.read_json('bpm.json')
+  df = pandas.read_json('../bpm.json')
 except ValueError:
   exit(f'error: problem loading bpm.json')
 
@@ -137,11 +143,11 @@ if not bpm:
   exit(f'error: BPM list is empty')
 
 # Generate pv names
-pv_list = [pv_make(name, args.plane, args.test) for name in bpm]
+pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length
-length = args.load
+length = args.length
 if length < 0 or length > LIMIT:
   exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
 
@@ -163,10 +169,6 @@ if args.rise:
 else:
   rise = 0
 
-# Check sample length
-if args.length > length:
-  exit(f'error: requested sample length {args.length} should be less than {length}')
-
 # Load TbT data
 size = len(bpm)
 count = length + offset + rise
@@ -185,25 +187,37 @@ if args.median:
 if args.normalize:
   tbt.normalize(window=args.window)
 
-# Generate shifted TbT data
-data = torch.cat([tbt.make_matrix(idx, args.length, args.shift).data for idx in range(len(bpm))])
-size, length = data.shape
-step = size//len(bpm)
-win = Window(length, name=args.name, order=args.order, dtype=dtype, device=device)
-tbt = Data.from_tensor(win, data)
-
-del data
-if device == 'cuda':
-  torch.cuda.empty_cache()
-
 # Set Frequency instance
 f = Frequency(tbt, pad=args.pad)
 
-# Compute frequencies
-f(args.method, window=args.window, f_range=(f_min, f_max))
+# Apply window
+if args.window:
+  f.data.window_remove_mean()
+  f.data.window_apply()
+
+# Compute FFT spectrum
+f.fft_get_spectrum()
+grid = f.fft_grid
+data = f.fft_spectrum
+
+# Compute FFRFT spectrum
+if (f_min, f_max) != (0.0, 0.5):
+  span = (f_max - f_min)
+  center = f_min + 0.5*span
+  f.ffrft_get_spectrum(center=center, span=span)
+  grid = f.ffrft_get_grid()
+  data = f.ffrft_spectrum
 
 # Convert to numpy
-frequency = f.frequency.cpu().numpy()
+grid = grid.cpu().numpy()[1:-1]
+data = data.cpu().numpy()[:, 1:-1]
+
+# Mean spectrum
+if args.average:
+  f('ffrft', window=args.window)
+  mean_grid, mean_data = f.task_mean_spectrum(window=args.window, log=args.log)
+  mean_grid = mean_grid.cpu().numpy()[1:-1]
+  mean_data = mean_data.cpu().numpy()[1:-1]
 
 # Clean
 del win, tbt, f
@@ -212,19 +226,29 @@ if device == 'cuda':
 
 # Flip
 if args.flip:
-  frequency = 1.0 - frequency
+  grid = 1.0 - grid[::-1]
+  data = data[:, ::-1]
+  if args.average:
+    mean_grid = 1.0 - mean_grid[::-1]
+    mean_data = mean_data[::-1]
 
-# Partition frequency data
-frequency = frequency.reshape(-1, step)
+# Scale
+if args.log:
+  data = numpy.log10(data)
 
 # Plot
 if args.plot:
   df = pandas.DataFrame()
   for i, name in enumerate(bpm):
-    df = pandas.concat([df, pandas.DataFrame({'step':range(1, step + 1), 'bpm':name, 'frequency':frequency[i]})])
+    df = pandas.concat([df, pandas.DataFrame({'frequency':grid, 'bpm':name, f"dtft({args.plane})":data[i]})])
   from plotly.express import scatter
-  title = f'{TIME}: Frequency (shift)<br>sample={args.length} & shift={args.shift}'
-  plot = scatter(df, x='step', y='frequency', color='bpm', title=title, opacity=0.75, marginal_y='box')
+  plot = scatter(
+    df,
+    x='frequency',
+    y=f"dtft({args.plane})",
+    color='bpm',
+    title=f'{TIME}: Spectrum',
+    opacity=0.75)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -232,16 +256,40 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
+  if args.map:
+    from plotly.express import imshow
+    plot = imshow(
+      data,
+      labels=dict(x="frequency", y="bpm", color=f"dtft({args.plane})"),
+      x=grid,
+      y=[*bpm.keys()],
+      aspect=0.5,
+      title=f'{TIME}: Spectrum (map)')
+    plot.show()
+  if args.average:
+    plot = scatter(
+      x=mean_grid,
+      y=mean_data,
+      title=f'{TIME}: Spectrum (average)')
+    config = {
+      'toImageButtonOptions': {'height':None, 'width':None},
+      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+      'scrollZoom': True
+    }
+    plot.show(config=config)
 
 # Print data
 if args.print:
   fmt = '{:>6}' + '{:>18.12}' * len(bpm)
-  print(fmt.format('STEP', *bpm))
-  for i in range(step):
-    print(fmt.format(i, *frequency[:, i]))
+  print(fmt.format('FREQUENCY', *bpm))
+  for i in range(len(grid)):
+    print(fmt.format(grid[i], *data[:, i]))
 
 # Save to file
 if args.file and args.numpy:
-  numpy.save(f'frequency_shift_{TIME}.npy', frequency)
+  filename = f'spectrum_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  numpy.save(filename, data)
 if args.file and args.csv:
-  numpy.savetxt(f'frequency_shift_{TIME}.csv', frequency.transpose(), delimiter=',')
+  filename = f'spectrum_plane_{args.plane}_length_{args.length}_time_{TIME}.csv'
+  numpy.savetxt(filename, data.transpose(), delimiter=',')

@@ -1,7 +1,8 @@
 """
-usage: hs_spectrum_all [-h] -p {x,z} [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                       [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] --f_min F_MIN --f_max F_MAX [--beta_min BETA_MIN]
-                       [--beta_max BETA_MAX] [--nufft] [--time {position,phase}] [--log] [--plot] [--device {cpu,cuda}] [--dtype {float32,float64}] [--test]
+usage: hs_spectrum_all [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
+                       [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--f_min F_MIN] [--f_max F_MAX]
+                       [--beta_min BETA_MIN] [--beta_max BETA_MAX] [--nufft] [--time {position,phase}] [--log] [--plot] [--harmonica] [--device {cpu,cuda}]
+                       [--dtype {float32,float64}]
 
 Print/save/plot mixed amplitude spectrum data for selected plane and BPMs.
 
@@ -36,16 +37,21 @@ optional arguments:
                         time type to use with NUFFT
   --log                 flag to apply log10 to amplitude spectrum
   --plot                flag to plot data
+  --harmonica           flag to use harmonica PV names for input
   --device {cpu,cuda}   data device
   --dtype {float32,float64}
                         data type
-  --test                flag to use test PV names
 """
+
+# Input arguments flag
+import sys
+sys.path.append('..')
+_, *flag = sys.argv
 
 # Parse arguments
 import argparse
 parser = argparse.ArgumentParser(prog='hs_spectrum_all', description='Print/save/plot mixed amplitude spectrum data for selected plane and BPMs.')
-parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', required=True)
+parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=512)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
@@ -64,18 +70,18 @@ transform.add_argument('--normalize', action='store_true', help='flag to normali
 parser.add_argument('-w', '--window', action='store_true', help='flag to apply window')
 parser.add_argument('--name', choices=('cosine_window', 'kaiser_window'), help='window type', default='cosine_window')
 parser.add_argument('--order', type=float, help='window order parameter (float >= 0.0)', default=1.0)
-parser.add_argument('--f_min', type=float, help='min frequency value (float)', required=True)
-parser.add_argument('--f_max', type=float, help='max frequency value (float)', required=True)
+parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
+parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('--beta_min', type=float, help='min beta threshold value for x or z', default=0.0E+0)
 parser.add_argument('--beta_max', type=float, help='max beta threshold value for x or z', default=1.0E+3)
 parser.add_argument('--nufft', action='store_true', help='flag to compute spectum using TYPY-III NUFFT')
 parser.add_argument('--time', choices=('position', 'phase'), help='time type to use with NUFFT', default='phase')
 parser.add_argument('--log', action='store_true', help='flag to apply log10 to amplitude spectrum')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-parser.add_argument('--test', action='store_true', help='flag to use test PV names')
-args = parser.parse_args()
+args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
 import epics
@@ -97,7 +103,7 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit(f'error: CUDA is not avalible')
 
-# Check and set frequency range & padding
+# Check and set frequency range
 f_min = args.f_min
 f_max = args.f_max
 if f_min < 0.0:
@@ -107,7 +113,7 @@ if f_max < f_min:
 
 # Import BPM data
 try:
-  df = pandas.read_json('bpm.json')
+  df = pandas.read_json('../bpm.json')
 except ValueError:
   exit(f'error: problem loading bpm.json')
 
@@ -152,7 +158,7 @@ if not bpm:
   exit(f'error: BPM list is empty')
 
 # Generate pv names
-pv_list = [pv_make(name, args.plane, args.test) for name in bpm]
+pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Set BPM positions
@@ -254,6 +260,8 @@ if args.print:
 # Save to file
 data = numpy.array([grid, data])
 if args.file and args.numpy:
-  numpy.save(f'spectrum_all_{TIME}.npy', data)
+  filename = f'spectrum_all_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  numpy.save(filename, data)
 if args.file and args.csv:
-  numpy.savetxt(f'spetrum_all_{TIME}.csv', data.transpose(), delimiter=',')
+  filename = f'spectum_all__plane_{args.plane}_length_{args.length}_time_{TIME}.csv'
+  numpy.savetxt(filename, data.transpose(), delimiter=',')

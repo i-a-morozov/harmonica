@@ -11,12 +11,16 @@ optional arguments:
                         pause value (default 1.0sec)
 """
 
+# Input arguments flag
+import sys
+_, *flag = sys.argv
+
 # Parse arguments
 import argparse
 parser = argparse.ArgumentParser(prog='hs_soft', description='Perform SOFT for given bunch {E1,E2,P1,P2}.')
-parser.add_argument('-b', '--bunch', choices=('E1', 'E2', 'P1', 'P2'), help='bunch id', required=True)
+parser.add_argument('-b', '--bunch', choices=('E1', 'E2', 'P1', 'P2'), help='bunch id', default='E1')
 parser.add_argument('-p', '--pause', type=float, help='pause value (default 1.0sec)', default=1.0)
-args = parser.parse_args()
+args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
 from os import system
