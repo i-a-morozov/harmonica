@@ -1,7 +1,7 @@
 """
-usage: hs_frequency_shift [-h] -p {x,z} [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                          [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX]
-                          [-m {fft,ffrft,parabola}] [--flip] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
+usage: hs_frequency_shift [-h] [-p {x,z}] [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n]
+                          [--print] [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN]
+                          [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit] [--flip] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
 Print/save/plot frequency data for selected plane and BPMs using shifts.
 
@@ -34,6 +34,7 @@ optional arguments:
   --f_max F_MAX         max frequency value (float)
   -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
                         frequency estimation method
+  --fit                 flag to fit frequency
   --flip                flag to flip frequency around 1/2
   --plot                flag to plot data
   --harmonica           flag to use harmonica PV names for input
@@ -75,6 +76,7 @@ parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', 
 parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
+parser.add_argument('--fit', action='store_true', help='flag to fit frequency')
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -190,37 +192,29 @@ if args.median:
 if args.normalize:
   tbt.normalize(window=args.window)
 
-# Generate shifted TbT data
-data = torch.cat([tbt.make_matrix(idx, args.length, args.shift).data for idx in range(len(bpm))])
-size, length = data.shape
-step = size//len(bpm)
-win = Window(length, name=args.name, order=args.order, dtype=dtype, device=device)
-tbt = Data.from_tensor(win, data)
-
-del data
-if device == 'cuda':
-  torch.cuda.empty_cache()
-
-# Set Frequency instance
-f = Frequency(tbt, pad=args.pad)
-
-# Compute frequencies
-f(args.method, window=args.window, f_range=(f_min, f_max))
+# Compute shifted frequencies
+f = Frequency(tbt)
+frequency = f.task_shift(args.length, args.shift, task=args.method, window=args.window, f_range=(f_min, f_max))
+_, step = frequency.shape
 
 # Convert to numpy
-frequency = f.frequency.cpu().numpy()
-
-# Clean
-del win, tbt, f
-if device == 'cuda':
-  torch.cuda.empty_cache()
+frequency = frequency.cpu().numpy()
 
 # Flip
 if args.flip:
   frequency = 1.0 - frequency
 
-# Partition frequency data
-frequency = frequency.reshape(-1, step)
+# Fit
+if args.fit:
+  from statsmodels.api import WLS
+  m = frequency.mean(1)
+  s = frequency.std(1)
+  w = 1/s**2
+  x = numpy.ones(len(bpm)).reshape(1, -1).T
+  y = m
+  wls = WLS(y, x, w).fit()
+  f_fit, *_ = wls.params
+  s_fit, *_ = wls.bse
 
 # Plot
 if args.plot:
@@ -229,7 +223,12 @@ if args.plot:
     df = pandas.concat([df, pandas.DataFrame({'step':range(1, step + 1), 'bpm':name, 'frequency':frequency[i]})])
   from plotly.express import scatter
   title = f'{TIME}: Frequency (shift)<br>sample={args.length} & shift={args.shift}'
+  title = title if not args.fit else f'{title}<br>FIT={f_fit} & ERR={s_fit}'
   plot = scatter(df, x='step', y='frequency', color='bpm', title=title, opacity=0.75, marginal_y='box')
+  if args.fit:
+    plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],

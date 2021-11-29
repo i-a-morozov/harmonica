@@ -1,7 +1,7 @@
 """
-usage: hs_frequency [-h] -p {x,z} [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
-                    [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--flip] [--plot]
-                    [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
+usage: hs_frequency [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
+                    [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit] [--flip]
+                    [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
 Print/save/plot frequency data for selected plane and BPMs.
 
@@ -32,6 +32,7 @@ optional arguments:
   --f_max F_MAX         max frequency value (float)
   -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
                         frequency estimation method
+  --fit                 flag to fit frequency
   --flip                flag to flip frequency around 1/2
   --plot                flag to plot data
   --harmonica           flag to use harmonica PV names for input
@@ -71,6 +72,7 @@ parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', 
 parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
+parser.add_argument('--fit', action='store_true', help='flag to fit frequency')
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -191,6 +193,17 @@ f(args.method, window=args.window, f_range=(f_min, f_max))
 # Convert to numpy
 frequency = f.frequency.cpu().numpy()
 
+# Fit
+if args.fit:
+  from statsmodels.api import WLS
+  m, s = f.task_fit(window=args.window, size=int(0.05*length), mode='ols').T
+  w = 1/s.cpu().numpy()**2
+  x = numpy.ones(len(bpm)).reshape(1, -1).T
+  y = m.cpu().numpy()
+  wls = WLS(y, x, w).fit()
+  f_fit, *_ = wls.params
+  s_fit, *_ = wls.bse
+
 # Clean
 del win, tbt, f
 if device == 'cuda':
@@ -199,6 +212,8 @@ if device == 'cuda':
 # Flip
 if args.flip:
   frequency = 1.0 - frequency
+  if args.fit:
+    f_fit = 1.0 - f_fit
 
 # Plot
 if args.plot:
@@ -210,10 +225,15 @@ if args.plot:
   median = numpy.median(frequency)
   std = numpy.std(frequency)
   title=f'{TIME}: Frequency<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
+  title = title if not args.fit else f'{title}<br>FIT={f_fit} & ERR={s_fit}'
   plot = scatter(df, x='bpm', y='frequency', title=title, opacity=0.75, marginal_y='box')
   plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
   plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
   plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
+  if args.fit:
+    plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],

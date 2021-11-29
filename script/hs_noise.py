@@ -23,7 +23,7 @@ optional arguments:
   --mean                flag to remove mean
   --median              flag to remove median
   --normalize           flag to normalize data
-  -s, --save            flag to noise estimation to PV
+  -u, --update          flag to update harmonica PV
   --std                 flag to estimate noise with std
   --plot                flag to plot data
   --harmonica           flag to use harmonica PV names for input
@@ -57,7 +57,7 @@ transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
-parser.add_argument('-s', '--save', action='store_true', help='flag to save noise estimation to PV')
+parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
 parser.add_argument('--std', action='store_true', help='flag to estimate noise with std')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -209,11 +209,11 @@ if args.file and args.csv:
   numpy.savetxt(filename, std.cpu(), delimiter=',')
 
 # Save to epics
-if args.save:
+if args.update:
   noise = torch.zeros(len(index), dtype=dtype)
   count = 0
   for key, value in index.items():
     if key in bpm:
       noise[value] = std[count]
       count+=1
-  Data.pv_put(f'HARMONICA:NOISE:{args.plane.upper()}-I', noise)
+  Data.pv_put(f'HARMONICA:{args.plane.upper()}:NOISE-I', noise)

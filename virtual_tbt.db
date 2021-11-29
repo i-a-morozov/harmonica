@@ -1,19 +1,53 @@
-#softIoc -d virtual_tbt.db
-record(waveform, "HARMONICA:NOISE:X-I") {
-    field(DESC, "NOISE")
+# Start all PVs (attached to console)
+# softIoc -d virtual_tbt.db
+###############################################################################
+# Noise                                                                       #
+###############################################################################
+record(waveform, "HARMONICA:X:NOISE-I") {
     field(NELM, "54")
     field(FTVL, "DOUBLE")
 }
-record(waveform, "HARMONICA:NOISE:Z-I") {
-    field(DESC, "NOISE")
+record(waveform, "HARMONICA:Z:NOISE-I") {
     field(NELM, "54")
     field(FTVL, "DOUBLE")
 }
-record(waveform, "HARMONICA:NOISE:I-I") {
-    field(DESC, "NOISE")
+record(waveform, "HARMONICA:I:NOISE-I") {
     field(NELM, "54")
     field(FTVL, "DOUBLE")
 }
+###############################################################################
+# Frequency                                                                   #
+###############################################################################
+record(waveform, "HARMONICA:X:FREQUECY-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:Z:FREQUECY-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:S:FREQUECY-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+###############################################################################
+# Frequency spread                                                            #
+###############################################################################
+record(waveform, "HARMONICA:X:FREQUECY:SPREAD-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:Z:FREQUECY:SPREAD-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:S:FREQUECY:SPREAD-I") {
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+###############################################################################
+# Data                                                                        #
+###############################################################################
 record(waveform, "HARMONICA:STP2:turns_x-I") {
     field(DESC, "BPM")
     field(NELM, "8192")
