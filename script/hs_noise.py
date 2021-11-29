@@ -210,4 +210,10 @@ if args.file and args.csv:
 
 # Save to epics
 if args.save:
-  Data.pv_put(f'HARMONICA:NOISE:{args.plane.upper()}-I', std)
+  noise = torch.zeros(len(index), dtype=dtype)
+  count = 0
+  for key, value in index.items():
+    if key in bpm:
+      noise[value] = std[count]
+      count+=1
+  Data.pv_put(f'HARMONICA:NOISE:{args.plane.upper()}-I', noise)
