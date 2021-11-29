@@ -125,15 +125,15 @@ class Frequency():
         Compute FFRFT frequency estimation.
     parabola_get_frequency(self) -> None
         Compute parabola frequency estimation.
-    task_fft(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), shift:int=0, count:int=LIMIT) -> None
+    task_fft(self, *, window:bool=True, f_range:tuple=(None, None), shift:int=0, count:int=LIMIT) -> None
         Compute spectrum (FFT) and frequency estimation using FFT.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
-    task_ffrft(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
+        Optionaly apply window and pass other parameters.
+    task_ffrft(self, *, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
         Compute spectrum (FFT & FFRFT) and frequency estimation using FFRFT.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
-    task_parabola(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
+        Optionaly apply window and pass other parameters.
+    task_parabola(self, *, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
         Compute spectrum (FFT & FFRFT) and frequency estimation using parabola.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+        Optionaly apply window and pass other parameters.
     task_mean_spectrum(self, *, window:bool=False, log:bool=False) -> tuple
         Compure mean normalized spectrum.
         Computed FFT spectra are normalized using estimated frequencies and averaged over TbT signals.
@@ -147,9 +147,9 @@ class Frequency():
         Estimate frequency using shifted signals.
     __repr__(self) -> str
         String representation.
-    __call__(self, task='parabola', *, reload:bool=False, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
+    __call__(self, task='parabola', *, window:bool=True, f_range:tuple=(None, None), center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None
         Compute spectrum and frequency using selected method.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+        Optionaly apply window and pass other parameters.
     mod(x: float, y:float, d:float=0.0) -> float
         Return the remainder on division of x by y with offset d.
     harmonics(cls, order:int, basis:list, *, limit:float=1.0, offset:float=-0.5) -> dict
@@ -406,16 +406,15 @@ class Frequency():
         self.parabola_frequency.copy_(self.ffrft_start + self.parabola_bin*self.ffrft_span/self.length)
 
 
-    def task_fft(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None),
+    def task_fft(self, *, window:bool=True, f_range:tuple=(None, None),
                  shift:int=0, count:int=LIMIT) -> None:
         """
         Compute spectrum (FFT) and frequency estimation using FFT.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+
+        Optionaly apply window and pass other parameters.
 
         Parameters
         ----------
-        reload: bool
-            flag to reload epics
         window: bool
             flag to apply window
         f_range: tuple
@@ -430,9 +429,6 @@ class Frequency():
         None
 
         """
-        if reload and self.data.source == 'epics':
-            self.data(shift=shift, count=count)
-
         if window:
             self.data.window_apply()
 
@@ -443,16 +439,15 @@ class Frequency():
             self.data.reset()
 
 
-    def task_ffrft(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None),
+    def task_ffrft(self, *, window:bool=True, f_range:tuple=(None, None),
                  center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None:
         """
         Compute spectrum (FFT & FFRFT) and frequency estimation using FFRFT.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+
+        Optionaly apply window and pass other parameters.
 
         Parameters
         ----------
-        reload: bool
-            flag to reload epics
         window: bool
             flag to apply window
         f_range: tuple
@@ -471,13 +466,10 @@ class Frequency():
         None
 
         """
-        if reload and self.data.source == 'epics':
-            self.data(shift=shift, count=count)
-
         if window:
             self.data.window_apply()
 
-        self.task_fft(reload=False, window=False, f_range=f_range)
+        self.task_fft(window=False, f_range=f_range)
         self.ffrft_get_spectrum(center=center, span=span)
         self.ffrft_get_frequency()
 
@@ -485,16 +477,15 @@ class Frequency():
             self.data.reset()
 
 
-    def task_parabola(self, *, reload:bool=False, window:bool=True, f_range:tuple=(None, None),
+    def task_parabola(self, *, window:bool=True, f_range:tuple=(None, None),
                  center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None:
         """
         Compute spectrum (FFT & FFRFT) and frequency estimation using parabola.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+
+        Optionaly apply window and pass other parameters.
 
         Parameters
         ----------
-        reload: bool
-            flag to reload epics
         window: bool
             flag to apply window
         f_range: tuple
@@ -513,13 +504,10 @@ class Frequency():
         None
 
         """
-        if reload and self.data.source == 'epics':
-            self.data(shift=shift, count=count)
-
         if window:
             self.data.window_apply()
 
-        self.task_ffrft(reload=False, window=False, f_range=f_range, center=center, span=span)
+        self.task_ffrft(window=False, f_range=f_range, center=center, span=span)
         self.parabola_get_frequency()
 
         if window:
@@ -529,6 +517,7 @@ class Frequency():
     def task_mean_spectrum(self, *, window:bool=False, log:bool=False) -> tuple:
         """
         Compure mean normalized spectrum.
+
         Computed FFT spectra are normalized using estimated frequencies and averaged over TbT signals.
 
         Parameters
@@ -858,16 +847,15 @@ class Frequency():
         return f'{self.__class__.__name__}({self.data})'
 
 
-    def __call__(self, task:str='parabola', *, reload:bool=False, window:bool=True, f_range:tuple=(None, None),
+    def __call__(self, task:str='parabola', *, window:bool=True, f_range:tuple=(None, None),
                  center:float=None, span:float=None, shift:int=0, count:int=LIMIT) -> None:
         """
         Compute spectrum and frequency using selected method.
-        Optionaly reload TbT data (if epics), apply window and pass other parameters.
+
+        Optionaly apply window and pass other parameters.
 
         Parameters
         ----------
-        reload: bool
-            flag to reload epics
         window: bool
             flag to apply window
         f_range: tuple
@@ -887,17 +875,17 @@ class Frequency():
 
         """
         if task == 'fft':
-            self.task_fft(reload=reload, window=window, f_range=f_range, shift=shift, count=count)
+            self.task_fft(window=window, f_range=f_range, shift=shift, count=count)
             self.frequency.copy_(self.fft_frequency)
             return
 
         if task == 'ffrft':
-            self.task_ffrft(reload=reload, window=window, f_range=f_range, center=center, span=span, shift=shift, count=count)
+            self.task_ffrft(window=window, f_range=f_range, center=center, span=span, shift=shift, count=count)
             self.frequency.copy_(self.ffrft_frequency)
             return
 
         if task == 'parabola':
-            self.task_parabola(reload=reload, window=window, f_range=f_range, center=center, span=span, shift=shift, count=count)
+            self.task_parabola(window=window, f_range=f_range, center=center, span=span, shift=shift, count=count)
             self.frequency.copy_(self.parabola_frequency)
             return
 

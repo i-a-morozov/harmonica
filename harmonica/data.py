@@ -321,7 +321,7 @@ class Data:
         """
         Save data to file (numpy).
 
-        Note, only data is saved.
+        Note, only work is saved.
 
         Parameters
         ----------
@@ -333,7 +333,7 @@ class Data:
         None
 
         """
-        numpy.save(file_name, self.data.detach().cpu().numpy())
+        numpy.save(file_name, self.work.detach().cpu().numpy())
 
 
     def load_data(self, file_name:str) -> None:
@@ -353,7 +353,7 @@ class Data:
         data = numpy.load(file_name)
         if (self.size, self.length) == data.shape:
             self.source = 'file'
-            self.data.copy_(torch.tensor(data))
+            self.data.copy_(torch.tensor(data, dtype=self.dtype, device=self.device))
             self.reset()
             return
         else:

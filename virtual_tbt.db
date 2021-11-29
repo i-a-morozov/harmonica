@@ -1,4 +1,19 @@
 #softIoc -d virtual_tbt.db
+record(waveform, "HARMONICA:NOISE:X-I") {
+    field(DESC, "NOISE")
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:NOISE:Z-I") {
+    field(DESC, "NOISE")
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
+record(waveform, "HARMONICA:NOISE:I-I") {
+    field(DESC, "NOISE")
+    field(NELM, "54")
+    field(FTVL, "DOUBLE")
+}
 record(waveform, "HARMONICA:STP2:turns_x-I") {
     field(DESC, "BPM")
     field(NELM, "8192")

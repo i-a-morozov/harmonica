@@ -21,7 +21,7 @@ def pv_make(name: str, plane: str, flag: bool = False) -> str:
     """
     Generate PV name (str) for given BPM name (str) and plane (str).
 
-    Use test PV names if test flag.
+    Use harmonica PV names if test flag.
 
     Parameters
     ----------
