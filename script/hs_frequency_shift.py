@@ -236,6 +236,16 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
+  if args.fit:
+    df = pandas.DataFrame()
+    df['bpm'] = [*bpm.keys()]
+    df['f_fit'] = m
+    df['s_fit'] = s
+    plot = scatter(df, x='bpm', y='f_fit', title=title, opacity=0.75, marginal_y='box', error_y='s_fit')
+    plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.show(config=config)
 
 # Print data
 if args.print:

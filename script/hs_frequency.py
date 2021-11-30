@@ -1,7 +1,7 @@
 """
 usage: hs_frequency [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
-                    [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit] [--flip]
-                    [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
+                    [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit]
+                    [--fraction FRACTION] [--flip] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
 Print/save/plot frequency data for selected plane and BPMs.
 
@@ -33,6 +33,7 @@ optional arguments:
   -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
                         frequency estimation method
   --fit                 flag to fit frequency
+  --fraction FRACTION   fraction of points near spectum peak
   --flip                flag to flip frequency around 1/2
   --plot                flag to plot data
   --harmonica           flag to use harmonica PV names for input
@@ -73,6 +74,7 @@ parser.add_argument('--f_min', type=float, help='min frequency value (float)', d
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
 parser.add_argument('--fit', action='store_true', help='flag to fit frequency')
+parser.add_argument('--fraction', type=float, help='fraction of points near spectum peak', default=0.05)
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -195,8 +197,11 @@ frequency = f.frequency.cpu().numpy()
 
 # Fit
 if args.fit:
+  fraction = args.fraction
+  if fraction >= 1.0 or fraction <= 0.0:
+    exit(f'error: fraction is expected to br in (0, 1)')
   from statsmodels.api import WLS
-  m, s = f.task_fit(window=args.window, size=int(0.05*length), mode='ols').T
+  m, s = f.task_fit(window=args.window, size=int(fraction*length), mode='ols').T
   w = 1/s.cpu().numpy()**2
   x = numpy.ones(len(bpm)).reshape(1, -1).T
   y = m.cpu().numpy()
@@ -224,13 +229,19 @@ if args.plot:
   mean = numpy.mean(frequency)
   median = numpy.median(frequency)
   std = numpy.std(frequency)
-  title=f'{TIME}: Frequency<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
+  title = f'{TIME}: Frequency<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
   title = title if not args.fit else f'{title}<br>FIT={f_fit} & ERR={s_fit}'
-  plot = scatter(df, x='bpm', y='frequency', title=title, opacity=0.75, marginal_y='box')
-  plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
-  plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
-  plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
+  if not args.fit:
+    plot = scatter(df, x='bpm', y='frequency', title=title, opacity=0.75, marginal_y='box')
+    plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
+    plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
+    plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
   if args.fit:
+    m, s = m.cpu().numpy(), s.cpu().numpy()
+    m = 1.0 - m if args.flip else m
+    df['f_fit'] = m
+    df['s_fit'] = s
+    plot = scatter(df, x='bpm', y='f_fit', title=title, opacity=0.75, marginal_y='box', error_y='s_fit')
     plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
