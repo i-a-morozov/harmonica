@@ -1,6 +1,6 @@
 """
 usage: hs_noise [-h] [-p {x,z,i}] [-l LENGTH] [--limit LIMIT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                [--mean | --median | --normalize] [-s] [--std] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
+                [--mean | --median | --normalize] [-u] [--std] [--plot] [--auto] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
 
 TbT data noise estimation for selected BPMs and plane.
 
@@ -26,6 +26,7 @@ optional arguments:
   -u, --update          flag to update harmonica PV
   --std                 flag to estimate noise with std
   --plot                flag to plot data
+  --auto                flag to plot autocorrelation
   --harmonica           flag to use harmonica PV names for input
   --device {cpu,cuda}   data device
   --dtype {float32,float64}
@@ -60,6 +61,7 @@ transform.add_argument('--normalize', action='store_true', help='flag to normali
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
 parser.add_argument('--std', action='store_true', help='flag to estimate noise with std')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--auto', action='store_true', help='flag to plot autocorrelation')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -75,6 +77,7 @@ from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
+from harmonica.frequency import Frequency
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
@@ -170,6 +173,10 @@ if args.std:
 else:
   rnk, std = flt.estimate_noise(limit=args.limit, cpu=True)
 
+# Autocorrelation
+if args.auto:
+  auto = Frequency.autocorrelation(tbt.work).cpu().numpy()
+
 # Clean
 del win, tbt, flt
 if device == 'cuda':
@@ -192,6 +199,16 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
+  if args.auto:
+    from plotly.express import imshow
+    plot = imshow(
+      auto,
+      labels=dict(x="shift", y="bpm", color=f"autocorrelation"),
+      y=[*bpm.keys()],
+      aspect=0.5,
+      title=f'{TIME}: Autocorrelation'
+    )
+    plot.show(config=config)
 
 # Print data
 if args.print:
