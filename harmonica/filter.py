@@ -17,18 +17,18 @@ class Filter():
     Parameters
     ----------
     data: 'Data'
-        Data instance.
-        Noise estimation is perfomed using work container.
-        Filtering is performed using work container (modify work container inplace).
+        Data instance
+        Noise estimation is perfomed using work container
+        Filtering is performed using work container (modify work container inplace)
     random_seed: int
-        Random seed (randomized range estimation).
+        Random seed (randomized range estimation)
 
     Attributes
     ----------
     data: 'Data'
-        Data instance.
+        Data instance
     random_seed: int
-        Random seed (randomized range estimation).
+        Random seed (randomized range estimation)
 
     Methods
     ----------
@@ -444,7 +444,8 @@ class Filter():
         return count, value, low, sparse
 
 
-    def estimate_noise(self, *, limit:int=64, cpu:bool=True) -> tuple:
+    def estimate_noise(self, *, limit:int=64, cpu:bool=True,
+                       randomized:bool=False, buffer:int=8, count:int=8, random_seed:int=0) -> tuple:
         """
         Estimate optimal truncation rank and noise value for each signal in TbT.
 
@@ -456,6 +457,14 @@ class Filter():
             number of columns to use for estimation
         cpu: bool
             flag to use CPU for SVD computation
+        randomized: bool
+            flag to use randomized SVD
+        buffer: int
+            number of extra dimensions (randomized range estimation)
+        count: int
+            number of iterations (randomized range estimation)
+        random_seed: int
+            random seed (randomized range estimation)
 
         Returns
         -------
@@ -463,7 +472,13 @@ class Filter():
             estimated optimal rank and noise value for each signal in TbT
 
         """
-        return self.__class__.svd_optimal(self.__class__.make_matrix(self.data.work)[:, :, :limit], cpu=cpu)
+        if not randomized:
+            return self.svd_optimal(self.make_matrix(self.data.work)[:, :, :limit], cpu=cpu)
+
+        matrix = self.make_matrix(self.data.work)
+        projection = self.randomized_range(limit + buffer, count, matrix, random_seed)
+        matrix = torch.matmul(torch.transpose(projection, 1, 2), matrix)
+        return self.svd_optimal(matrix, cpu=cpu)
 
 
     def filter_svd(self, *, rank:int=0, limit:int=32,

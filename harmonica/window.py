@@ -1,10 +1,12 @@
 """
 Window module.
+Generate window data.
 Initialize Window class instance.
 
 """
 
 import torch
+import numpy
 
 class Window:
     """
@@ -12,104 +14,181 @@ class Window:
     ----------
     Window class instance.
 
-    Window(length:int, name:str, order:float, **kwargs)
-    Window.from_cosine(length:int, order:float, **kwargs)
-    Window.from_kaiser(length:int, order:float, **kwargs)
+    Window(length:int=1024, name:str=None, order:float=None, **kwargs)
+    Window.from_cosine(length:int=1024, order:float=1.0, **kwargs)
+    Window.from_kaiser(length:int=1024, order:float=1.0, **kwargs)
 
     Parameters
     ----------
     length: int
-        Window data length.
+        window data length
     name: str
-        Window name (a static method of Window class).
-        See cosine_window or kaiser_window implementations.
+        window name ('cosine_window' or kaiser_window)
     order: float
-        Window order pararameter.
+        window order parameter, positive float
     **kwargs:
         dtype, device
 
     Attributes
     ----------
     length: int
-        Window data length.
+        window data length
     name: str
-        Window name (a static method of Window class).
-        See cosine_window or kaiser_window implementations.
+        window name ('cosine_window' or kaiser_window)
     order: float
-        Window order pararameter.
+        window order parameter, positive float
     dtype: torch.dtype
-        Window data type.
+        window type
     device: torch.device
-        Window data device.
-    data: torch.Tensor
-        Window data.
+        window device
+    window: torch.Tensor
+        window container
     total: torch.Tensor
-        Window sum (property).
+        window sum (property)
 
     Methods
     ----------
-    set_data(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None
-        Set (new) window data for given name and order or input tensor with matching length.
-    cosine_window(length:int, order:float, data:torch.Tensor) -> None
-        Cosine window generator (staticmethod).
-    kaiser_window(length:int, order:float, data:torch.Tensor) -> None
-        Cosine window generator (staticmethod).
-    from_cosine(cls, length:int, order:float, **kwargs) -> 'Window'
+    __init__(self, length:int=1024, name:str=None, order:float=None, **kwargs) -> None
+        Window instance initialization.
+    cosine_window(length:int=1024, order:float=1.0, **kwargs) -> torch.Tensor
+        Generate cosine window data (staticmethod).
+    kaiser_window(length:int=1024, order:float=1.0, **kwargs) -> torch.Tensor
+        Generate kaiser window data (staticmethod).
+    set_data(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None
+        Set self.window container for given input data with matching length or given name and order.
+    total(self) -> torch.Tensor
+        Window sum (property).
+    from_cosine(cls, length:int=1024, order:float, **kwargs) -> 'Window'
         Create Window instance using cosine window (classmethod).
-    from_kaiser(cls, length:int, order:float, **kwargs) -> 'Window'
+    from_kaiser(cls, length:int=1024, order:float, **kwargs) -> 'Window'
         Create Window instance using kaiser window (classmethod).
     __repr__(self) -> str
         String representation.
     __len__(self) -> int
         Window length.
-    __getitem__(self, idx:int) -> torch.Tensor:
-        Return window data at given index.
-    __call__(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None
-        Set (new) window data for given name and order or input tensor with matching length. Invoke set_data.
+    __call__(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None
+        Set self.window container for given input data with matching length or given name and order.
+        Invoke set_data() method.
 
     """
-
-    def __init__(self, length: int = 1024, name: str = None, order: float = None, **kwargs) -> None:
-        self.length = length
-        self.data = torch.ones(length, **kwargs)
-        self.dtype = self.data.dtype
-        self.device = self.data.device
-        self.name = name
-        self.order = order
-        if name != None and order != None:
-            self.set_data(name=name, order=order)
-
-
-    def set_data(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None:
+    def __init__(self, length:int=1024, name:str=None, order:float=None, **kwargs) -> None:
         """
-        Set (new) window data for given name and order or input tensor with matching length.
+        Window instance initialization.
 
-        Modify data container inplace.
-        tensor != None, copy given tensor to window data.
-        tensor == None, generate window data using a static method for given name and order.
+        If name==None and order==None, self.window container is equal to ones.
 
         Parameters
         ----------
+        length: int
+            window length
         name: str
-            valid window name ('cosine_window' or 'kaiser_window')
+            window name ('cosine_window' or 'kaiser_window')
         order: float
-            window order
-        tensor: torch.Tensor
-            tensor with window data
+            window order parameter, positive float
+        **kwargs:
+            dtype, device
 
         Returns
         -------
         None
 
         """
-        if tensor == None and name != None and order != None:
+        self.length = length
+        self.window = torch.ones(length, **kwargs)
+        self.dtype = self.window.dtype
+        self.device = self.window.device
+        self.name = name
+        self.order = order
+        if self.name != None and self.order != None:
+            self.set_data(name=self.name, order=self.order)
+
+
+    @staticmethod
+    def cosine_window(length:int=1024, order:float=1.0, **kwargs) -> torch.Tensor:
+        """
+        Generate cosine window data (staticmethod).
+
+        Parameters
+        ----------
+        length: int
+            window length
+        order: float
+            window order parameter, positive float
+        **kwargs:
+            dtype, device
+
+        Returns
+        -------
+        window data (torch.Tensor)
+
+        """
+        window = torch.linspace(0.0, (length - 1.0)/length, length, **kwargs)
+        factor = 2.0**order*torch.exp(torch.lgamma(torch.tensor(1.0 + order, **kwargs)))**2
+        factor = factor/torch.exp(torch.lgamma(torch.tensor(1.0 + 2.0*order, **kwargs)))
+        torch.cos(2.0*numpy.pi*(window - 0.5), out=window)
+        window.add_(1.0).pow_(order).mul_(factor)
+        return window
+
+
+    @staticmethod
+    def kaiser_window(length:int=1024, order:float=1.0, **kwargs) -> torch.Tensor:
+        """
+        Generate kaiser window data (staticmethod).
+
+        Parameters
+        ----------
+        length: int
+            window length
+        order: float
+            window order parameter, positive float
+        **kwargs:
+            dtype, device
+
+        Returns
+        -------
+        window data (torch.Tensor)
+
+        """
+        window = torch.linspace(0.0, (length - 1.0)/length, length, **kwargs)
+        factor = 1.0/torch.i0(torch.tensor(numpy.pi*order, **kwargs))
+        window.sub_(0.5).pow_(2.0).mul_(-4.0).add_(1.0)
+        window.sqrt_().mul_(numpy.pi*order).i0_().mul_(factor)
+        return window
+
+
+    def set_data(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None:
+        """
+        Set self.window container for given input data with matching length or given name and order.
+
+        If data == None, generate window data using staticmethod for given name and order.
+        If data != None, copy given input data to self.window, other parameters are be ignored.
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            window data with matching length
+        name: str
+            window name ('cosine_window' or 'kaiser_window')
+        order: float
+            window order parameter, positive float
+
+        Returns
+        -------
+        None
+
+        """
+        if data == None and name != None and order != None:
             self.name = name
             self.order = order
-            type.__getattribute__(self.__class__, self.name)(self.length, self.order, self.data)
+            self.window = type.__getattribute__(self.__class__, self.name)(self.length, self.order, dtype=self.dtype, device=self.device)
             return
 
-        if tensor != None and self.data.shape == tensor.shape:
-            self.data.copy_(tensor)
+        if data != None:
+            if data.shape != self.window.shape:
+                raise Exception(f'WINDOW: expected input data length {self.length}, got {len(data)}.')
+            self.name = None
+            self.order = None
+            self.window.copy_(data)
             return
 
         raise Exception(f'WINDOW: wrong input arguments in set_data.')
@@ -121,74 +200,11 @@ class Window:
         Window sum (property).
 
         """
-        return torch.sum(self.data)
-
-
-    @staticmethod
-    @torch.jit.script
-    def cosine_window(length:int, order:float, data:torch.Tensor) -> None:
-        """
-        Cosine window generator (staticmethod).
-
-        Modify data container inplace.
-
-        Parameters
-        ----------
-        length: int
-            window data length
-        order: float
-            window order
-        data: torch.Tensor
-            window data
-
-        Returns
-        -------
-        None
-
-        """
-        pi = 2.0*torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
-        num = 2.0**order*torch.exp(torch.lgamma(torch.tensor(1.0 + order, dtype=data.dtype, device=data.device)))**2
-        den = torch.exp(torch.lgamma(torch.tensor(1.0 + 2.0*order, dtype=data.dtype, device=data.device)))
-        factor = num/den
-        torch.linspace(0.0, (length - 1.0)/length, length, out=data)
-        torch.cos(2.0*pi*(data - 0.5), out=data)
-        data.add_(1.0).pow_(order).mul_(factor)
-
-
-    @staticmethod
-    @torch.jit.script
-    def kaiser_window(length:int, order:float, data:torch.Tensor) -> None:
-        """
-        Kaiser window generator (staticmethod).
-
-        Modify data container inplace.
-
-        Parameters
-        ----------
-        length: int
-            window data length
-        order: float
-            window order
-        data: torch.Tensor
-            window data
-
-        Returns
-        -------
-        None
-
-        """
-        pi = 2.0*torch.acos(torch.zeros(1, dtype=data.dtype, device=data.device))
-        factor = 1.0/torch.i0(pi*order)
-        torch.linspace(0.0, (length - 1.0) / length, length, out=data)
-        data.sub_(0.5).pow_(2.0).mul_(-4.0).add_(1.0)
-        torch.sqrt(data, out=data)
-        data.mul_(pi*order)
-        torch.i0(data, out=data)
-        data.mul_(factor)
+        return torch.sum(self.window)
 
 
     @classmethod
-    def from_cosine(cls, length:int, order:float, **kwargs) -> "Window":
+    def from_cosine(cls, length:int=1024, order:float=1.0, **kwargs) -> 'Window':
         """
         Create Window instance using cosine window (classmethod).
 
@@ -197,35 +213,35 @@ class Window:
         length: int
             window length
         order: float
-            window order
+            window order parameter, positive float
         **kwargs:
             dtype, device
 
         Returns
         -------
-        Window instance (cosine window)
+        Window instance (cosine window of given length and order)
 
         """
         return Window(length, "cosine_window", order, **kwargs)
 
 
     @classmethod
-    def from_kaiser(cls, length:int, order:float, **kwargs) -> "Window":
+    def from_kaiser(cls, length:int=1024, order:float=1.0, **kwargs) -> 'Window':
         """
-        Create Window instance using kaise window (classmethod).
+        Create Window instance using kaiser window (classmethod).
 
         Parameters
         ----------
         length: int
             window length
         order: float
-            window order
+            window order parameter, positive float
         **kwargs:
             dtype, device
 
         Returns
         -------
-        Window instance (kaise window)
+        Window instance (kaiser window of given length and order)
 
         """
         return Window(length, "kaiser_window", order, **kwargs)
@@ -247,48 +263,29 @@ class Window:
         return self.length
 
 
-    def __getitem__(self, idx:int) -> torch.Tensor:
+    def __call__(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None:
         """
-        Return window data at given index.
+        Set self.window container for given input data with matching length or given name and order.
+        Invoke set_data() method.
+
+        If data == None, generate window data using staticmethod for given name and order.
+        If data != None, copy given input data to self.window, other parameters are be ignored.
 
         Parameters
         ----------
-        idx: int
-            index
-
-        Returns
-        -------
-        torch.Tensor:
-            value at idx
-
-        """
-        return self.data[idx]
-
-
-    def __call__(self, *, name:str=None, order:float=None, tensor:torch.Tensor=None) -> None:
-        """
-        Set (new) window data for given name and order or input tensor with matching length.
-
-        Invoke set_data.
-        Modify data container inplace.
-        tensor != None, copy given tensor to window data.
-        tensor == None, generate window data using a static method for given name and order.
-
-        Parameters
-        ----------
+        data: torch.Tensor
+            window data with matching length
         name: str
-            valid window name ('cosine_window' or 'kaiser_window')
+            window name ('cosine_window' or 'kaiser_window')
         order: float
-            window order
-        tensor: torch.Tensor
-            tensor with window data
+            window order parameter, positive float
 
         Returns
         -------
         None
 
         """
-        self.set_data(name=name, order=order, tensor=tensor)
+        self.set_data(name=name, order=order, data=data)
 
 
 def main():

@@ -6,10 +6,10 @@ Data normalization.
 
 """
 
-import epics
+import torch
 import numpy
 import pandas
-import torch
+import epics
 
 from .util import LIMIT
 from .window import Window
@@ -20,556 +20,590 @@ class Data:
     ----------
     Data class instance.
 
-    Data(size:int, window:'Window')
-    Data.from_tensor(window:'Window', tensor:torch.Tensor)
-    Data.from_harmonics(size:int, window:'Window', mean:torch.Tensor, frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor, std:torch.Tensor=None)
-    Data.from_file(size:int, window:'Window', file_name:str)
-    Data.from_epics(size:int, window:'Window', pv_list:list, pv_rise:list, shift:int=0, count:int=LIMIT)
+    Data(size:int, window:'Window', dtype:torch.dtype=None, device:torch.device=None)
+    Data.from_data(window:'Window', data:torch.Tensor)
+    Data.from_file(size:int, window:'Window', file:str, dtype:torch.dtype=None, device:torch.device=None)
+    Data.from_epics(window:'Window', pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT, dtype:torch.dtype=None, device:torch.device=None)
 
-    Data type and device are inherited from window.
+    Data type and device are inherited from window if dtype==None and device==None
+    Data type and device are inherited from input data for Data.from_data
 
     Parameters
     ----------
     size: int
-        Number of signals. Data length. TbT size.
+        number of signals
     window: 'Window'
-        Window instance.
-    tensor: torch.Tensor:
-        Input TbT data tensor with matching length (from_tensor).
-    mean: torch.Tensor
-        Mean harmonics values (from_harmonics).
-    frequency: torch.Tensor
-        Harmonics frequencies (from_harmonics).
-    c_amp: torch.Tensor
-        Harmonics cos amplitudes (from_harmonics).
-    s_amp: torch.Tensor
-        Harmonics sin amplitudes (from_harmonics).
-    std: torch.Tensor
-        Noise std.
-    file_name: str
-        Input file name (from_file).
+        window instance
+    data: torch.Tensor
+        input TbT data with matching length (from_data)
+    file: str
+        input file name (from_file)
     pv_list: list
-        List of PV names (from_epics)
+        list of TbT PV names (from_epics)
     pv_rise: list
-        List of PV starting indices (from_epics).
+        list of TbT PV starting indices (from_epics)
     shift: int
-        Shift for all PVs (from_epics).
+        start shift for all TbT PVs (from_epics)
     count: int
-        Length to read from PVs (from_epics).
+        maximum length to read from TbT PVs (from_epics)
+    dtype: torch.dtype
+        data type for self.data and self.work
+    device: torch.device
+        device for self.data and self.work
 
     Attributes
     ----------
     size: int
-        Number of signals. Data length. TbT size.
+        number of signals
     window: 'Window'
-        Window instance.
+        window instance
     length: int
-        Window length. Signal length.
+        window/signal length
     dtype: torch.dtype
-        Data type (inherited from window).
+        data type for self.data and self.work
     device: torch.device
-        Data device (inherited from window).
+        device for self.data and self.work
     data: torch.tensor
-        Data container.
+        data container
     work: torch.tensor
-        Work container. Copy of TbT data.
-        Normalization is done on work. Window is applied only to work.
+        work container (working copy of data container)
     source: str
-        Data source ('empty', 'tensor', 'file' or 'epics').
-    file_name: str
-        Input file (from_file).
+        data source ('empty', 'data', 'file' or 'epics')
+    file: str
+        input file (from_file)
     pv_list: list
-        List of PV names (from_epics).
+        list of TbT PV names (from_epics)
     pv_rise: list
-        List of PV starting indices (from_epics).
+        list of TbT PV starting indices (from_epics)
 
     Methods
     ----------
+    __init__(self, size:int, window:'Window', dtype:torch.dtype=None, device:torch.device=None) -> None
+        Data instance initialization.
     reset(self) -> None
-        Reset work. Copy data to work.
-    set_data(self, tensor:torch.Tensor) -> None
-        Copy input tensor with matching shape to data and reset work.
-    from_tensor(cls, window:'Window', tensor:torch.Tensor) -> 'Data'
-        Generate Data instance from given window (length) and tensor (size x length).
-    generate_harmonics(tensor:torch.Tensor, mean:torch.Tensor, frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor) -> None
-        Generate tensor from harmonics.
-    add_noise(tensor:torch.Tensor, std:torch.Tensor) -> None
-        Add normal noise.
-    from_harmonics(cls, size:int, window:'Window', mean:torch.Tensor, frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor, std:torch.Tensor=None) -> 'Data'
-        Generate Data instance from given harmonics parameters.
-    save_data(self, file_name:str) -> None
-        Save data to file (numpy).
-    load_data(self, file_name:str) -> None
-        Load data from file (numpy). Reset work.
-    from_file(cls, size:int, window:'Window', file_name:str) -> 'Data'
-        Generate Data instance from file (numpy).
-    pv_get(pv_name:str, count:int=None, **kwargs) -> torch.Tensor
-        Get PV value as tensor.
-    pv_put(pv_name:str, tensor:torch.Tensor) -> None
-        Put tensor to PV.
+        Reset self.work container (copy self.data container to self.work container).
+    set_data(self, data:torch.Tensor) -> None
+        Copy input data with matching shape to self.data container and reset self.work container.
+    from_data(cls, window:'Window', data:torch.Tensor) -> 'Data'
+        Generate Data instance for given window and data.
+    save_data(self, file:str) -> None
+        Save self.work to file (numpy array).
+    load_data(self, file:str) -> None
+        Load data from file (numpy array) into self.data container and reset self.work container.
+    from_file(cls, size:int, window:'Window', file:str, dtype:torch.dtype=None, device:torch.device=None) -> 'Data'
+        Generate Data instance from file (numpy array).
+    pv_put(pv:str, data:torch.Tensor, wait:bool=True) -> None
+        Put data to PV.
+    pv_get(pv:str, *, count:int=None, **kwargs) -> torch.Tensor
+        Get PV data.
+    save_epics(self, wait:bool=True) -> None
+        Save data from self.work into self.pv_list.
     load_epics(self, shift:int=0, count:int=LIMIT) -> None
-        Get data from PVs. Reset work.
-    save_epics(self) -> None
-        Put data to PVs.
-    from_epics(cls, size:int, window:'Window', pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT) -> 'Data'
+        Load data from self.pv_list into self.data container and reset self.work container.
+    from_epics(cls, window:'Window', pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT, dtype:torch.dtype=None, device:torch.device=None) -> 'Data'
         Generate Data instance from epics.
-    make_matrix(self, idx:int, length:int, shift:int, name:str=None, order:float=None) -> 'Data'
-        Generate matrix from signal (from work).
-    make_signal(self, length:int) -> 'Data'
-        Generate mixed signal (from work).
+    make_harmonic(length:int, f:float, a:float=1.0, b:float=0.0, m:float=0.0, c:float=None, s:float=None, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor
+        Generate harmonic signal for given parameters.
+    make_noise(length:int, sigma:torch.Tensor, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor
+        Generate normal noise for given length and list of noise parameters.
+    add_noise(self, sigma:torch.tensor) -> None
+        Add noise to self.work container.
+    make_matrix(length:int, shift:int, signal:torch.Tensor) -> torch.Tensor
+        Generate matrix from given signal.
+    make_signal(length:int, matrix:torch.Tensor) -> torch.Tensor
+        Generate mixed signal from given matrix.
     window_mean(self) -> torch.Tensor
-        Return window weighted mean.
+        Return window weighted mean for each signal in self.work container.
     window_remove_mean(self) -> None
-        Remove window weighted mean. Result in work.
+        Remove window weighted mean from self.work container.
     window_apply(self) -> None
-        Apply window. Result in work.
+        Apply window to self.work container.
     mean(self) -> torch.Tensor
-        Return mean.
+        Return mean for each signal in self.work container.
     median(self) -> torch.Tensor
-        Return median.
-    normalize(self, window:bool=False) -> None
-        Normalize (standardize). Result in work.
+        Return median  for each signal in self.work container.
+    normalize(self, window:bool = False) -> None
+        Normalize (standardize) self.work container.
     to_tensor(self) -> torch.Tensor
-        Return data as tensor.
+        Return self.work container as tensor.
     to_numpy(self) -> numpy.ndarray
-        Return data as numpy.
+        Return self.work container as numpy.
     to_dict(self) -> dict
-        Return data as dict if epics.
-    to_data_frame(self) -> pandas.DataFrame
-        Return data as data frame if epics.
+        Return self.work container as dict if epics.
+    to_frame(self) -> pandas.DataFrame
+        Return self.work container as data frame if epics.
     __repr__(self) -> str
         String representation.
     __len__(self) -> int
-        Return number of signals. TbT size.
+        Return number of signals.
     __getitem__(self, idx:int) -> torch.Tensor
         Return signal for given index or PV name if epics.
-    __call__(self, shift:int=0, count:int=LIMIT) -> None
-        Reload epics data. Reset work.
+    __call__(self) -> None
+        Reset self.work container (copy self.data container to self.work container).
 
     """
 
-    def __init__(self, size:int, window:'Window') -> None:
+    def __init__(self, size:int, window:'Window',
+                 dtype:torch.dtype=None, device:torch.device=None) -> None:
+        """
+        Data instance initialization.
+
+        If dtype/device != None, use input dtype/device to set self.data and self.work containers
+        Else use window dtype/device
+
+        Parameters
+        ----------
+        size: int
+            number of signals
+        window: 'Window'
+            window instance
+        dtype: torch.dtype
+            data type for self.data and self.work
+        device: torch.device
+            device for self.data and self.work
+
+        Returns
+        -------
+        None
+
+        """
         self.size = size
         self.window = window
         self.length = self.window.length
-        self.dtype = self.window.dtype
-        self.device = self.window.device
+        self.dtype = dtype if dtype != None else self.window.dtype
+        self.device = device if device != None else self.window.device
         self.data = torch.zeros((self.size, self.length), dtype=self.dtype, device=self.device)
-        self.work = torch.clone(self.data)
+        self.work = torch.zeros((self.size, self.length), dtype=self.dtype, device=self.device)
         self.source = 'empty'
-        self.file_name = None
+        self.file = None
         self.pv_name = None
         self.pv_rise = None
 
 
     def reset(self) -> None:
         """
-        Reset work. Copy data to work.
+        Reset self.work container (copy self.data to self.work).
 
         """
         self.work.copy_(self.data)
 
 
-    def set_data(self, tensor:torch.Tensor) -> None:
+    def set_data(self, data:torch.Tensor) -> None:
         """
-        Copy input tensor with matching shape to data and reset work.
+        Copy input data with matching shape to self.data container and reset self.work container.
 
         Parameters
         ----------
-        tensor: torch.Tensor
-            input tensor with matching shape
+        data: torch.Tensor
+            input data with matching shape
 
         Returns
         -------
         None
 
         """
-        if self.data.shape == tensor.shape:
-            self.data.copy_(tensor)
+        if data.shape == self.data.shape:
+            self.source = 'data'
+            self.data.copy_(data)
             self.reset()
             return
 
-        raise Exception(f'DATA: expected shape {self.data.shape}, got {tensor.shape} on input.')
+        raise Exception(f'DATA: expected input data shape {self.data.shape}, got {data.shape}')
 
 
     @classmethod
-    def from_tensor(cls, window:'Window', tensor:torch.Tensor) -> 'Data':
+    def from_data(cls, window:'Window', data:torch.Tensor) -> 'Data':
         """
-        Generate Data instance from given window (length) and tensor (size x length).
+        Generate Data instance for given window and data.
 
-        Data type and device are inherited from window.
+        type and device are inherited from input data
 
         Parameters
         ----------
         window: 'Window'
             Window instance
-        tensor: torch.Tensor
-            input tensor with matching length
+        data: torch.Tensor
+            input data with matching length
 
         Returns
         -------
-        Data instance generated from given window and input tensor
+        Data instance
 
         """
-        size, length = tensor.shape
+        size, length = data.shape
 
         if length != window.length:
-            raise Exception(f'DATA: expected length {window.length}, got {length} on input.')
+            raise Exception(f'DATA: expected input data length {window.length}, got {length}')
 
-        out = cls(size, window)
-        out.source = 'tensor'
-        out.set_data(tensor)
+        out = cls(size, window, dtype=data.dtype, device=data.device)
+        out.set_data(data)
         return out
 
 
-    @staticmethod
-    @torch.jit.script
-    def generate_harmonics(tensor:torch.Tensor, mean:torch.Tensor,
-                           frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor) -> None:
+    def save_data(self, file:str) -> None:
         """
-        Generate tensor from harmonics.
-
-        Modify tensor container inplace.
+        Save self.work to file (numpy array).
 
         Parameters
         ----------
-        tensor: torch.Tensor
-            input data container
-        mean: torch.Tensor
-            mean values for each signal
-        frequency: torch.Tensor
-            frequency values for each signal and each harmonic
-        c_amp: torch.Tensor
-            cos amplitude values for each signal and each harmonic
-        s_amp: torch.Tensor
-            sin amplitude values for each signal and each harmonic
+        file: str
+            output filename
 
         Returns
         -------
         None
 
         """
-        size, length = tensor.shape
-        pi = 2.0*torch.acos(torch.zeros(1, dtype=tensor.dtype, device=tensor.device))
-        time = 2.0*pi*frequency*torch.linspace(1, length, length, dtype=tensor.dtype, device=tensor.device)
-        torch.sum(c_amp*torch.cos(time) + s_amp*torch.sin(time), 1, out=tensor)
-        tensor.add_(mean)
+        numpy.save(file, self.work.detach().cpu().numpy())
 
 
-    @staticmethod
-    @torch.jit.script
-    def add_noise(tensor:torch.Tensor, std:torch.Tensor) -> None:
+    def load_data(self, file:str) -> None:
         """
-        Add normal noise.
-
-        Modify tensor container inplace.
+        Load data from file (numpy array) into self.data container and reset self.work container.
 
         Parameters
         ----------
-        tensor: torch.Tensor
-            input data container
-        std: torch.Tensor
-            std values for each signal
+        file: str
+            input filename
 
         Returns
         -------
         None
 
         """
-        size, length = tensor.shape
-        tensor.add_(torch.normal(mean=0.0, std=std.repeat((length, 1)).T))
+        data = numpy.load(file)
+        size, length = data.shape
+
+        if size < self.size:
+            raise Exception(f'DATA: expected input data size > {self.size}, got {size}')
+
+        if length < self.length:
+            raise Exception(f'DATA: expected input data length > {self.length}, got {length}')
+
+        self.source = 'file'
+        self.data.copy_(torch.tensor(data[:self.size, :self.length], dtype=self.dtype, device=self.device))
+        self.reset()
 
 
     @classmethod
-    def from_harmonics(cls, size:int, window:'Window', mean:torch.Tensor,
-                       frequency:torch.Tensor, c_amp:torch.Tensor, s_amp:torch.Tensor, std:torch.Tensor=None) -> 'Data':
+    def from_file(cls, size:int, window:'Window', file:str,
+                 dtype:torch.dtype=None, device:torch.device=None) -> 'Data':
         """
-        Generate Data instance from given harmonics parameters.
+        Generate Data instance from file (numpy array).
 
         Parameters
         ----------
         size: int
             number of signals
-        window: 'Window'
-            Window instance
-        mean: torch.Tensor
-            mean values for each signal
-        frequency: torch.Tensor
-            frequency values for each signal and each harmonic
-        c_amp: torch.Tensor
-            cos amplitude values for each signal and each harmonic
-        s_amp: torch.Tensor
-            sin amplitude values for each signal and each harmonic
-        std: torch.Tensor
-            std values for each signal
-
-        Returns
-        -------
-        Data instance generated from harmonics
-
-        """
-        out = cls(size, window)
-        out.source = "harmonics"
-        cls.generate_harmonics(out.data, mean, frequency, c_amp, s_amp)
-        if std != None:
-            cls.add_noise(out.data, std)
-        out.reset()
-        return out
-
-
-    def save_data(self, file_name:str) -> None:
-        """
-        Save data to file (numpy).
-
-        Note, only work is saved.
-
-        Parameters
-        ----------
-        file_name: str
-            file name
-
-        Returns
-        -------
-        None
-
-        """
-        numpy.save(file_name, self.work.detach().cpu().numpy())
-
-
-    def load_data(self, file_name:str) -> None:
-        """
-        Load data from file (numpy). Reset work.
-
-        Parameters
-        ----------
-        file_name: str
-            file name
-
-        Returns
-        -------
-        None
-
-        """
-        data = numpy.load(file_name)
-        if (self.size, self.length) == data.shape:
-            self.source = 'file'
-            self.data.copy_(torch.tensor(data, dtype=self.dtype, device=self.device))
-            self.reset()
-            return
-        else:
-            raise Exception(f'DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.')
-
-
-    @classmethod
-    def from_file(cls, size:int, window:'Window', file_name:str) -> 'Data':
-        """
-        Generate Data instance from file (numpy).
-
-        File data should have matching shape.
-
-        Parameters
-        ----------
-        size: int
-            number of signals in a file
         window:
             window instance
-        file_name: str
-            file name
+        file: str
+            input filename
+        dtype: torch.dtype
+            data type for self.data and self.work
+        device: torch.device
+            device for self.data and self.work
 
         Returns
         -------
-        Data instance from file
+        Data instance
 
         """
-        out = cls(size, window)
-        out.file_name = file_name
-        out.load_data(out.file_name)
+        out = cls(size, window, dtype=dtype, device=device)
+        out.load_data(file)
         return out
 
 
     @staticmethod
-    def pv_get(pv_name:str, count:int=None, **kwargs) -> torch.Tensor:
+    def pv_put(pv:str, data:torch.Tensor, wait:bool=True) -> None:
         """
-        Get PV value as tensor.
+        Put data to PV.
 
         Parameters
         ----------
-        pv_name: str
+        pv: str
+            PV name
+        data: torch.Tensor
+            data to put
+        wait: bool
+            flag to wait for processing to complete
+
+        Returns
+        -------
+        None
+
+        """
+        epics.caput(pv, data.detach().cpu().numpy(), wait=wait)
+
+
+    @staticmethod
+    def pv_get(pv:str, *, count:int=None, **kwargs) -> torch.Tensor:
+        """
+        Get PV data.
+
+        Parameters
+        ----------
+        pv: str
             PV name
         count: int
             length to read from PV
         **kwargs:
-            passed to torch.tensor
+            dtype, device
 
         Returns
         -------
-        torch.Tensor
-            PV value as tensor
+        PV value (torch.Tensor)
 
         """
-        return torch.tensor(epics.caget(pv_name, count=count), **kwargs)
+        data = epics.caget(pv, count=count)
+        if data is None:
+            raise Exception(f'DATA: {pv=} is None.')
+        return torch.tensor(data, **kwargs)
 
 
-    @staticmethod
-    def pv_put(pv_name:str, tensor:torch.Tensor) -> None:
+    def save_epics(self, wait:bool=True) -> None:
         """
-        Put tensor to PV.
+        Save self.work container into self.pv_list.
 
         Parameters
         ----------
-        pv_name: str
-            PV name
-        tensor: torch.Tensor
-            tensor to put
+        wait: bool
+            flag to wait for processing to complete
 
         Returns
         -------
         None
 
         """
-        epics.caput(pv_name, tensor.cpu().numpy())
+        if self.pv_list is None:
+            raise Exception(f'DATA: pv_list is not defined')
+
+        if len(self.pv_list) != self.size:
+            raise Exception(f'DATA: self.pv_list length {len(self.pv_list)} and self.work length {self.size} expected to match')
+
+        epics.caput_many(self.pv_list, self.work.detach().cpu().numpy(), wait=wait)
 
 
     def load_epics(self, shift:int=0, count:int=LIMIT) -> None:
         """
-        Get data from PVs. Reset work.
-
-        pv_list and pv_rise attibutes should be defined.
+        Load data from self.pv_list into self.data container and reset self.work container.
 
         Parameters
         ----------
         shift: int
-            shift for all PVs
+            common start shift for all PVs
         count: int
-            length to load
+            maximum length to load
 
         Returns
         -------
         None
 
         """
-        self.source = 'epics'
-        data = numpy.array(epics.caget_many(self.pv_list, count=count)).reshape(self.size, -1)
-        if data.shape == (self.size, count):
-            if self.pv_rise != None:
-                for i, value in enumerate(data):
-                    self.data[i].copy_(torch.tensor(value[shift + self.pv_rise[i] : shift + self.pv_rise[i] + self.length]))
-            else:
-                self.data.copy_(torch.tensor(data[:, shift : shift + self.length]))
+        if self.pv_list is None:
+            raise Exception(f'DATA: pv_list is not defined')
 
+        if len(self.pv_list) != self.size:
+            raise Exception(f'DATA: self.pv_list length {len(self.pv_list)} and self.work length {self.size} expected to match')
+
+        self.source = 'epics'
+        data = epics.caget_many(self.pv_list, count=count)
+
+        if any(_ is None for _ in data):
+            raise Exception(f'DATA: None in data')
+        data = numpy.array(data).reshape(self.size, -1)
+
+        if data.shape != (self.size, count):
+            raise Exception(f'DATA: expected shape {(self.size, self.length)}, got {pv_data.shape}')
+
+        if self.pv_rise != None and len(self.pv_list) == len(self.pv_rise):
+            for i, (rise, signal) in enumerate(zip(self.pv_rise, data)):
+                self.data[i].copy_(torch.tensor(signal[shift + rise : shift + rise + self.length]))
             self.reset()
             return
 
-        raise Exception(f'DATA: expected shape {(self.size, self.length)}, got {data.shape} on input.')
+        elif self.pv_rise == None:
+            self.data.copy_(torch.tensor(data[:, shift : shift + self.length]))
+            self.reset()
+            return
 
-
-    def save_epics(self) -> None:
-        """
-        Put data to PVs.
-
-        pv_list attibute should be defined.
-
-        """
-        epics.caput_many(self.pv_list, self.work.cpu().numpy())
+        raise Exception(f'DATA: pv_list length {len(self.pv_list)} and pv_rise length {len(self.pv_rise)} expected to match')
 
 
     @classmethod
-    def from_epics(cls, size:int, window:'Window',
-                   pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT) -> 'Data':
+    def from_epics(cls, window:'Window', pv_list:list, pv_rise:list=None, shift:int=0, count:int=LIMIT,
+                  dtype:torch.dtype=None, device:torch.device=None) -> 'Data':
         """
         Generate Data instance from epics.
 
-        If pv_rise == None, data is loaded from index zero.
+        If pv_rise == None, data is loaded from index defined by shift
 
         Parameters
         ----------
-        size: int
-            number of signals
         window:
             Window instance
         pv_list:
             list of PV names
         pv_rise:
-            list of statring indices for each PV
+            list of starting indices for each PV
         shift: int
-            shift for all PVs
+            common start shift for all PVs
         count: int
-            length to load
+            maximum length to load
+        dtype: torch.dtype
+            data type for self.data and self.work
+        device: torch.device
+            device for self.data and self.work
 
         Returns
         -------
-        Data instance from epics
+        Data instance
 
         """
-        out = Data(size, window)
+        out = cls(len(pv_list), window, dtype=dtype, device=device)
         out.pv_list = pv_list
         out.pv_rise = pv_rise
         out.load_epics(shift=shift, count=count)
         return out
 
 
-    def make_matrix(self, idx:int, length:int, shift:int, name:str=None, order:float=None) -> 'Data':
+    @staticmethod
+    def make_harmonic(length:int, f:float, a:float=1.0, b:float=0.0, m:float=0.0, c:float=None, s:float=None,
+                          dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor:
         """
-        Generate matrix from signal (from work).
+        Generate harmonic signal for given parameters.
+
+        h(n) = m + a*cos(2*pi*f*n + b) = m + c*cos(2*pi*f*n) + s*sin(2*pi*f*n)
+        n = 0, ..., length - 1
+
+        If c & s parameters are passed, amplitude and phase are ignored.
 
         Parameters
         ----------
-        idx: int
-            signal id
+        length: int
+            data length
+        f: float
+            frequency
+        a: float
+            amplitude
+        b: float
+            phase
+        m: float
+            mean
+        c: float
+            cos amplitude
+        s: float
+            sin amplitude
+        dtype: torch.dtype
+            data type
+        device: torch.device
+            device
+
+        Returns
+        -------
+        harmonic signal (torch.Tensor)
+
+        """
+        time = torch.linspace(0, length - 1, length, dtype=dtype, device=device)
+
+        if c == None and s == None:
+            return m + a*torch.cos(2.0*numpy.pi*f*time + b)
+
+        return m + c*torch.cos(2.0*numpy.pi*f*time) + s*torch.sin(2.0*numpy.pi*f*time)
+
+
+    @staticmethod
+    def make_noise(length:int, sigma:torch.Tensor,
+                       dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor:
+        """
+        Generate normal noise for given length and list of noise parameters.
+
+        Parameters
+        ----------
+        length: int
+            data length
+        sigma: torch.Tensor
+            sigma values for each signal
+
+        Returns
+        -------
+        noise data (torch.Tensor) with shape (len(sigma), length)
+
+        """
+        return sigma.reshape(-1, 1)*torch.randn((len(sigma), length), dtype=dtype, device=device)
+
+
+    def add_noise(self, sigma:torch.tensor) -> None:
+        """
+        Add noise to self.work container.
+
+        Parameters
+        ----------
+        sigma: torch.Tensor
+            sigma values for each signal
+
+        Returns
+        -------
+        None
+
+        """
+        if len(sigma) != self.size:
+            raise Exception(f'DATA: expected sigma length {self.length}, got {len(sigma)}')
+
+        self.work.add_(self.make_noise(self.length, sigma.to(self.device), dtype=self.dtype, device=self.device))
+
+
+    @staticmethod
+    def make_matrix(length:int, shift:int, signal:torch.Tensor) -> torch.Tensor:
+        """
+        Generate matrix from given signal.
+
+        Parameters
+        ----------
         length: int
             sample length
         shift: int
             sample shift
-        name: str
-            window name
-        order: float
-            window order
+        signal: torch.Tensor
+            input signal
 
         Returns
         -------
-        Data instance with samples generated as shifts of given length
+        matrix (torch.Tensor)
 
         """
-        array = self.work[idx]
-        size = 1 + (len(array) - length)//shift
-        window = Window(length, name, order, dtype=self.dtype, device=self.device)
-        out = Data(size, window)
-        out.source = 'tensor'
+        size = 1 + (len(signal) - length)//shift
+        data = torch.zeros((size, length), dtype=signal.dtype, device=signal.device)
         for i in range(size):
-            out.data[i].copy_(array[i*shift : i*shift + length])
-        out.reset()
-        return out
+            data[i].copy_(signal[i*shift : i*shift + length])
+        return data
 
 
-    def make_signal(self, length:int, name:str=None, order:float=None) -> 'Data':
+    @staticmethod
+    def make_signal(length:int, matrix:torch.Tensor) -> torch.Tensor:
         """
-        Generate mixed signal (from work).
+        Generate mixed signal from given matrix.
 
         Parameters
         ----------
         length: int
             sample length
-        name: str
-            window name
-        order: float
-            window order
+        matrix: torch.Tensor
+            matrix
 
         Returns
         -------
-        Data instance from mixed data.
+        signal (torch.Tensor)
 
         """
-        window = Window(length*self.size, name, order, dtype=self.dtype, device=self.device)
-        out = Data(1, window)
-        out.source = 'tensor'
-        out.data.copy_(self.work[:, :length].T.flatten())
-        out.reset()
-        return out
+        data = torch.zeros(len(matrix)*length, dtype=matrix.dtype, device=matrix.device)
+        data.copy_(matrix[:, :length].T.flatten())
+        return data
 
 
     def window_mean(self) -> torch.Tensor:
         """
-        Return window weighted mean.
+        Return window weighted mean for each signal in self.work container.
 
         Parameters
         ----------
@@ -577,16 +611,15 @@ class Data:
 
         Returns
         ----------
-        torch.Tensor
-            mean values for each signal
+        mean values for each signal (torch.Tensor) with shape (self.size, 1)
 
         """
-        return 1/self.window.total*torch.sum(self.work*self.window.data, 1).reshape(-1, 1)
+        return 1/self.window.total*torch.sum(self.work*self.window.window, 1).reshape(-1, 1)
 
 
     def window_remove_mean(self) -> None:
         """
-        Remove window weighted mean. Result in work.
+        Remove window weighted mean from self.work container.
 
         """
         self.work.sub_(self.window_mean())
@@ -594,15 +627,15 @@ class Data:
 
     def window_apply(self) -> None:
         """
-        Apply window. Result in work.
+        Apply window to self.work container.
 
         """
-        self.work.mul_(self.window.data)
+        self.work.mul_(self.window.window)
 
 
     def mean(self) -> torch.Tensor:
         """
-        Return mean.
+        Return mean for each signal in self.work container.
 
         Parameters
         ----------
@@ -610,8 +643,7 @@ class Data:
 
         Returns
         ----------
-        torch.Tensor
-            mean values for each signal
+        mean values for each signal (torch.Tensor) with shape (self.size, 1)
 
         """
         return torch.mean(self.work, 1).reshape(-1, 1)
@@ -619,7 +651,7 @@ class Data:
 
     def median(self) -> torch.Tensor:
         """
-        Return median.
+        Return median  for each signal in self.work container.
 
         Parameters
         ----------
@@ -627,8 +659,7 @@ class Data:
 
         Returns
         ----------
-        torch.Tensor
-            median values for each signal
+        median values for each signal (torch.Tensor) with shape (self.size, 1)
 
         """
         return torch.median(self.work, 1).values.reshape(-1, 1)
@@ -636,52 +667,34 @@ class Data:
 
     def normalize(self, window:bool = False) -> None:
         """
-        Normalize (standardize). Result in work.
+        Normalize (standardize) self.work container.
 
         Parameters
         ----------
         window: bool
-            flag to use window weighted mean
+            flag to use window weighted mean istead of regular mean
 
         Returns
         -------
         None
 
         """
-        mean = self.window_mean().reshape(-1, 1) if window else self.mean()
+        mean = self.window_mean() if window else self.mean()
         std = torch.std(self.work, 1).reshape(-1, 1)
         self.work.sub_(mean).div_(std)
 
 
     def to_tensor(self) -> torch.Tensor:
         """
-        Return work as tensor.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        ----------
-        torch.Tensor
-            work tensor (cpu)
+        Return self.work container as tensor.
 
         """
-        return self.work.cpu()
+        return self.work.detach().cpu()
 
 
     def to_numpy(self) -> numpy.ndarray:
         """
-        Return data as numpy.
-
-                Parameters
-        ----------
-        None
-
-        Returns
-        ----------
-        numpy.ndarray
-            work tensor (numpy)
+        Return self.work container as numpy.
 
         """
         return self.to_tensor().numpy()
@@ -689,7 +702,7 @@ class Data:
 
     def to_dict(self) -> dict:
         """
-        Return data as dict if epics.
+        Return self.work container as dict if epics.
 
         """
         if self.source == 'epics':
@@ -697,12 +710,12 @@ class Data:
             data = self.to_numpy()
             return {pv: signal for pv, signal in zip(name, data)}
 
-        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
+        raise Exception(f'DATA: expected source epics, got {self.source}')
 
 
-    def to_data_frame(self) -> pandas.DataFrame:
+    def to_frame(self) -> pandas.DataFrame:
         """
-        Return data as data frame if epics.
+        Return self.work container as data frame if epics.
 
         """
         if self.source == 'epics':
@@ -710,12 +723,10 @@ class Data:
             name = self.pv_list
             data = self.to_numpy()
             for pv, value in zip(name, data):
-                frame = pandas.concat(
-                    [frame, pandas.DataFrame({"PV": pv, 'DATA': value})]
-                )
+                frame = pandas.concat([frame, pandas.DataFrame({"PV": pv, 'DATA': value})])
             return frame
 
-        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
+        raise Exception(f'DATA: expected source epics, got {self.source}')
 
 
     def __repr__(self) -> str:
@@ -747,16 +758,12 @@ class Data:
                 return self[self.pv_list.index(idx)]
 
 
-    def __call__(self, shift:int=0, count:int=LIMIT) -> None:
+    def __call__(self) -> None:
         """
-        Reload epics data. Reset work.
+        Reset self.work container (copy self.data container to self.work container).
 
         """
-        if self.source == 'epics':
-            self.load_epics(shift=shift, count=count)
-            return
-
-        raise Exception(f'DATA: expected source epics, got {self.source} on input.')
+        self.reset()
 
 
 def main():
