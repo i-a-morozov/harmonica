@@ -1,47 +1,3 @@
-"""
-usage: hs_frequency [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
-                    [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit]
-                    [--fraction FRACTION] [--flip] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot frequency data for selected plane and BPMs.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z}, --plane {x,z}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -w, --window          flag to apply window
-  --name {cosine_window,kaiser_window}
-                        window type
-  --order ORDER         window order parameter (float >= 0.0)
-  --pad PAD             number of zeros to pad (integer)
-  --f_min F_MIN         min frequency value (float)
-  --f_max F_MAX         max frequency value (float)
-  -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
-                        frequency estimation method
-  --fit                 flag to fit frequency
-  --fraction FRACTION   fraction of points near spectum peak
-  --flip                flag to flip frequency around 1/2
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -73,8 +29,9 @@ parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', 
 parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
-parser.add_argument('--fit', action='store_true', help='flag to fit frequency')
+parser.add_argument('--fit', choices=('none', 'noise', 'ols', 'wls'), help='fit type', default='none')
 parser.add_argument('--fraction', type=float, help='fraction of points near spectum peak', default=0.05)
+parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=32)
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -92,6 +49,7 @@ from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.frequency import Frequency
+from harmonica.filter import Filter
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
@@ -172,7 +130,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, args.name, args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -180,34 +138,56 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize()
+
+# Estimate noise
+if args.fit == 'noise' or args.fit == 'wls':
+  f = Filter(tbt)
+  _, noise = f.estimate_noise(limit=args.limit)
+else:
+  noise = None
 
 # Set Frequency instance
 f = Frequency(tbt, pad=args.pad)
 
+# Apply window
+if args.window:
+  f.data.window_remove_mean()
+  f.data.window_apply()
+
 # Compute frequencies
-f(args.method, window=args.window, f_range=(f_min, f_max))
+f(args.method, f_range=(f_min, f_max))
 
 # Convert to numpy
 frequency = f.frequency.cpu().numpy()
 
-# Fit
-if args.fit:
+# Fit (noise)
+if args.fit == 'noise':
+  from statsmodels.api import WLS
+  x = numpy.ones((len(bpm), 1))
+  y = frequency
+  w = (1/noise**2).cpu().numpy()
+  out = WLS(y, x, w).fit()
+  f_fit = out.params.item()
+  s_fit = out.bse.item()
+
+# Fit (ols/wls)
+if args.fit == 'ols' or args.fit == 'wls':
   fraction = args.fraction
   if fraction >= 1.0 or fraction <= 0.0:
     exit(f'error: fraction is expected to br in (0, 1)')
   from statsmodels.api import WLS
-  m, s = f.task_fit(window=args.window, size=int(fraction*length), mode='ols').T
-  w = 1/s.cpu().numpy()**2
-  x = numpy.ones(len(bpm)).reshape(1, -1).T
+  m, s = f.task_fit(size=int(fraction*length), mode=args.fit, std=noise).T
+  x = numpy.ones((len(bpm), 1))
   y = m.cpu().numpy()
-  wls = WLS(y, x, w).fit()
-  f_fit, *_ = wls.params
-  s_fit, *_ = wls.bse
+  w = 1/s.cpu().numpy()**2
+  out = WLS(y, x, w).fit()
+  f_fit, *_ = out.params
+  s_fit, *_ = out.bse
 
 # Clean
 del win, tbt, f
@@ -217,7 +197,7 @@ if device == 'cuda':
 # Flip
 if args.flip:
   frequency = 1.0 - frequency
-  if args.fit:
+  if args.fit != 'none':
     f_fit = 1.0 - f_fit
 
 # Plot
@@ -230,13 +210,19 @@ if args.plot:
   median = numpy.median(frequency)
   std = numpy.std(frequency)
   title = f'{TIME}: Frequency<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
-  title = title if not args.fit else f'{title}<br>FIT={f_fit} & ERR={s_fit}'
-  if not args.fit:
+  title = title if not args.fit != 'none' else f'{title}<br>FIT={args.fit.upper()}, VALUE={f_fit}, ERROR={s_fit}'
+  if args.fit == 'none':
     plot = scatter(df, x='bpm', y='frequency', title=title, opacity=0.75, marginal_y='box')
     plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
     plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
     plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
-  if args.fit:
+  if args.fit == 'noise':
+    df['weight'] = w
+    plot = scatter(df, x='bpm', y='frequency', title=title, opacity=0.75, marginal_y='box', hover_data=['bpm', 'frequency', 'weight'])
+    plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=0.5)
+    plot.add_hline(mean, line_color='black', line_dash="dash", line_width=0.5)
+    plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=0.5)
+  if args.fit == 'ols' or args.fit == 'wls':
     m, s = m.cpu().numpy(), s.cpu().numpy()
     m = 1.0 - m if args.flip else m
     df['f_fit'] = m

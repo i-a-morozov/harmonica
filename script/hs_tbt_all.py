@@ -1,37 +1,3 @@
-"""
-usage: hs_tbt_all [-h] [-p {x,z,i}] [-l LENGTH] [--load LOAD] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [--beta_min BETA_MIN] [--beta_max BETA_MAX]
-                  [-f] [-c | -n] [--print] [--mean | --median | --normalize] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot mixed TbT data for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to print/save/plot (integer)
-  --load LOAD           number of turns to load (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  --beta_min BETA_MIN   min beta threshold value for x or z
-  --beta_max BETA_MAX   max beta threshold value for x or z
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -62,7 +28,7 @@ transform.add_argument('--normalize', action='store_true', help='flag to normali
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -164,7 +130,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -172,21 +138,21 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize()
 
 # Check mixed length
 if args.length < 0 or args.length > args.load:
   exit(f'error: requested length {args.length} is expected to be positive and less than load length {args.load}')
 
 # Generate mixed data
-tbt = tbt.make_signal(args.length)
+data = tbt.make_signal(args.length, tbt.work)
 
 # Convert to numpy
-data, *_ = tbt.to_numpy()
+data = data.detach().cpu().numpy()
 name = [name for name in bpm] * args.length
 turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
 time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()

@@ -1,34 +1,3 @@
-"""
-usage: hs_tbt_orbit [-h] [-p {x,z,i}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [--beta_min BETA_MIN] [--beta_max BETA_MAX] [-f]
-                    [-c | -n] [--print] [--median] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot TbT orbit data for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        total number of turns to average (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  --beta_min BETA_MIN   min beta threshold value for x or z
-  --beta_max BETA_MAX   max beta threshold value for x or z
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --median              flag to compute as median instead of mean
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -55,7 +24,7 @@ parser.add_argument('--median', action='store_true', help='flag to compute as me
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -157,10 +126,10 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Compute orbit
-orbit = torch.median(tbt.data, 1).values.cpu().numpy() if args.median else torch.mean(tbt.data, 1).cpu().numpy()
+orbit = tbt.median().flatten().cpu().numpy() if args.median else tbt.mean().flatten().cpu().numpy()
 
 # Clean
 del win, tbt

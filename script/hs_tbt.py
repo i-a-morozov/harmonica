@@ -1,35 +1,3 @@
-"""
-usage: hs_tbt [-h] [-p {x,z,i}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
-              [--plot] [--box] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot TbT data for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to print/save/plot (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  --plot                flag to plot data
-  --box                 flag to show box plot
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -58,7 +26,7 @@ parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--box', action='store_true', help='flag to show box plot')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -140,7 +108,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -148,11 +116,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize()
 
 # Convert to numpy
 data = tbt.to_numpy()

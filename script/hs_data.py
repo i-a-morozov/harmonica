@@ -1,33 +1,3 @@
-"""
-usage: hs_data [-h] [-p {x,z,i}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [--pv | --data] [-f FILE] [--out {pv,file}]
-               [--mean | --median | --normalize] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Save/load TbT data for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to save (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  --pv                  flag to load data from PVs
-  --data                flag to load data from file
-  -f FILE, --file FILE  input file name
-  --out {pv,file}       output target
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -54,7 +24,7 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -137,7 +107,7 @@ size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
 if args.pv:
-  tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+  tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 pv_list = [pv.replace('VEPP4', 'HARMONICA') for pv in pv_list]
 if args.data:
   filename = args.file
@@ -155,7 +125,7 @@ if args.data:
   for i, value in enumerate(data):
     rise = pv_rise[i] if args.rise else 0
     tensor[i].copy_(torch.tensor(value[offset + rise : offset + rise + length]))
-  tbt = Data.from_tensor(win, tensor)
+  tbt = Data.from_data(win, tensor)
   tbt.pv_list = pv_list
   tbt.pv_rise = pv_rise
 
@@ -165,11 +135,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize()
 
 # Convert to numpy
 data = tbt.to_numpy()

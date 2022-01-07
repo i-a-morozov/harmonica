@@ -1,23 +1,10 @@
-"""
-usage: hs_udar [-h] -b {E1,E2,P1,P2} [-p PAUSE]
-
-Perform UDAR for given bunch {E1,E2,P1,P2}.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -b {E1,E2,P1,P2}, --bunch {E1,E2,P1,P2}
-                        bunch id
-  -p PAUSE, --pause PAUSE
-                        pause value (default 1.0sec)
-"""
-
 # Input arguments flag
 import sys
 _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_soft', description='Perform SOFT for given bunch {E1,E2,P1,P2}.')
+parser = argparse.ArgumentParser(prog='hs_soft', description='Perform UDAR for selected bunch {E1,E2,P1,P2}.')
 parser.add_argument('-b', '--bunch', choices=('E1', 'E2', 'P1', 'P2'), help='bunch id', default='E1')
 parser.add_argument('-p', '--pause', type=float, help='pause value (default 1.0sec)', default=1.0)
 args = parser.parse_args(args=None if flag else ['--help'])
@@ -37,20 +24,20 @@ def tuki_on():
 	""" TUKI on. """
 	system('/home/vepp4/kadrs/converter/dsend/bin/dsend-bin -o CHAN -d "LG TUKI 21" > /dev/null')
 def tuki_off():
-	""" TUKI on. """
+	""" TUKI off. """
 	system('/home/vepp4/kadrs/converter/dsend/bin/dsend-bin -o CHAN -d "LG TUKI 22" > /dev/null')
 def tuki_kick():
-	""" TUKI do kick. """
+	""" TUKI kick. """
 	system('/home/vepp4/kadrs/converter/dsend/bin/dsend-bin -o CHAN -d "LG TUKI 24" > /dev/null')
 
 # Set BPMs
 def prepare():
 	""" Prepare BPMs. Set to UDAR, set given bunch and set trigger. """
-	caput('VEPP4:ALL:turns_kick-SP', 'UDAR')
+	caput('VEPP4:ALL:turns_kick-SP', 'UDAR', wait=True)
 	sleep(0.1)
-	caput('VEPP4:ALL:turns_bunch-SP', args.bunch)
+	caput('VEPP4:ALL:turns_bunch-SP', args.bunch, wait=True)
 	sleep(0.1)
-	caput('VEPP4:ALL:turns_do-SP', 1)
+	caput('VEPP4:ALL:turns_do-SP', 1, wait=True)
 	sleep(0.1)
 
 # Kick

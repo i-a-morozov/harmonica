@@ -1,48 +1,3 @@
-"""
-usage: hs_spectrum_all [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                       [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--f_min F_MIN] [--f_max F_MAX]
-                       [--beta_min BETA_MIN] [--beta_max BETA_MAX] [--nufft] [--time {position,phase}] [--log] [--plot] [--harmonica] [--device {cpu,cuda}]
-                       [--dtype {float32,float64}]
-
-Print/save/plot mixed amplitude spectrum data for selected plane and BPMs.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z}, --plane {x,z}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -w, --window          flag to apply window
-  --name {cosine_window,kaiser_window}
-                        window type
-  --order ORDER         window order parameter (float >= 0.0)
-  --f_min F_MIN         min frequency value (float)
-  --f_max F_MAX         max frequency value (float)
-  --beta_min BETA_MIN   min beta threshold value for x or z
-  --beta_max BETA_MAX   max beta threshold value for x or z
-  --nufft               flag to compute spectum using TYPY-III NUFFT
-  --time {position,phase}
-                        time type to use with NUFFT
-  --log                 flag to apply log10 to amplitude spectrum
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -77,6 +32,7 @@ parser.add_argument('--beta_max', type=float, help='max beta threshold value for
 parser.add_argument('--nufft', action='store_true', help='flag to compute spectum using TYPY-III NUFFT')
 parser.add_argument('--time', choices=('position', 'phase'), help='time type to use with NUFFT', default='phase')
 parser.add_argument('--log', action='store_true', help='flag to apply log10 to amplitude spectrum')
+parser.add_argument('--peaks', type=int, help='number of peaks to find', default=0)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -89,7 +45,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, QX, QZ, pv_make
+from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.frequency import Frequency
@@ -167,13 +123,11 @@ if args.nufft:
     position = numpy.array([df[name]["S"] for name in bpm])/LENGTH
   if args.time == 'phase':
     if args.plane == 'x':
-      tune = QX
       case = 'FX'
-    if args.plane == 'y':
-      tune = QZ
+    if args.plane == 'z':
       case = 'FZ'
     position = numpy.array([df[name][case] for name in df])
-    position = numpy.cumsum(position)/(2.0*numpy.pi*tune)
+    position = numpy.cumsum(position)/position.sum()
     start, *_ = position
     position = position - start
     position = numpy.array([value for (value, name) in zip(position, df) if name in bpm])
@@ -205,7 +159,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, args.name, args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -213,11 +167,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize()
 
 # Set Frequency instance
 f = Frequency(tbt)
@@ -225,7 +179,6 @@ f = Frequency(tbt)
 # Compute spectrum
 grid, data = f.task_mixed_spectrum(
     length=args.length,
-    window=args.window,
     f_range=(f_min, f_max),
     name=args.name,
     order=args.order,
@@ -238,10 +191,19 @@ del win, tbt, f
 if device == 'cuda':
   torch.cuda.empty_cache()
 
+# Peaks
+if args.peaks > 0:
+  from scipy.signal import find_peaks
+  peak, *_ = find_peaks(data)
+  peak = numpy.array([grid[peak], data[peak]]).T
+  peak_grid, peak_data = numpy.array(sorted(peak, key=lambda x: x[1], reverse=True)[:args.peaks]).T
+
 # Plot
 if args.plot:
   from plotly.express import scatter
   plot = scatter(x=grid, y=data, title=f'{TIME}: Spectrum (mixed)', labels={'x': 'frequency', 'y': f'dtft({args.plane})'})
+  if args.peaks > 0:
+    plot.add_scatter(x=peak_grid, y=peak_data, mode='markers', marker=dict(color='red', size=10), showlegend=False, name='peak')
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],

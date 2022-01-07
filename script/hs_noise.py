@@ -1,38 +1,3 @@
-"""
-usage: hs_noise [-h] [-p {x,z,i}] [-l LENGTH] [--limit LIMIT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                [--mean | --median | --normalize] [-u] [--std] [--plot] [--auto] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-TbT data noise estimation for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --limit LIMIT         number of columns to use (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -u, --update          flag to update harmonica PV
-  --std                 flag to estimate noise with std
-  --plot                flag to plot data
-  --auto                flag to plot autocorrelation
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -151,7 +116,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -159,11 +124,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize()
 
 # Estimate rank & noise
 flt = Filter(tbt)

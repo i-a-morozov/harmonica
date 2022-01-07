@@ -1,48 +1,3 @@
-"""
-usage: hs_frequency_all [-h] -p {x,z} [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print]
-                        [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] --f_min F_MIN --f_max F_MAX [--beta_min BETA_MIN]
-                        [--beta_max BETA_MAX] [--nufft] [--time {position,phase}] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Compute mixed frequency for selected plane and BPMs with optional shifts.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z}, --plane {x,z}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --load LOAD           number of turns to load (integer)
-  --shift SHIFT         shift step (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -w, --window          flag to apply window
-  --name {cosine_window,kaiser_window}
-                        window type
-  --order ORDER         window order parameter (float >= 0.0)
-  --f_min F_MIN         min frequency value (float)
-  --f_max F_MAX         max frequency value (float)
-  --beta_min BETA_MIN   min beta threshold value for x or z
-  --beta_max BETA_MAX   max beta threshold value for x or z
-  --nufft               flag to compute spectum using TYPY-III NUFFT
-  --time {position,phase}
-                        time type to use with NUFFT
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -52,9 +7,9 @@ _, *flag = sys.argv
 import argparse
 parser = argparse.ArgumentParser(prog='hs_frequency_all', description='Compute mixed frequency for selected plane and BPMs with optional shifts.')
 parser.add_argument('-p', '--plane', choices=('x', 'z'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=128)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=64)
 parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=128)
-parser.add_argument('--shift', type=int, help='shift step (integer)', default=0)
+parser.add_argument('--shift', type=int, help='shift step (integer)', default=1)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -90,7 +45,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, QX, QZ, pv_make
+from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.frequency import Frequency
@@ -168,13 +123,11 @@ if args.nufft:
     position = numpy.array([df[name]["S"] for name in bpm])/LENGTH
   if args.time == 'phase':
     if args.plane == 'x':
-      tune = QX
       case = 'FX'
     if args.plane == 'z':
-      tune = QZ
       case = 'FZ'
     position = numpy.array([df[name][case] for name in df])
-    position = numpy.cumsum(position)/(2.0*numpy.pi*tune)
+    position = numpy.cumsum(position)/position.sum()
     start, *_ = position
     position = position - start
     position = numpy.array([value for (value, name) in zip(position, df) if name in bpm])
@@ -210,7 +163,7 @@ if args.length > length:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, args.name, args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -218,11 +171,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize()
 
 # Number of steps
 step = range(1 if args.shift <= 0 else 1 + (length - args.length) // args.shift)
@@ -238,10 +191,9 @@ for i in step:
   tbt_shift.set_data(tbt.work[:, i*shift : length + i*shift])
   frequency = f.task_mixed_frequency(
     length=length,
-    window=args.window,
     f_range=(f_min, f_max),
     name=args.name,
-    order=args.order,
+    order=args.order if args.window else 0.0,
     normalize=args.normalize,
     position=position if args.nufft else None
   )
@@ -261,7 +213,10 @@ if args.plot:
   for i, name in enumerate(['F1', 'F2', 'F3']):
     df = pandas.concat([df, pandas.DataFrame({'step':step, 'case':name, 'frequency':frequency[:, i]})])
   from plotly.express import scatter
-  title = f'{TIME}: Frequency (all)<br>sample={args.length} & shift={args.shift}'
+  mean = numpy.mean(frequency[-1])
+  median = numpy.median(frequency[-1])
+  std = numpy.std(frequency[-1])
+  title = f'{TIME}: Frequency (all)<br>LENGTH={args.length}, SHIFT={args.shift}, COUNT={len(step)}<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
   plot = scatter(df, x='step', y='frequency', color='case', title=title, opacity=0.75, marginal_y='box')
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},

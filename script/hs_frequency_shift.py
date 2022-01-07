@@ -1,48 +1,3 @@
-"""
-usage: hs_frequency_shift [-h] [-p {x,z}] [-l LENGTH] [--load LOAD] [--shift SHIFT] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n]
-                          [--print] [--mean | --median | --normalize] [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN]
-                          [--f_max F_MAX] [-m {fft,ffrft,parabola}] [--fit] [--flip] [--plot] [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot frequency data for selected plane and BPMs using shifts.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z}, --plane {x,z}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --load LOAD           number of turns to load (integer)
-  --shift SHIFT         shift step (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -w, --window          flag to apply window
-  --name {cosine_window,kaiser_window}
-                        window type
-  --order ORDER         window order parameter (float >= 0.0)
-  --pad PAD             number of zeros to pad (integer)
-  --f_min F_MIN         min frequency value (float)
-  --f_max F_MAX         max frequency value (float)
-  -m {fft,ffrft,parabola}, --method {fft,ffrft,parabola}
-                        frequency estimation method
-  --fit                 flag to fit frequency
-  --flip                flag to flip frequency around 1/2
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -76,9 +31,11 @@ parser.add_argument('--pad', type=int, help='number of zeros to pad (integer)', 
 parser.add_argument('--f_min', type=float, help='min frequency value (float)', default=0.0)
 parser.add_argument('--f_max', type=float, help='max frequency value (float)', default=0.5)
 parser.add_argument('-m', '--method', choices=('fft', 'ffrft', 'parabola'), help='frequency estimation method', default='parabola')
-parser.add_argument('--fit', action='store_true', help='flag to fit frequency')
+parser.add_argument('--fit', choices=('none', 'std', 'noise'), help='fit type', default='none')
+parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=32)
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--noise', action='store_true', help='flag to plot noise data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -94,6 +51,7 @@ from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.frequency import Frequency
+from harmonica.filter import Filter
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
@@ -178,7 +136,7 @@ if args.length > length:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, args.name, args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -186,16 +144,39 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize()
 
 # Compute shifted frequencies
 f = Frequency(tbt)
-frequency = f.task_shift(args.length, args.shift, task=args.method, window=args.window, f_range=(f_min, f_max))
+frequency = f.task_shift(
+  args.length,
+  args.shift,
+  task=args.method,
+  name=args.name,
+  order=args.order if args.window else 0.0,
+  f_range=(f_min, f_max)
+)
 _, step = frequency.shape
+
+# Estimate noise
+if args.fit == 'noise':
+  table = []
+  win = Window(args.length)
+  for signal in tbt.work:
+    matrix = Data.from_data(win, Data.make_matrix(args.length, args.shift, signal))
+    f = Filter(matrix)
+    _, noise = f.estimate_noise(limit=args.limit)
+    table.append(noise)
+  noise = torch.stack(table).cpu().numpy()
+
+# Clean
+del win, tbt, f
+if device == 'cuda':
+  torch.cuda.empty_cache()
 
 # Convert to numpy
 frequency = frequency.cpu().numpy()
@@ -204,17 +185,36 @@ frequency = frequency.cpu().numpy()
 if args.flip:
   frequency = 1.0 - frequency
 
-# Fit
-if args.fit:
+# Fit (std)
+if args.fit == 'std':
   from statsmodels.api import WLS
   m = frequency.mean(1)
   s = frequency.std(1)
-  w = 1/s**2
-  x = numpy.ones(len(bpm)).reshape(1, -1).T
+  x = numpy.ones((len(bpm), 1))
   y = m
-  wls = WLS(y, x, w).fit()
-  f_fit, *_ = wls.params
-  s_fit, *_ = wls.bse
+  w = 1/s**2
+  out = WLS(y, x, w).fit()
+  f_fit, *_ = out.params
+  s_fit, *_ = out.bse
+
+# Fit (noise)
+if args.fit == 'noise':
+  from statsmodels.api import WLS
+  table = []
+  x = numpy.ones((step, 1))
+  for y, s in zip(frequency, noise):
+    w = 1/s**2
+    out = WLS(y, x, w).fit()
+    f_fit, *_ = out.params
+    s_fit, *_ = out.bse
+    table.append([f_fit, s_fit])
+  x = numpy.ones((len(bpm), 1))
+  m, s = numpy.array(table).T
+  y = m
+  w = 1/s**2
+  out = WLS(y, x, w).fit()
+  f_fit, *_ = out.params
+  s_fit, *_ = out.bse
 
 # Plot
 if args.plot:
@@ -222,10 +222,10 @@ if args.plot:
   for i, name in enumerate(bpm):
     df = pandas.concat([df, pandas.DataFrame({'step':range(1, step + 1), 'bpm':name, 'frequency':frequency[i]})])
   from plotly.express import scatter
-  title = f'{TIME}: Frequency (shift)<br>sample={args.length} & shift={args.shift}'
-  title = title if not args.fit else f'{title}<br>FIT={f_fit} & ERR={s_fit}'
+  title = f'{TIME}: Frequency (shift)<br>SAMPLE={args.length}, SHIFT={args.shift}, COUNT={step}, MEAN={frequency.mean()}, STD={frequency.std()}'
+  title = title if not args.fit != 'none' else f'{title}<br>FIT={args.fit.upper()}, VALUE={f_fit}, ERROR={s_fit}'
   plot = scatter(df, x='step', y='frequency', color='bpm', title=title, opacity=0.75, marginal_y='box')
-  if args.fit:
+  if args.fit != 'none':
     plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
@@ -236,7 +236,7 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
-  if args.fit:
+  if args.fit != 'none':
     df = pandas.DataFrame()
     df['bpm'] = [*bpm.keys()]
     df['f_fit'] = m
@@ -245,6 +245,13 @@ if args.plot:
     plot.add_hline(f_fit - s_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit, line_color='red', line_dash="dash", line_width=0.5)
     plot.add_hline(f_fit + s_fit, line_color='red', line_dash="dash", line_width=0.5)
+    plot.show(config=config)
+  if args.noise and args.fit == 'noise':
+    df = pandas.DataFrame()
+    for i, name in enumerate(bpm):
+      df = pandas.concat([df, pandas.DataFrame({'step':range(1, step + 1), 'bpm':name, 'noise':noise[i]})])
+    title = f'{TIME}: Noise (shift)<br>SAMPLE={args.length}, SHIFT={args.shift}, COUNT={step}'
+    plot = scatter(df, x='step', y='noise', color='bpm', title=title, opacity=0.75)
     plot.show(config=config)
 
 # Print data

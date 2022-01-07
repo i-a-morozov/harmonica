@@ -1,32 +1,3 @@
-"""
-usage: hs_tbt [-h] [-p {x,z,i}] [-l LENGTH] [-b BPM] [-o OFFSET] [-r] [--mean | --median | --normalize] [--envelope] [--frequency] [--flip] [--plot] [--harmonica]
-              [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot TbT data for selected BPMs and plane.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z,i}, --plane {x,z,i}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to print/save/plot (integer)
-  -b BPM, --bpm BPM     BPM name
-  -o OFFSET, --offset OFFSET
-                        rise offset
-  -r, --rise            flag to use rise data from file (drop first turns)
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  --envelope            flag to compute envelope
-  --frequency           flag to compute instantaneous frequency
-  --flip                flag to flip frequency around 1/2
-  --plot                flag to plot data
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -34,7 +5,7 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_tbt', description='Print/save/plot TbT data for selected BPMs and plane.')
+parser = argparse.ArgumentParser(prog='hs_tbt_one', description='Print/save/plot TbT data for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'z', 'i'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to print/save/plot (integer)', default=1024)
 parser.add_argument('-b', '--bpm', type=str, help='BPM name', default='stp2')
@@ -50,7 +21,7 @@ parser.add_argument('--flip', action='store_true', help='flag to flip frequency 
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
-parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float32')
+parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -125,7 +96,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -133,17 +104,17 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=True)
+  tbt.normalize()
 
 # Envelope
 if args.envelope:
   out = Frequency.dht(tbt.work)
   env = out.abs().flatten().cpu().numpy()
-  fre = 1/(2*numpy.pi)*(out[:, :-1]*out[:, 1:].conj()).angle().abs().flatten().cpu().numpy()
+  fre = 1.0/(2.0*numpy.pi)*(out[:, :-1]*out[:, 1:].conj()).angle().abs().flatten().cpu().numpy()
   fre = 1.0 - fre if args.flip else fre
 
 # Convert to numpy
@@ -181,4 +152,5 @@ if args.plot:
     mean = fre.mean()
     std = fre.std()
     plot = scatter(df, x='turn', y='frequency', title=f'{TIME}: Frequency<br>MEAN: {mean}, STD:{std}', opacity=0.75)
+    plot.add_hline(fre.mean(), line_color='red', line_dash="dash", line_width=0.5)
     plot.show(config=config)

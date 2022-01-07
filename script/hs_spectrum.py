@@ -1,46 +1,3 @@
-"""
-usage: hs_spectrum [-h] [-p {x,z}] [-l LENGTH] [--skip BPM [BPM ...] | --only BPM [BPM ...]] [-o OFFSET] [-r] [-f] [-c | -n] [--print] [--mean | --median | --normalize]
-                   [-w] [--name {cosine_window,kaiser_window}] [--order ORDER] [--pad PAD] [--f_min F_MIN] [--f_max F_MAX] [--log] [--flip] [--plot] [--map] [--average]
-                   [--harmonica] [--device {cpu,cuda}] [--dtype {float32,float64}]
-
-Print/save/plot amplitude spectrum data for selected plane and BPMs.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p {x,z}, --plane {x,z}
-                        data plane
-  -l LENGTH, --length LENGTH
-                        number of turns to use (integer)
-  --skip BPM [BPM ...]  space separated list of valid BPM names to skip
-  --only BPM [BPM ...]  space separated list of valid BPM names to use
-  -o OFFSET, --offset OFFSET
-                        rise offset for all BPMs
-  -r, --rise            flag to use rise data from file (drop first turns)
-  -f, --file            flag to save data
-  -c, --csv             flag to save data as CSV
-  -n, --numpy           flag to save data as NUMPY
-  --print               flag to print data
-  --mean                flag to remove mean
-  --median              flag to remove median
-  --normalize           flag to normalize data
-  -w, --window          flag to apply window
-  --name {cosine_window,kaiser_window}
-                        window type
-  --order ORDER         window order parameter (float >= 0.0)
-  --pad PAD             number of zeros to pad (integer)
-  --f_min F_MIN         min frequency value (float)
-  --f_max F_MAX         max frequency value (float)
-  --log                 flag to apply log10 to amplitude spectra
-  --flip                flag to flip spectra around 1/2
-  --plot                flag to plot data
-  --map                 flag to plot heat map
-  --average             flag to plot average spectrum
-  --harmonica           flag to use harmonica PV names for input
-  --device {cpu,cuda}   data device
-  --dtype {float32,float64}
-                        data type
-"""
-
 # Input arguments flag
 import sys
 sys.path.append('..')
@@ -76,6 +33,7 @@ parser.add_argument('--flip', action='store_true', help='flag to flip spectra ar
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--map', action='store_true', help='flag to plot heat map')
 parser.add_argument('--average', action='store_true', help='flag to plot average spectrum')
+parser.add_argument('--peaks', type=int, help='number of peaks to find in average spectrum', default=0)
 parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -173,7 +131,7 @@ else:
 size = len(bpm)
 count = length + offset + rise
 win = Window(length, args.name, args.order, dtype=dtype, device=device)
-tbt = Data.from_epics(size, win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
+tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset, count=count)
 
 # Remove mean
 if args.mean:
@@ -181,11 +139,11 @@ if args.mean:
 
 # Remove median
 if args.median:
-  tbt.work.sub_(torch.median(tbt.data, 1).values.reshape(-1, 1))
+  tbt.work.sub_(tbt.median())
 
 # Normalize
 if args.normalize:
-  tbt.normalize(window=args.window)
+  tbt.normalize()
 
 # Set Frequency instance
 f = Frequency(tbt, pad=args.pad)
@@ -209,13 +167,13 @@ if (f_min, f_max) != (0.0, 0.5):
   data = f.ffrft_spectrum
 
 # Convert to numpy
-grid = grid.cpu().numpy()[1:-1]
-data = data.cpu().numpy()[:, 1:-1]
+grid = grid.detach().cpu().numpy()[1:-1]
+data = data.detach().cpu().numpy()[:, 1:-1]
 
 # Mean spectrum
 if args.average:
-  f('ffrft', window=args.window)
-  mean_grid, mean_data = f.task_mean_spectrum(window=args.window, log=args.log)
+  f('ffrft')
+  mean_grid, mean_data = f.task_mean_spectrum(log=args.log)
   mean_grid = mean_grid.cpu().numpy()[1:-1]
   mean_data = mean_data.cpu().numpy()[1:-1]
 
@@ -235,6 +193,13 @@ if args.flip:
 # Scale
 if args.log:
   data = numpy.log10(data)
+
+# Peaks
+if args.average and args.peaks > 0:
+  from scipy.signal import find_peaks
+  peak, *_ = find_peaks(mean_data)
+  peak = numpy.array([mean_grid[peak], mean_data[peak]]).T
+  peak_grid, peak_data = numpy.array(sorted(peak, key=lambda x: x[1], reverse=True)[:args.peaks]).T
 
 # Plot
 if args.plot:
@@ -264,13 +229,24 @@ if args.plot:
       x=grid,
       y=[*bpm.keys()],
       aspect=0.5,
-      title=f'{TIME}: Spectrum (map)')
+      title=f'{TIME}: Spectrum (map)'
+    )
     plot.show()
   if args.average:
     plot = scatter(
       x=mean_grid,
       y=mean_data,
-      title=f'{TIME}: Spectrum (average)')
+      title=f'{TIME}: Spectrum (average)'
+    )
+    if args.peaks > 0:
+      plot.add_scatter(
+        x=peak_grid,
+        y=peak_data,
+        mode='markers',
+        marker=dict(color='red', size=10),
+        showlegend=False,
+        name='peak'
+      )
     config = {
       'toImageButtonOptions': {'height':None, 'width':None},
       'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
