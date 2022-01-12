@@ -73,7 +73,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def make_matrix(signal:torch.Tensor) -> torch.Tensor:
         """
         Compute Hankel matrix representation for a given batch of signals.
@@ -102,7 +101,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def make_signal(matrix:torch.Tensor) -> torch.Tensor:
         """
         Compute signal representation for a given batch of Hankel matrices.
@@ -132,7 +130,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def randomized_range(rank:int, count:int, matrix:torch.Tensor, random_seed:int=0) -> torch.Tensor:
         """
         Randomized range estimation based on QR decomposition.
@@ -156,12 +153,13 @@ class Filter():
             batch of estimated range matrices
 
         """
-        torch.manual_seed(random_seed)
         dtype = matrix.dtype
         device = matrix.device
+        generator = torch.Generator(device=device)
+        generator.manual_seed(random_seed)
         size, m, n = matrix.shape
         transpose = torch.clone(torch.transpose(matrix, 1, 2))
-        projection1 = torch.randn((size, n, rank), dtype=dtype, device=device)
+        projection1 = torch.randn((size, n, rank), dtype=dtype, device=device, generator=generator)
         projection2 = torch.zeros((size, m, rank), dtype=dtype, device=device)
         for _ in range(count):
             projection2 = torch.linalg.qr(torch.matmul(matrix, projection1)).Q
@@ -170,7 +168,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def svd_list(rank:int, matrix:torch.Tensor, cpu:bool=True) -> torch.Tensor:
         """
         Compute list of singular values for a given batch of matrices.
@@ -228,7 +225,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def svd_truncation(rank:int, matrix:torch.Tensor, cpu:bool=True) -> tuple:
         """
         Compute SVD truncation for given rank and a batch of matrices.
@@ -299,7 +295,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def svd_optimal(matrix:torch.Tensor, cpu:bool=True) -> tuple:
         """
         Estimate optimal truncation rank and noise value for a given batch of matrices.
@@ -334,7 +329,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def rpca_shrink(threshold:float, matrix:torch.Tensor) -> torch.Tensor:
         """
         Replace input matrix elements with zeros if the absolute value is less than a given threshold.
@@ -361,7 +355,6 @@ class Filter():
 
 
     @staticmethod
-    @torch.jit.script
     def rpca_threshold(threshold:float, matrix:torch.Tensor, cpu:bool=True) -> torch.Tensor:
         """
         SVD truncation based on singular values thresholding.
