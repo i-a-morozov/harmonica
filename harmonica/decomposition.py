@@ -598,93 +598,86 @@ class Decomposition():
             return result
 
 
-    @classmethod
-    def advance(cls, phase_x:torch.Tensor, phase_y:torch.Tensor, *,
-                error_x:torch.Tensor=None, error_y:torch.Tensor=None) -> tuple:
+    @staticmethod
+    def advance(i:int, j:int, total:float, table:torch.Tensor) -> torch.Tensor:
         """
-        Compute phase advance between two locations (pairwise).
+        Compute phase advance mod 2*pi between i and j locations.
+
+        Note, phase advance is computed from i to j, if i > j, phase advance is negative
 
         Parameters
         ----------
-        phase_x: torch.Tensor
-            phase at the first location
-        phase_y: torch.Tensor
-            phase at the second location
-        error_x: torch.Tensor
-            phase error at the first location
-        error_y: torch.Tensor
-            phase error at the second location
+        i: int
+            probed location
+        j: int
+            second location
+        total: float
+            total phase advane for one turn (fractional part)
+        table: torch.Tensor
+            model phase advance data or measured phase data
 
         Returns
         -------
-        advance and standard errors for each pair (tuple)
+        phase advance mod 2*pi and optional error (torch.Tensor)
 
         """
-        phase = Frequency.mod(phase_y - phase_x, 2.0*numpy.pi, -numpy.pi)
-        if error_x == None or error_y == None:
-            return (phase, None)
-        return (phase, torch.sqrt(error_x**2 + error_y**2))
+        size, *_ = table.shape
+        if i < j:
+            i_index, j_index = int(Frequency.mod(i, size)), int(Frequency.mod(j, size))
+            i_count, j_count = (i - i_index)//size, (j - j_index)//size
+            i_phase, j_phase = table[i_index] + i_count*total, table[j_index] + j_count*total
+            return Frequency.mod(j_phase - i_phase, 2.0*numpy.pi)
+        return -advance(j, i, total, table)
 
 
-    @classmethod
-    def advance_adjacent(cls, frequency:float, phase:torch.Tensor, *,
-                         sigma_phase:torch.Tensor=None, sigma_frequency:torch.Tensor=None) -> tuple:
+    @staticmethod
+    def advance_error(i:int, j:int, error:torch.Tensor) -> tuple:
         """
-        Compute phase advance between adjacent locations.
+        Compute phase advance error between i and j locations.
+
+        Note, frequency error is ignored
 
         Parameters
         ----------
-        frequency: float
-            frequency
-        phase: torch.Tensor
-            phase at all locations (ordered from first to last)
-        sigma_phase: torch.Tensor
-            phase error at all locations (ordered from first to last)
-        sigma_frequency: torch.Tensor
-            frequency error
+        i: int
+            probed location
+        j: int
+            second location
+        error: torch.Tensor
+            error data
 
         Returns
         -------
-        advance between adjacent locations and standard errors for each pair (tuple)
+        phase advance error (torch.Tensor)
 
         """
-        phase_x = phase
-        phase_y = torch.cat([phase, phase[:1] + 2.0*numpy.pi*frequency])[1:]
-
-        if sigma_phase != None:
-            error_x = sigma_phase
-            error_y = torch.cat([sigma_phase, sigma_phase[:1]])[1:]
-            if sigma_frequency != None:
-                error_y[-1] = torch.sqrt(error_y[-1]**2 + (2.0*numpy.pi)**2*sigma_frequency**2)
-        else:
-            error_x, error_y = None, None
-
-        return cls.advance(phase_x, phase_y, error_x=error_x, error_y=error_y)
+        size, *_ = error.shape
+        i_index, j_index = int(Frequency.mod(i, size)), int(Frequency.mod(j, size))
+        i_error, j_error = error[i_index], error[j_index]
+        return torch.sqrt(i_error**2 + j_error**2)
 
 
     @classmethod
-    def advance_tune(cls, frequency:float, phase:torch.Tensor, *,
-                         sigma_phase:torch.Tensor=None, sigma_frequency:torch.Tensor=None) -> tuple:
+    def advance_adjacent(cls, total:float, table:torch.Tensor, error:torch.Tensor=None) -> tuple:
         """
-        Compute tune.
+        Compute phase advance mod 2*pi between adjacent locations.
 
         Parameters
         ----------
-        frequency: float
-            frequency
-        phase: torch.Tensor
-            phase at all locations (ordered from first to last)
-        sigma_phase: torch.Tensor
-            phase error at all locations (ordered from first to last)
-        sigma_frequency: torch.Tensor
-            frequency error
+        total: float
+            total phase advane for one turn (fractional part)
+        table: torch.Tensor
+            model phase advance data or measured phase data
+        error: torch.Tensor
+            error data
 
         Returns
         -------
-        tune and tune error (tuple)
+        adjacent phase advance mod 2*pi and optional error (torch.Tensor, torch.Tensor)
 
         """
-        phase, error = cls.advance_adjacent(frequency, phase, sigma_phase=sigma_phase, sigma_frequency=sigma_frequency)
-        tune = (phase.sum()/(2.0*numpy.pi)).cpu().item()
-        error = ((error**2).sum().sqrt()/(2.0*numpy.pi)).cpu().item()
-        return (tune, error)
+        size, *_ = table.shape
+        data = torch.stack([cls.advance(i, i + 1, total, table) for i in range(size)])
+        if error == None:
+            return (data, None)
+        return (data, torch.stack([cls.advance_error(i, i + 1, error) for i in range(size)]))
