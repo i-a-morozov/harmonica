@@ -5,26 +5,25 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_tbt', description='Save/plot TbT data for selected BPMs and plane.')
+parser = argparse.ArgumentParser(prog='hs_bpm', description='Plot TbT data for selected BPM and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y', 'i'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=1024)
-select = parser.add_mutually_exclusive_group()
-select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
-select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
-parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
+parser.add_argument('-b', '--bpm', type=str, help='BPM name', default='stp2')
+parser.add_argument('-o', '--offset', type=int, help='rise offset', default=0)
 parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
-parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
-parser.add_argument('-f', '--filter', choices=('none', 'svd', 'hankel'), help='filter type', default='none')
-parser.add_argument('--rank', type=int, help='rank to use for svd & hankel filter', default=8)
+parser.add_argument('-f', '--filter', choices=('none', 'hankel'), help='filter type', default='none')
+parser.add_argument('--rank', type=int, help='rank to use for hankel filter', default=8)
 parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
+parser.add_argument('--envelope', action='store_true', help='flag to compute envelope')
+parser.add_argument('--frequency', action='store_true', help='flag to compute instantaneous frequency')
+parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('--box', action='store_true', help='flag to show box plot')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -39,6 +38,7 @@ from datetime import datetime
 from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
+from harmonica.frequency import Frequency
 from harmonica.filter import Filter
 
 # Time
@@ -58,21 +58,13 @@ rise = epics.caget_many([f'H:{name}:RISE' for name in name])
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
 
-# Check & remove skipped
-if args.skip:
-  for name in (name.upper() for name in args.skip):
-    if not name in bpm:
-      exit(f'error: {name} is not a valid BPM to skip')
+# Check & keep only selected BPM
+target = args.bpm.upper()
+if not target in bpm:
+  exit(f'error: {target} in not a valid BPM to read')
+for name in bpm.copy():
+  if name != target:
     bpm.pop(name)
-
-# Check & keep selected
-if args.only:
-    for name in (name.upper() for name in args.only):
-      if not name in bpm:
-        exit(f'error: {name} is not a valid BPM to read')
-    for name in bpm.copy():
-      if not name in (name.upper() for name in args.only):
-        bpm.pop(name)
 
 # Check BPM list
 if not bpm:
@@ -124,19 +116,19 @@ if args.normalize:
   tbt.normalize()
 
 # Filter
-if args.filter == 'none':
-  data = tbt.to_numpy()
-elif args.filter == 'svd':
+if args.filter == 'hankel':
   flt = Filter(tbt)
-  flt.filter_svd(rank=args.rank)
-  data = tbt.to_numpy()
-  del flt
-elif args.filter == 'hankel':
-  flt = Filter(tbt)
-  flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
-  data = tbt.to_numpy()
-  del flt
+
+# Envelope
+if args.envelope:
+  dht = Frequency.dht(tbt.work)
+  envelope = dht.abs().flatten().cpu().numpy()
+  frequency = 1.0/(2.0*numpy.pi)*(dht[:, :-1]*dht[:, 1:].conj()).angle().abs().flatten().cpu().numpy()
+  frequency = 1.0 - frequency if args.flip else frequency
+
+# Convert to numpy
+data = tbt.to_numpy().flatten()
 
 # Clean
 del win, tbt
@@ -149,10 +141,13 @@ turn = numpy.linspace(0, length - 1, length, dtype=numpy.int32)
 # Plot
 if args.plot:
   df = pandas.DataFrame()
-  for i, name in enumerate(bpm):
-    df = pandas.concat([df, pandas.DataFrame({'TURN':turn, 'BPM':name, args.plane.upper():data[i]})])
+  df['TURN'] = turn
+  df[args.plane.upper()] = data
   from plotly.express import scatter
-  plot = scatter(df, x='TURN', y=args.plane.upper(), color='BPM', title=f'{TIME}: TbT (DATA)', opacity=0.75, marginal_y='box')
+  plot = scatter(df, x='TURN', y=args.plane.upper(), title=f'{TIME}: TbT ({args.bpm.upper()})', opacity=0.75, labels={'TURN', args.plane.upper()})
+  if args.envelope:
+    df['ENVELOPE'] = envelope
+    plot = scatter(df, x='TURN', y=[args.plane.upper(), 'ENVELOPE'], title=f'{TIME}: TbT ({args.bpm.upper()})', opacity=0.75)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -160,18 +155,12 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
-  if args.box:
-    from plotly.express import box
-    plot = box(df, x='BPM', y=args.plane.upper(), title=f'{TIME}: TbT (BOX)')
-    config = {
-      'toImageButtonOptions': {'height':None, 'width':None},
-      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-      'scrollZoom': True
-    }
+  if args.frequency:
+    df = pandas.DataFrame()
+    df['TURN'] = turn[:-1]
+    df['FREQUENCY'] = frequency
+    mean = frequency.mean()
+    std = frequency.std()
+    plot = scatter(df, x='TURN', y='FREQUENCY', title=f'{TIME}: Frequency ({args.bpm.upper()})<br>MEAN: {mean}, STD:{std}', opacity=0.75)
+    plot.add_hline(mean, line_color='red', line_dash="dash", line_width=0.5)
     plot.show(config=config)
-
-# Save to file
-if args.save:
-  filename = f'tbt_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, data)

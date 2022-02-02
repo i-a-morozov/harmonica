@@ -5,9 +5,10 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_tbt', description='Save/plot TbT data for selected BPMs and plane.')
+parser = argparse.ArgumentParser(prog='hs_trajectory', description='Save/plot trajectory TbT data for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y', 'i'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=1024)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=4)
+parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=1024)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -24,11 +25,21 @@ parser.add_argument('--type', choices=('full', 'randomized'), help='computation 
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('--box', action='store_true', help='flag to show box plot')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
+
+# Import
+import epics
+import numpy
+import pandas
+import torch
+from datetime import datetime
+from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.window import Window
+from harmonica.data import Data
+from harmonica.filter import Filter
 
 # Import
 import epics
@@ -78,12 +89,15 @@ if args.only:
 if not bpm:
   exit(f'error: BPM list is empty')
 
+# Set BPM positions
+position = numpy.array(epics.caget_many([f'H:{name}:S' for name in bpm]))
+
 # Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
-# Check length
-length = args.length
+# Check load length
+length = args.load
 if length < 0 or length > LIMIT:
   exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
 
@@ -138,21 +152,33 @@ elif args.filter == 'hankel':
   data = tbt.to_numpy()
   del flt
 
+# Check mixed length
+if args.length < 0 or args.length > args.load:
+  exit(f'error: requested length {args.length} is expected to be positive and less than load length {args.load}')
+
+# Generate mixed data
+data = tbt.make_signal(args.length, tbt.work)
+
+# Convert to numpy
+data = data.detach().cpu().numpy()
+name = [name for name in bpm] * args.length
+turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
+time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
+
 # Clean
 del win, tbt
 if device == 'cuda':
   torch.cuda.empty_cache()
 
-# Set turns
-turn = numpy.linspace(0, length - 1, length, dtype=numpy.int32)
-
 # Plot
 if args.plot:
   df = pandas.DataFrame()
-  for i, name in enumerate(bpm):
-    df = pandas.concat([df, pandas.DataFrame({'TURN':turn, 'BPM':name, args.plane.upper():data[i]})])
-  from plotly.express import scatter
-  plot = scatter(df, x='TURN', y=args.plane.upper(), color='BPM', title=f'{TIME}: TbT (DATA)', opacity=0.75, marginal_y='box')
+  df['BPM'] = name
+  df['TURN'] = turn.astype(str)
+  df['TIME'] = time
+  df[args.plane.upper()] = data
+  from plotly.express import line
+  plot = line(df, x='TIME', y=args.plane.upper(), color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY)', markers=True)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -160,18 +186,9 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
-  if args.box:
-    from plotly.express import box
-    plot = box(df, x='BPM', y=args.plane.upper(), title=f'{TIME}: TbT (BOX)')
-    config = {
-      'toImageButtonOptions': {'height':None, 'width':None},
-      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-      'scrollZoom': True
-    }
-    plot.show(config=config)
 
 # Save to file
+data = numpy.array([time, data])
 if args.save:
-  filename = f'tbt_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  filename = f'tbt_all_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, data)

@@ -6,28 +6,23 @@ _, *flag = sys.argv
 # Parse arguments
 import argparse
 parser = argparse.ArgumentParser(prog='hs_noise', description='TbT data noise estimation for selected BPMs and plane.')
-parser.add_argument('-p', '--plane', choices=('x', 'z', 'i'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use (integer)', default=512)
-parser.add_argument('--limit', type=int, help='number of columns to use (integer)', default=32)
+parser.add_argument('-p', '--plane', choices=('x', 'y', 'i'), help='data plane', default='x')
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=512)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
 parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
-parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data from file (drop first turns)')
-parser.add_argument('-f', '--file', action='store_true', help='flag to save data')
-save = parser.add_mutually_exclusive_group()
-save.add_argument('-c', '--csv', action='store_true', help='flag to save data as CSV')
-save.add_argument('-n', '--numpy', action='store_true', help='flag to save data as NUMPY')
-parser.add_argument('--print', action='store_true', help='flag to print data')
+parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
+parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
-parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
+parser.add_argument('--limit', type=int, help='number of columns to use', default=16)
 parser.add_argument('--std', action='store_true', help='flag to estimate noise with std')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--auto', action='store_true', help='flag to plot autocorrelation')
-parser.add_argument('--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
@@ -53,17 +48,13 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit(f'error: CUDA is not avalible')
 
-# Import BPM data
-try:
-  df = pandas.read_json('../bpm.json')
-except ValueError:
-  exit(f'error: problem loading bpm.json')
+# Load monitor data
+name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
+flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
+rise = epics.caget_many([f'H:{name}:RISE' for name in name])
 
-# Process BPM data
-bpm = {name: int(df[name]['RISE']) for name in df if df[name]['FLAG']}
-
-# Set BPM indices
-index = {name:position for position, name in enumerate(bpm)}
+# Set BPM data
+bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
 
 # Check & remove skipped
 if args.skip:
@@ -85,7 +76,7 @@ if args.only:
 if not bpm:
   exit(f'error: BPM list is empty')
 
-# Generate pv names
+# Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
@@ -150,13 +141,13 @@ if device == 'cuda':
 # Plot
 if args.plot:
   df = pandas.DataFrame()
-  df['bpm'] = [*bpm.keys()]
-  df['rnk'] = rnk.cpu()
-  df['rnk'] = df['rnk'].astype(str)
-  df['std'] = std.cpu()
+  df['BPM'] = [*bpm.keys()]
+  df['RANK'] = rnk.cpu()
+  df['RANK'] = df['RANK'].astype(str)
+  df['SIGMA'] = std.cpu()
   from plotly.express import bar
-  title = f'{TIME}: Noise'
-  plot = bar(df, x='bpm', y='std', color='rnk', category_orders={'bpm':df['bpm']}, title=title)
+  title = f'{TIME}: NOISE'
+  plot = bar(df, x='BPM', y='SIGMA', color='RANK', category_orders={'BPM':df['BPM']}, title=title)
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -168,34 +159,14 @@ if args.plot:
     from plotly.express import imshow
     plot = imshow(
       auto,
-      labels=dict(x="shift", y="bpm", color=f"autocorrelation"),
+      labels=dict(x="SHIFT", y="BPM", color=f"AUTO"),
       y=[*bpm.keys()],
       aspect=0.5,
-      title=f'{TIME}: Autocorrelation'
+      title=f'{TIME}: AUTO'
     )
     plot.show(config=config)
 
-# Print data
-if args.print:
-  fmt = '{:>6}' * 2 + '{:>18.9}'
-  print(fmt.format('BPM', 'RNK', 'STD'))
-  for name, rank, sigma in zip(bpm, rnk, std):
-    print(fmt.format(name, rank, sigma))
-
 # Save to file
-if args.file and args.numpy:
+if args.save:
   filename = f'noise_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, std.cpu())
-if args.file and args.csv:
-  filename = f'noise_plane_{args.plane}_length_{args.length}_time_{TIME}.csv'
-  numpy.savetxt(filename, std.cpu(), delimiter=',')
-
-# Save to epics
-if args.update:
-  noise = torch.zeros(len(index), dtype=dtype)
-  count = 0
-  for key, value in index.items():
-    if key in bpm:
-      noise[value] = std[count]
-      count+=1
-  Data.pv_put(f'HARMONICA:{args.plane.upper()}:NOISE-I', noise)
