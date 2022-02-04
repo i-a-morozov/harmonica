@@ -598,8 +598,8 @@ class Decomposition():
             return result
 
 
-    @staticmethod
-    def advance(i:int, j:int, total:float, table:torch.Tensor) -> torch.Tensor:
+    @classmethod
+    def advance(cls, i:int, j:int, total:float, table:torch.Tensor) -> torch.Tensor:
         """
         Compute phase advance mod 2*pi between i and j locations.
 
@@ -627,7 +627,7 @@ class Decomposition():
             i_count, j_count = (i - i_index)//size, (j - j_index)//size
             i_phase, j_phase = table[i_index] + i_count*total, table[j_index] + j_count*total
             return Frequency.mod(j_phase - i_phase, 2.0*numpy.pi)
-        return -advance(j, i, total, table)
+        return -cls.advance(j, i, total, table)
 
 
     @staticmethod
@@ -681,3 +681,120 @@ class Decomposition():
         if error == None:
             return (data, None)
         return (data, torch.stack([cls.advance_error(i, i + 1, error) for i in range(size)]))
+
+    @classmethod
+    def advance_check(cls, q:float, Q:float, phase:torch.Tensor, PHASE:torch.Tensor, *,
+                    method:str='quantile', factor:float=10.0, epsilon:float=0.5,
+                    remove:bool=True, **kwargs) -> dict:
+        """
+        Perform synchronization check based on adjacent locations advance diffrence with model values.
+
+        Only one turn error is checked
+        Empty dict is returned if all locations pass
+
+        Parameters
+        ----------
+        q: float
+            measured tune
+        Q: float
+            model tune
+        phase: torch.Tensor
+            measured phase data
+        PHASE: torch.Tensor
+            model phase data
+        method: str
+            detection method ('quantile' or 'dbscan')
+        factor: float
+            factor for quantile method
+        epsilon: float
+            epsilon for dbscan method
+        remove: bool
+            flag to remove endpoints
+        **kwargs:
+            passed to DBSCAN
+
+        Returns
+        -------
+        {marked: (shift, phase)}
+
+        """
+
+        advance_phase, _ = Decomposition.advance_adjacent(2.0*numpy.pi*q, phase)
+        advance_model, _ = Decomposition.advance_adjacent(2.0*numpy.pi*Q, PHASE)
+        advance_error = (advance_phase - advance_model)/advance_model
+
+        if method == 'dbscan':
+            from sklearn.cluster import DBSCAN
+            from collections import Counter
+            advance_error = advance_error.cpu().numpy()
+            group = DBSCAN(eps=epsilon, **kwargs).fit(advance_error.reshape(-1, 1))
+            label, *_ = Counter(group.labels_)
+            pairs, *_ = numpy.in1d(advance_error, advance_error[group.labels_ != label]).nonzero()
+            pairs = [[i, i + 1] for i in tuple(pairs)]
+
+        if method == 'quantile':
+            q_25 = torch.quantile(advance_error, 0.25).cpu().numpy()
+            q_75 = torch.quantile(advance_error, 0.75).cpu().numpy()
+            q_l = q_25 - factor*(q_75 - q_25)
+            q_u = q_75 + factor*(q_75 - q_25)
+            advance_error = advance_error.cpu().numpy()
+            pairs_l, *_ = numpy.where(advance_error < q_l)
+            pairs_u, *_ = numpy.where(advance_error > q_u)
+            pairs = (*tuple(pairs_l), *tuple(pairs_u))
+            pairs = [[i, i + 1] for i in pairs]
+
+        if pairs == []:
+            return {}
+
+        table = []
+        chain = []
+        for i in numpy.unique(numpy.array(pairs).flatten()):
+            if chain == []:
+                chain.append(i)
+                value = i
+                continue
+            if i == value + 1:
+                chain.append(i)
+                value = i
+                continue
+            table.append(chain)
+            chain = []
+            chain.append(i)
+            value = i
+        else:
+            table.append(chain)
+
+        if remove:
+            table = [*map(lambda chain: chain[1:-1], table)]
+
+        marked = [j for i in table for j in i]
+        passed = [i for i in range(len(phase)) if i not in marked]
+
+        result = {}
+
+        for index in marked:
+
+            local_model = torch.stack([Decomposition.advance(index, other, 2.0*numpy.pi*Q, PHASE) for other in passed])
+
+            local_phase = torch.clone(phase)
+            phase_x = Frequency.mod(local_phase[index] + 1.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            local_phase[index] = phase_x
+            local_phase = torch.stack([Decomposition.advance(index, other, 2.0*numpy.pi*q, local_phase) for other in passed])
+            error_x = torch.sum((local_model - local_phase)**2)
+
+            local_phase = torch.clone(phase)
+            phase_y = Frequency.mod(local_phase[index] + 0.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            local_phase[index] = phase_y
+            local_phase = torch.stack([Decomposition.advance(index, other, 2.0*numpy.pi*q, local_phase) for other in passed])
+            error_y = torch.sum((local_model - local_phase)**2)
+
+            local_phase = torch.clone(phase)
+            phase_z = Frequency.mod(local_phase[index] - 1.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            local_phase[index] = phase_z
+            local_phase = torch.stack([Decomposition.advance(index, other, 2.0*numpy.pi*q, local_phase) for other in passed])
+            error_z = torch.sum((local_model - local_phase)**2)
+
+            error = torch.stack([error_x, error_y, error_z]).argmin().item()
+            result[index] = (error - 1, [phase_x, phase_y, phase_z][error])
+
+        return result
