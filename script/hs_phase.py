@@ -221,6 +221,19 @@ if args.plot:
       'scrollZoom': True
     }
     plot.show(config=config)
+    df = pandas.DataFrame()
+    df['PAIR'] = pair
+    df['ERROR'] = 100*(model - phase)/model
+    df['SIGMA'] = 100*sigma/model
+    title = f'{TIME}: ADJACENT ADVANCE ERROR ({plane})'
+    plot = scatter(df, x='PAIR', y='ERROR', error_y='SIGMA', title=title)
+    config = {
+      'toImageButtonOptions': {'height':None, 'width':None},
+      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+      'scrollZoom': True
+    }
+    plot.show(config=config)
 
 # Save to file
 if args.save:
