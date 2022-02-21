@@ -11,7 +11,7 @@ import pandas
 import torch
 import nufft
 
-from .util import LIMIT
+from .util import LIMIT, mod
 from .window import Window
 from .data import Data
 
@@ -845,16 +845,7 @@ class Frequency():
 
         """
         return f'{self.__class__.__name__}({self.data}, f_range={self.fft_min.item(), self.fft_max.item()})'
-
-
-    @staticmethod
-    def mod(x: float, y:float, d:float=0.0) -> float:
-        """
-        Return the remainder on division of x by y with offset d.
-
-        """
-        return x - ((x - d) - (x - d) % y)
-
+    
 
     @classmethod
     def harmonics(cls, order:int, basis:list, *,
@@ -889,7 +880,7 @@ class Frequency():
             frequency = numpy.sum(basis*numpy.array(combo))
             if first == 0 and frequency <= 0.0:
                 continue
-            table[combo] = abs(cls.mod(frequency, limit, offset))
+            table[combo] = abs(mod(frequency, limit, offset))
         keys = sorted(table, key=lambda x: sum(map(abs, x)))
         return {key: table[key] for key in keys}
 

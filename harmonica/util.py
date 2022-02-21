@@ -7,6 +7,8 @@ import epics
 import numpy
 import pandas
 
+from itertools import combinations
+
 # Maximum length to read from TbT PVs
 LIMIT:int = 8192
 
@@ -38,6 +40,7 @@ def pv_make(name:str, plane:str, flag:bool=False) -> str:
         plane = {'X':'x', 'Y':'z', 'I':'i'}[plane.upper()]
 
     return f'H:{name}:DATA:{plane.upper()}' if flag else f'VEPP4:{name}:turns_{plane}-I'
+
 
 # Generate location record
 def record_make(name:str) -> str:
@@ -100,6 +103,7 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:PHASE:BY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     '''
 
+# Load data to record
 def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
     """
     Load data into epics process variables for given location.
@@ -130,6 +134,7 @@ def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
     epics.caput(f'H:{name}:MODEL:FY', data['FY'],   connection_timeout=connection_timeout)
 
 
+# Load TbT data from file
 def data_load(case:str, file:str) -> numpy.ndarray:
     """
     Return TbT data for selected plane.
@@ -149,12 +154,62 @@ def data_load(case:str, file:str) -> numpy.ndarray:
     return numpy.array(pandas.read_pickle(file)[case].tolist())
 
 
+# Remainder with offset
 def mod(x:float, y:float, d:float=0.0) -> float:
     """
     Returns the remainder on division of x by y with offset d.
 
     """
     return x - ((x - d) - (x - d) % y)
+
+# Chain
+def chain(pairs):
+    table = []
+    chain = []
+    for i in numpy.unique(numpy.array(pairs).flatten()):
+        if chain == []:
+            chain.append(i)
+            value = i
+            continue
+        if i == value + 1:
+            chain.append(i)
+            value = i
+            continue
+        table.append(chain)
+        chain = []
+        chain.append(i)
+        value = i
+    else:
+        table.append(chain)
+    return table
+
+
+# Pairs combinations
+def generate_pairs(limit:int, count:int) -> list:
+    """
+    Generate combinations of unique pairs of probed locatiaon and other locations.
+
+    Probed location has index 0, other locations are in range defined by limit
+
+    Parameters
+    ----------
+    limit: int
+        maximum distance from probed location
+    count: int
+        number of unique locations in combination
+
+    Returns
+    -------
+    [..., [sum_i, combination_i], ...] sorted by sum_i
+
+    """
+    other = [i for i in range(-limit, 1 + limit) if i != 0]
+    pairs = [(0, i) for i in other]
+    stock = {pair: abs(sum(pair)) for pair in pairs}
+    combo = list(combinations(pairs, count))
+    stock = [sum(stock[j] for j in i) for i in combo]
+    combo = [[stock, list(map(list, combo))] for combo, stock in zip(combo, stock)]
+    return sorted(combo)
 
 
 def fst(array):
