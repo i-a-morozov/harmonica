@@ -5,16 +5,14 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_amplutude', description='Estimate amplitude for selected plane and BPMs.')
+parser = argparse.ArgumentParser(prog='hs_phase', description='Estimate phase for selected plane and BPMs.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=128)
-parser.add_argument('--load', type=int, help='total number of turns to load', default=1024)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=256)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
 parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
 parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
-parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
@@ -25,20 +23,13 @@ parser.add_argument('--type', choices=('full', 'randomized'), help='computation 
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('-w', '--window', type=float, help='window order', default=0.0)
-parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=16)
-case = parser.add_mutually_exclusive_group()
-case.add_argument('--error', action='store_true', help='flag to propagate errors')
-case.add_argument('--shift', action='store_true', help='flag to use shifted samples')
-parser.add_argument('--size', type=int, help='maximum number of samples to use', default=64)
-parser.add_argument('--delta', type=int, help='sample shift step', default=1)
-parser.add_argument('--fit', choices=('none', 'noise', 'average', 'fit'), help='fit type', default='none')
-parser.add_argument('--dht', action='store_true', help='flag to use DHT estimator')
-parser.add_argument('--drop', type=int, help='number of endpoints to drop in DHT', default=32)
+parser.add_argument('-m', '--method', choices=('quantile', 'dbscan'), help='detection method', default='quantile')
+parser.add_argument('--factor', type=float, help='quantile factor', default=10.0)
+parser.add_argument('--epsilon', type=float, help='dbscan epsilon', default=0.5)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
@@ -103,7 +94,7 @@ pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length
-length = args.load
+length = args.length
 if length < 0 or length > LIMIT:
   exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
 
@@ -124,10 +115,6 @@ if args.rise:
     exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
 else:
   rise = 0
-
-# Check sample length
-if args.length > length:
-  exit(f'error: requested sample length {args.length} should be less than {length}')
 
 # Check window order
 if args.window < 0.0:
@@ -164,50 +151,55 @@ if args.filter == 'hankel':
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
   del flt
 
-# Estimate amplitude
-if not args.dht:
-  dec = Decomposition(tbt)
-  value, error, table = dec.harmonic_amplitude(
-    value,
-    length=args.length,
-    name='cosine_window',
-    order=args.window,
-    error=args.error,
-    limit=args.limit,
-    sigma_frequency=error,
-    shift=args.shift,
-    count=args.size,
-    step=args.delta,
-    fit=args.fit)
-else:
-  dht = Frequency.dht(tbt.work[:, :args.length])
-  table = dht.abs()
-  value = table[:, +args.drop:-args.drop].mean(1)
-  error = table[:, +args.drop:-args.drop].std(1)
+# Estimate phase
+dec = Decomposition(tbt)
+phase, _, _ = dec.harmonic_phase(
+  value,
+  length=args.length,
+  name='cosine_window',
+  order=args.window,
+  error=False,
+  shift=False,
+  )
+
+# Set model phase
+PHASE = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
+
+# Set tunes
+q = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
+Q = epics.caget(f'H:FREQUENCY:MODEL:{plane}')
+
+# Check
+check, table= Decomposition.phase_check(
+  q,
+  Q,
+  phase,
+  PHASE,
+  method=args.method,
+  factor=args.factor,
+  epsilon=args.epsilon,
+  remove=True,
+  limit=5
+)
+
+# Legend
+print('-1: add one turn')
+print('+1: rem one turn')
+print()
+
+# Print result
+for marked in check:
+  print(marked, [*bpm][marked], check[marked])
 
 # Plot
 if args.plot:
   from plotly.express import scatter
-  if table != None:
-    step = len(table[0])
-    df = pandas.DataFrame()
-    for i, name in enumerate(bpm):
-      df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'AMPLITUDE':table[i].cpu().numpy()})])
-    plot = scatter(df, x='STEP', y='AMPLITUDE', color='BPM', title=f'{TIME}: AMPLITUDE ({plane})', opacity=0.75, marginal_y='box')
-    config = {
-      'toImageButtonOptions': {'height':None, 'width':None},
-      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-      'scrollZoom': True
-    }
-    plot.show(config=config)
+  flag = [-1 if key not in check else check[key][0]/2 - 1 for key in range(len(bpm))]
   df = pandas.DataFrame()
-  df['BPM'] = [*bpm.keys()]
-  df['AMPLITUDE'] = value.cpu().numpy()
-  if error != None:
-    df['ERROR'] = error.cpu().numpy()
-  title = f'{TIME}: AMPLITUDE ({plane})'
-  plot = scatter(df, x='BPM', y=f'AMPLITUDE', title=title, opacity=0.75, error_y='ERROR' if error != None else None, hover_data=['BPM', 'AMPLITUDE', 'ERROR' if error != None else None])
+  for case, data in zip(['PHASE', 'MODEL', 'CHECK', 'FLAG'], [table['phase'], table['model'], table['check'], flag]):
+      df = pandas.concat([df, pandas.DataFrame({'CASE':case, 'INDEX':range(len(bpm)), 'ADVANCE':data})])
+  plot = scatter(df, x='INDEX', y='ADVANCE', color='CASE', title=f'{TIME}: ADVANCE ({plane})', opacity=0.75, color_discrete_sequence = ['red', 'black', 'blue', 'green'])
+  plot.update_layout(xaxis = dict(tickmode = 'array', tickvals = list(range(len(bpm))), ticktext = list(bpm.keys())))
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
@@ -215,16 +207,3 @@ if args.plot:
     'scrollZoom': True
   }
   plot.show(config=config)
-
-# Save to file
-if args.save:
-  filename = f'amplitude_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, value.cpu().numpy())
-
-# Save to epics
-if args.update:
-  epics.caput_many([f'H:{name}:AMPLITUDE:VALUE:{plane}' for name in bpm], value.cpu().numpy())
-  if error != None:
-    epics.caput_many([f'H:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
-  else:
-    epics.caput_many([f'H:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], -numpy.ones(value.cpu().numpy().shape))

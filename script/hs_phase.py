@@ -9,9 +9,6 @@ parser = argparse.ArgumentParser(prog='hs_phase', description='Estimate phase fo
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=256)
 parser.add_argument('--load', type=int, help='total number of turns to load', default=1024)
-parser.add_argument('--shift', action='store_true', help='flag to use shifted samples')
-parser.add_argument('--size', type=int, help='maximum number of samples to use', default=512)
-parser.add_argument('--delta', type=int, help='sample shift step', default=1)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -29,8 +26,14 @@ parser.add_argument('--buffer', type=int, help='buffer size to use for randomize
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('-w', '--window', type=float, help='window order', default=0.0)
 parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=16)
-parser.add_argument('--error', action='store_true', help='flag to propagate errors')
+case = parser.add_mutually_exclusive_group()
+case.add_argument('--error', action='store_true', help='flag to propagate errors')
+case.add_argument('--shift', action='store_true', help='flag to use shifted samples')
+parser.add_argument('--size', type=int, help='maximum number of samples to use', default=512)
+parser.add_argument('--delta', type=int, help='sample shift step', default=1)
 parser.add_argument('--fit', choices=('none', 'noise', 'average', 'fit'), help='fit type', default='none')
+parser.add_argument('--dht', action='store_true', help='flag to use DHT estimator')
+parser.add_argument('--drop', type=int, help='number of endpoints to drop in DHT', default=32)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--advance', action='store_true', help='flag to plot phase advance')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
@@ -100,7 +103,7 @@ if not bpm:
 if args.advance:
   total = epics.caget(f'H:END:MODEL:F{plane}')
   model = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype, device=device)
-  model, _ = Decomposition.advance_adjacent(total, model)
+  model, _ = Decomposition.phase_adjacent(total/(2.0*numpy.pi), model)
   model = model.cpu().numpy()
   name = [*bpm.keys()]
   pair = [f'{name[i]}-{name[i+1]}' for i in range(len(bpm)-1)]
@@ -173,28 +176,49 @@ if args.filter == 'hankel':
   del flt
 
 # Estimate phase
-dec = Decomposition(tbt)
-value, error = dec.harmonic_phase(
-  value,
-  length=args.length,
-  name='cosine_window',
-  order=args.window,
-  error=args.error,
-  limit=args.limit,
-  sigma_frequency=error,
-  shift=args.shift,
-  count=args.size,
-  step=args.delta,
-  fit=args.fit)
+if not args.dht:
+  dec = Decomposition(tbt)
+  value, error, table = dec.harmonic_phase(
+    value,
+    length=args.length,
+    name='cosine_window',
+    order=args.window,
+    error=args.error,
+    limit=args.limit,
+    sigma_frequency=error,
+    shift=args.shift,
+    count=args.size,
+    step=args.delta,
+    fit=args.fit)
+else:
+  dht = Frequency.dht(tbt.work[:, :args.length])
+  table = dht.angle()
+  table -= 2.0*numpy.pi*value*torch.linspace(0, args.length - 1, args.length, dtype=dtype, device=device)
+  table = Frequency.mod(table, 2.0*numpy.pi, -numpy.pi)
+  value = table[:, +args.drop:-args.drop].mean(1)
+  error = table[:, +args.drop:-args.drop].std(1)
 
 # Plot
 if args.plot:
+  from plotly.express import scatter
+  if table != None:
+    step = len(table[0])
+    df = pandas.DataFrame()
+    for i, name in enumerate(bpm):
+      df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'PHASE':table[i].cpu().numpy()})])
+    plot = scatter(df, x='STEP', y='PHASE', color='BPM', title=f'{TIME}: PHASE ({plane})', opacity=0.75, marginal_y='box')
+    config = {
+      'toImageButtonOptions': {'height':None, 'width':None},
+      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
+      'scrollZoom': True
+    }
+    plot.show(config=config)
   df = pandas.DataFrame()
   df['BPM'] = [*bpm.keys()]
   df['PHASE'] = value.cpu().numpy()
   if error != None:
     df['ERROR'] = error.cpu().numpy()
-  from plotly.express import scatter
   title = f'{TIME}: PHASE ({plane})'
   plot = scatter(df, x='BPM', y=f'PHASE', title=title, opacity=0.75, error_y='ERROR' if error != None else None, hover_data=['BPM', 'PHASE', 'ERROR' if error != None else None])
   config = {
@@ -205,8 +229,8 @@ if args.plot:
   }
   plot.show(config=config)
   if args.advance:
-    total = 2.0*numpy.pi*epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-    phase, sigma = Decomposition.advance_adjacent(total, value, error)
+    total = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
+    phase, sigma = Decomposition.phase_adjacent(total, value, sigma_phase=error)
     phase = phase.cpu().numpy()
     sigma = sigma.cpu().numpy() if sigma != None else numpy.zeros(phase.shape)
     df = pandas.DataFrame()
