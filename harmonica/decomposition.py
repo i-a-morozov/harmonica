@@ -9,6 +9,10 @@ import pandas
 import torch
 import nufft
 
+from collections import Counter
+from statsmodels.api import OLS, WLS
+from sklearn.cluster import DBSCAN
+
 from .util import LIMIT, mod, chain
 from .window import Window
 from .data import Data
@@ -48,7 +52,7 @@ class Decomposition():
 
     """
 
-    def __init__(self, data:'Data') -> None:
+    def __init__(self, data:'Data'=None) -> None:
         """
         Decomposition instance initialization.
 
@@ -434,7 +438,6 @@ class Decomposition():
         sigma = sigma.reshape(size, count)
 
         if fit == 'noise':
-            from statsmodels.api import WLS
             x = numpy.ones((count, 1))
             result = []
             for y, w in zip(out, sigma):
@@ -456,7 +459,6 @@ class Decomposition():
             return (out.mean(1), std.mean(1), out)
 
         if fit == 'fit':
-            from statsmodels.api import WLS
             x = numpy.ones((count, 1))
             result = []
             for y, w in zip(out, std):
@@ -557,7 +559,6 @@ class Decomposition():
         sigma = sigma.reshape(size, count)
 
         if fit == 'noise':
-            from statsmodels.api import WLS
             x = numpy.ones((count, 1))
             result = []
             for y, w in zip(out, sigma):
@@ -580,7 +581,6 @@ class Decomposition():
             return (out.mean(1), std.mean(1), out)
 
         if fit == 'fit':
-            from statsmodels.api import WLS
             x = numpy.ones((count, 1))
             result = []
             for y, w in zip(out, std):
@@ -682,7 +682,8 @@ class Decomposition():
 
             return torch.tensor([mod(other_phase - probe_phase, 2.0*numpy.pi), error])
 
-        return -cls.phase_advance(other, probe, frequency, phase, sigma_frequency, sigma_phase)
+        phase, error = cls.phase_advance(other, probe, frequency, phase, model, sigma_frequency, sigma_phase)
+        return torch.tensor([-phase, error])
 
 
     @classmethod
@@ -765,11 +766,10 @@ class Decomposition():
         select['check'] = advance_phase
 
         if method == 'dbscan':
-            from sklearn.cluster import DBSCAN
-            from collections import Counter
             advance_error = advance_error.cpu().numpy()
             group = DBSCAN(eps=epsilon, **kwargs).fit(advance_error.reshape(-1, 1))
-            label, *_ = Counter(group.labels_)
+            label = Counter(group.labels_)
+            label = max(label, key=label.get)
             pairs, *_ = numpy.in1d(advance_error, advance_error[group.labels_ != label]).nonzero()
             pairs = [[i, i + 1] for i in tuple(pairs)]
 
@@ -840,7 +840,7 @@ class Decomposition():
     def phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor,
                       q:torch.Tensor, Q:torch.Tensor, phase:torch.Tensor, PHASE:torch.Tensor, *,
                       full:bool=True, clean:bool=True, fit:bool=True, error:bool=True,
-                      factor:float=5.0,
+                      factor:float=3.0,
                       sigma_q:torch.Tensor=None, sigma_Q:torch.Tensor=None,
                       sigma_phase:torch.Tensor=None, sigma_PHASE:torch.Tensor=None) -> dict:
         """
@@ -924,11 +924,10 @@ class Decomposition():
         result['error'] = error
 
         if clean:
-            from sklearn.cluster import DBSCAN
-            from collections import Counter
             epsilon = factor*table.std().cpu().numpy()
             cluster = DBSCAN(eps=epsilon).fit(table.cpu().numpy().reshape(-1, 1))
-            primary, *_ = Counter(cluster.labels_)
+            primary = Counter(cluster.labels_)
+            primary = max(primary, key=primary.get)
             clean = {key: index[key] for key, cluster in zip(index, cluster.labels_) if cluster != primary}
             index = {key: index[key] for key, cluster in zip(index, cluster.labels_) if cluster == primary}
             result['index'] = index
@@ -937,7 +936,6 @@ class Decomposition():
             result['error'] = error[cluster.labels_ == primary]
 
         if fit:
-            from statsmodels.api import WLS
             x = numpy.ones((len(result['phase']), 1))
             y = result['phase'].cpu().numpy()
             s = result['error'].cpu().numpy()

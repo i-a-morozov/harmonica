@@ -11,6 +11,9 @@ import pandas
 import torch
 import nufft
 
+from itertools import product
+from statsmodels.api import OLS, WLS
+
 from .util import LIMIT, mod
 from .window import Window
 from .data import Data
@@ -744,11 +747,6 @@ class Frequency():
         fitted frequency value and error estimation for each signal (torch.Tensor)
 
         """
-        try:
-            from statsmodels.api import OLS, WLS
-        except ModuleNotFoundError:
-            raise Exception(f'FREQUENCY: statsmodels not found')
-
         length = 0 if std == None else len(std)
 
         if mode == 'wls' and length == 0:
@@ -870,7 +868,6 @@ class Frequency():
 
         """
         table = {}
-        from itertools import product
         for combo in product(range(-order, order + 1), repeat=len(basis)):
             if sum(map(abs, combo)) > order:
                 continue

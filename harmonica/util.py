@@ -63,13 +63,15 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:FLAG")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
     record(waveform, "H:{name}:JOIN")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
     record(waveform, "H:{name}:RISE")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
-    record(waveform, "H:{name}:S")                 {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:TIME")              {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:BX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:AX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:FX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:EX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:BY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:AY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:FY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:EY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:X")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:Y")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:I")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
@@ -125,13 +127,15 @@ def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
     epics.caput(f'H:{name}:FLAG',     data['FLAG'], connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:JOIN',     data['JOIN'], connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:RISE',     data['RISE'], connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:S',        data['S'],    connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:TIME',     data['TIME'], connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:BX', data['BX'],   connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:AX', data['AX'],   connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:FX', data['FX'],   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:EX', data['EX'],   connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:BY', data['BY'],   connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:AY', data['AY'],   connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:FY', data['FY'],   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:EY', data['EY'],   connection_timeout=connection_timeout)
 
 
 # Load TbT data from file
@@ -161,6 +165,7 @@ def mod(x:float, y:float, d:float=0.0) -> float:
 
     """
     return x - ((x - d) - (x - d) % y)
+
 
 # Chain
 def chain(pairs):
