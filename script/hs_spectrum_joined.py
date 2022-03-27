@@ -5,10 +5,11 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_phase', description='Estimate phase for selected BPMs ans plane.')
+parser = argparse.ArgumentParser(prog='hs_frequency_all', description='Save/plot joined frequency for selected BPMs and plane')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=256)
-parser.add_argument('--load', type=int, help='total number of turns to load', default=1024)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=64)
+parser.add_argument('--load', type=int, help='total number of turns to load', default=128)
+parser.add_argument('--shift', type=int, help='shift step', default=1)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -25,17 +26,13 @@ parser.add_argument('--type', choices=('full', 'randomized'), help='svd computat
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('-w', '--window', type=float, help='window order', default=0.0)
-parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=32)
-case = parser.add_mutually_exclusive_group()
-case.add_argument('--error', action='store_true', help='flag to propagate errors')
-case.add_argument('--shift', action='store_true', help='flag to use shifted samples')
-parser.add_argument('--size', type=int, help='maximum number of samples to use', default=256)
-parser.add_argument('--delta', type=int, help='sample shift step', default=8)
-parser.add_argument('-m', '--method', choices=('none', 'noise', 'error'), help='amplitude estimation method (shifted samples)', default='none')
-parser.add_argument('--dht', action='store_true', help='flag to use DHT estimator')
-parser.add_argument('--drop', type=int, help='number of endpoints to drop in DHT', default=32)
+parser.add_argument('--f_min', type=float, help='min frequency value', default=0.0)
+parser.add_argument('--f_max', type=float, help='max frequency value', default=0.5)
+parser.add_argument('--beta_min', type=float, help='min beta threshold value for x or y', default=0.0E+0)
+parser.add_argument('--beta_max', type=float, help='max beta threshold value for x or y', default=1.0E+3)
+parser.add_argument('--nufft', action='store_true', help='flag to compute spectum using TYPY-III NUFFT')
+parser.add_argument('--time', choices=('position', 'phase'), help='time type to use with NUFFT', default='phase')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('--advance', action='store_true', help='flag to plot phase advance')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -48,12 +45,11 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make, mod
+from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 from harmonica.frequency import Frequency
-from harmonica.decomposition import Decomposition
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
@@ -64,20 +60,24 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit(f'error: CUDA is not avalible')
 
-# Set data plane
-plane = args.plane.upper()
-
-# Load frequency and frequency error
-value = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-error = epics.caget(f'H:FREQUENCY:ERROR:{plane}')
+# Check and set frequency range
+f_min = args.f_min
+f_max = args.f_max
+if f_min < 0.0:
+  exit(f'error: {f_min=}, should be positive')
+if f_max < f_min:
+  exit(f'error: {f_max=} should be greater than {f_min=}')
 
 # Load monitor data
 name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
 flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
+join = epics.caget_many([f'H:{name}:JOIN' for name in name])
 rise = epics.caget_many([f'H:{name}:RISE' for name in name])
+beta = epics.caget_many([f'H:{name}:MODEL:B{args.plane.upper()}' for name in name])
+beta = {key: value for key, value in zip(name, beta)}
 
 # Set BPM data
-bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
+bpm = {name: rise for name, flag, rise, join in zip(name, flag, rise, join) if flag == 1 and join == 1}
 
 # Check & remove skipped
 if args.skip:
@@ -95,23 +95,36 @@ if args.only:
       if not name in (name.upper() for name in args.only):
         bpm.pop(name)
 
+# Check beta values
+if args.beta_min < 0:
+  exit(f'error: min beta threshold {args.beta_min} should be positive')
+if args.beta_max < 0:
+  exit(f'error: max beta threshold {args.beta_max} should be positive')
+if args.beta_min > args.beta_max:
+  exit(f'error: max beta threshold {args.beta_max} should be greater than min beta threshold {args.beta_min}')
+
+# Filter by beta values
+for name in bpm.copy():
+  if not (args.beta_min <= beta[name] <= args.beta_max):
+    bpm.pop(name)
+
 # Check BPM list
 if not bpm:
   exit(f'error: BPM list is empty')
 
-# Generate model advance
-if args.advance:
-  total = epics.caget(f'H:TAIL:MODEL:F{plane}')
-  model = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype, device=device)
-  model, _ = Decomposition.phase_adjacent(total/(2.0*numpy.pi), model)
-  model = model.cpu().numpy()
-  name = [*bpm.keys()]
-  pair = [f'{name[i]}-{name[i+1]}' for i in range(len(bpm)-1)]
-  pair.append(f'{name[-1]}-{name[0]}')
-
 # Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
+
+# Set BPM positions
+if args.nufft:
+  if args.time == 'position':
+    position = epics.caget_many([f'H:{name}:TIME' for name in bpm])
+    position = numpy.array(position)/LENGTH
+  if args.time == 'phase':
+    total = epics.caget(f'H:TAIL:MODEL:F{args.plane.upper()}')
+    position = epics.caget_many([f'H:{name}:MODEL:F{args.plane.upper()}' for name in bpm])
+    position = numpy.array(position)/total
 
 # Check length
 length = args.load
@@ -173,86 +186,54 @@ if args.filter == 'hankel':
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
 
-# Estimate phase
-if not args.dht:
-  dec = Decomposition(tbt)
-  value, error, table = dec.harmonic_phase(
-    value,
-    length=args.length,
+# Number of steps
+step = range(1 if args.shift <= 0 else 1 + (length - args.length) // args.shift)
+
+# Loop over steps
+shift = args.shift
+length = args.length
+win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
+tbt_shift = Data(size, win)
+f = Frequency(tbt_shift)
+result = []
+for i in step:
+  tbt_shift.set_data(tbt.work[:, i*shift : length + i*shift])
+  frequency = f.compute_joined_frequency(
+    length=length,
+    f_range=(f_min, f_max),
+    name='cosine_window',
     order=args.window,
-    window='cosine_window',
-    error=args.error,
-    limit=args.limit,
-    sigma_frequency=error,
-    shift=args.shift,
-    count=args.size,
-    step=args.delta,
-    clean=True,
-    factor=5.0,
-    method=args.method)
-else:
-  dht = Frequency.dht(tbt.work[:, :args.length])
-  table = dht.angle()
-  table -= 2.0*numpy.pi*value*torch.linspace(0, args.length - 1, args.length, dtype=dtype, device=device)
-  table = mod(table, 2.0*numpy.pi, -numpy.pi)
-  value = table[:, +args.drop:-args.drop].mean(-1)
-  error = table[:, +args.drop:-args.drop].std(-1)
+    normalize=True,
+    position=position if args.nufft else None
+  )
+  result.append(frequency)
+
+# Format result
+*_, frequency = torch.stack(result).T.cpu().numpy()
 
 # Plot
 if args.plot:
+  df = pandas.DataFrame({'STEP': step, 'FREQUENCY':frequency})
   from plotly.express import scatter
-  if table != None:
-    step = len(table[0])
-    df = pandas.DataFrame()
-    for i, name in enumerate(bpm):
-      df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'PHASE':table[i].cpu().numpy()})])
-    plot = scatter(df, x='STEP', y='PHASE', color='BPM', title=f'{TIME}: PHASE ({plane})', opacity=0.75, marginal_y='box')
-    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
-    plot.show(config=config)
-  df = pandas.DataFrame()
-  df['BPM'] = [*bpm.keys()]
-  df['PHASE'] = value.cpu().numpy()
-  if error != None:
-    df['ERROR'] = error.cpu().numpy()
-  else:
-    df['ERROR'] = torch.zeros_like(value).cpu().numpy()
-  title = f'{TIME}: PHASE ({plane})'
-  plot = scatter(df, x='BPM', y=f'PHASE', title=title, opacity=0.75, error_y='ERROR', color_discrete_sequence = ['blue'], hover_data=['BPM', 'PHASE', 'ERROR'])
-  plot.update_traces(marker={'size': 5})
+  mean = numpy.mean(frequency)
+  median = numpy.median(frequency)
+  std = numpy.std(frequency)
+  title = f'{TIME}: FREQUENCY (ALL)<br>LENGTH: {args.length}, SHIFT: {args.shift}, COUNT: {len(step)}<br>MEAN: {mean}, MEDIAN: {median}, SIGMA: {std}'
+  plot = scatter(df, x='STEP', y='FREQUENCY', title=title, opacity=0.75, marginal_y='box', color_discrete_sequence = ['blue'])
+  plot.add_hline(mean - std, line_color='black', line_dash="dash", line_width=1.0)
+  plot.add_hline(mean, line_color='black', line_dash="dash", line_width=1.0)
+  plot.add_hline(mean + std, line_color='black', line_dash="dash", line_width=1.0)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
-  if args.advance:
-    total = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-    phase, sigma = Decomposition.phase_adjacent(total, value, sigma_phase=error)
-    phase = phase.cpu().numpy()
-    sigma = sigma.cpu().numpy()
-    df = pandas.DataFrame()
-    for case, data, std in zip(['MODEL', 'PHASE'], [model, phase], [numpy.zeros_like(sigma), sigma]):
-      df = pandas.concat([df, pandas.DataFrame({'CASE':case, 'PAIR':pair, 'ADVANCE':data, 'SIGMA':std})])
-    title = f'{TIME}: ADJACENT ADVANCE ({plane})'
-    plot = scatter(df, x='PAIR', y='ADVANCE', color='CASE', error_y='SIGMA', title=title, color_discrete_sequence = ['blue', 'red'])
-    plot.update_traces(marker={'size': 5})
-    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
-    plot.show(config=config)
-    df = pandas.DataFrame()
-    df['PAIR'] = pair
-    df['ERROR'] = 100*(model - phase)/model
-    df['SIGMA'] = 100*sigma/model
-    title = f'{TIME}: ADJACENT ADVANCE ERROR ({plane})'
-    plot = scatter(df, x='PAIR', y='ERROR', error_y='SIGMA', title=title, color_discrete_sequence = ['blue'])
-    plot.update_traces(marker={'size': 5})
-    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
-    plot.show(config=config)
 
 # Save to file
 if args.save:
-  filename = f'phase_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, value.cpu().numpy())
+  filename = f'frequency_joined_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  numpy.save(filename, frequency)
 
 # Save to epics
 if args.update:
-  epics.caput_many([f'H:{name}:PHASE:VALUE:{plane}' for name in bpm], value.cpu().numpy())
-  if error != None:
-    epics.caput_many([f'H:{name}:PHASE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
-  else:
-    epics.caput_many([f'H:{name}:PHASE:ERROR:{plane}' for name in bpm],  torch.zeros_like(value).cpu().numpy())
+  plane = args.plane.upper()
+  *_, frequency = frequency.T
+  epics.caput(f'H:FREQUENCY:VALUE:{plane}', frequency.mean())
+  epics.caput(f'H:FREQUENCY:ERROR:{plane}', frequency.std())

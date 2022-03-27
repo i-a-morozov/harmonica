@@ -5,7 +5,7 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_spectrum', description='Save/plot amplitude spectrum data for selected plane and BPMs.')
+parser = argparse.ArgumentParser(prog='hs_spectrum', description='Save/plot amplitude spectrum data for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=1024)
 select = parser.add_mutually_exclusive_group()
@@ -20,7 +20,7 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-f', '--filter', choices=('none', 'svd', 'hankel'), help='filter type', default='none')
 parser.add_argument('--rank', type=int, help='rank to use for svd & hankel filter', default=8)
-parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
+parser.add_argument('--type', choices=('full', 'randomized'), help='SVD computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('-w', '--window', type=float, help='window order', default=0.0)
@@ -44,7 +44,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
@@ -152,14 +152,12 @@ if args.normalize:
 if args.filter == 'svd':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
-  del flt
 
 # Filter (hankel)
 if args.filter == 'hankel':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
-  del flt
 
 # Set Frequency instance
 f = Frequency(tbt, pad=args.pad)
@@ -183,20 +181,15 @@ if (f_min, f_max) != (0.0, 0.5):
   data = f.ffrft_spectrum
 
 # Convert to numpy
-grid = grid.detach().cpu().numpy()[1:-1]
-data = data.detach().cpu().numpy()[:, 1:-1]
+grid = grid.detach().cpu().numpy()[1:]
+data = data.detach().cpu().numpy()[:, 1:]
 
 # Mean spectrum
 if args.average:
   f('ffrft')
-  mean_grid, mean_data = f.task_mean_spectrum(log=args.log)
-  mean_grid = mean_grid.cpu().numpy()[1:-1]
-  mean_data = mean_data.cpu().numpy()[1:-1]
-
-# Clean
-del win, tbt, f
-if device == 'cuda':
-  torch.cuda.empty_cache()
+  mean_grid, mean_data = f.compute_mean_spectrum(log=args.log)
+  mean_grid = mean_grid.cpu().numpy()[1:]
+  mean_data = mean_data.cpu().numpy()[1:]
 
 # Flip
 if args.flip:
@@ -208,7 +201,7 @@ if args.flip:
 
 # Scale
 if args.log:
-  data = numpy.log10(data + 1.0E-16)
+  data = numpy.log10(data + 1.0E-12)
 
 # Peaks
 if args.average and args.peaks > 0:
@@ -224,12 +217,7 @@ if args.plot:
     df = pandas.concat([df, pandas.DataFrame({'FREQUENCY':grid, 'BPM':name, f'DTFT({args.plane.upper()})':data[i]})])
   from plotly.express import scatter
   plot = scatter(df, x='FREQUENCY', y=f'DTFT({args.plane.upper()})', color='BPM', title=f'{TIME}: SPECTRUM', opacity=0.75)
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
   if args.map:
     from plotly.express import imshow
@@ -242,12 +230,7 @@ if args.plot:
     plot = scatter(df, x='FREQUENCY', y=f'DTFT({args.plane.upper()})', title=f'{TIME}: SPECTRUM (AVERAGE)')
     if args.peaks > 0:
       plot.add_scatter(x=peak_grid, y=peak_data, mode='markers', marker=dict(color='red', size=10), showlegend=False, name='PEAK')
-    config = {
-      'toImageButtonOptions': {'height':None, 'width':None},
-      'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-      'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-      'scrollZoom': True
-    }
+    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
     plot.show(config=config)
 
 # Save to file

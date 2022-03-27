@@ -5,9 +5,11 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_frequency', description='Save/plot frequency data for selected BPMs and plane.')
+parser = argparse.ArgumentParser(prog='hs_frequency_shift', description='Save/plot frequency data for selected plane and BPMs using shifted samples.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=1024)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=512)
+parser.add_argument('--load', type=int, help='total number of turns to load', default=2048)
+parser.add_argument('--shift', type=int, help='shift step', default=8)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -34,6 +36,7 @@ parser.add_argument('--process', choices=('none', 'noise'), help='processing typ
 parser.add_argument('--limit', type=int, help='number of columns to use for noise estimation', default=32)
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--noise', action='store_true', help='flag to plot noise data')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -46,10 +49,10 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, pv_make
+from harmonica.util import LIMIT, LENGTH, pv_make
 from harmonica.statistics import weighted_mean, weighted_variance
-from harmonica.statistics import median, biweight_midvariance, standardize
-from harmonica.anomaly import threshold
+from harmonica.statistics import median, biweight_midvariance, standardize, rescale
+from harmonica.anomaly import threshold, score
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
@@ -109,7 +112,7 @@ pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length
-length = args.length
+length = args.load
 if length < 0 or length > LIMIT:
   exit(f'error: {length=}, expected a positive value less than {LIMIT=}')
 
@@ -130,6 +133,10 @@ if args.rise:
     exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
 else:
   rise = 0
+
+# Check sample length
+if args.length > length:
+  exit(f'error: requested sample length {args.length} should be less than {length}')
 
 # Check window order
 if args.window < 0.0:
@@ -155,8 +162,14 @@ if args.normalize:
 
 # Estimate noise
 if args.process == 'noise':
-  flt = Filter(tbt)
-  _, noise = flt.estimate_noise(limit=args.limit)
+  table = []
+  win = Window(args.length)
+  for signal in tbt.work:
+    matrix = Data.from_data(win, Data.make_matrix(args.length, args.shift, signal))
+    f = Filter(matrix)
+    _, noise = f.estimate_noise(limit=args.limit)
+    table.append(noise)
+  noise = torch.stack(table)
 
 # Filter (svd)
 if args.filter == 'svd':
@@ -172,71 +185,101 @@ if args.filter == 'hankel':
 # Set Frequency instance
 f = Frequency(tbt, pad=args.pad)
 
-# Apply window
-if args.window:
-  f.data.window_remove_mean()
-  f.data.window_apply()
-
-# Compute frequencies
-f(args.method, f_range=(f_min, f_max))
+# Compute shifted frequencies
+frequency = f.compute_shifted_frequency(
+  args.length,
+  args.shift,
+  method=args.method,
+  name='cosine_window',
+  order=args.window,
+  f_range=(f_min, f_max)
+)
+_, step = frequency.shape
 
 # Clean
 if args.clean:
-  data = standardize(f.frequency, center_estimator=median, spread_estimator=biweight_midvariance)
+  data = standardize(frequency.flatten(), center_estimator=median, spread_estimator=biweight_midvariance)
   factor = torch.tensor(args.factor, dtype=dtype, device=device)
-  mask = threshold(data, -factor, +factor).squeeze(0)
+  mask = threshold(data, -factor, +factor).reshape_as(frequency)
+  mark = 0.5 >= rescale(score(tbt.size, mask.flatten()).to(dtype), scale_min=0.0, scale_max=1.0).nan_to_num()
 else:
-  mask = torch.ones_like(f.frequency)
+  mask = torch.ones_like(frequency)
+  mark = torch.ones(tbt.size, dtype=dtype, device=device)
 
 # Process (none)
 if args.process == 'none':
-  center = weighted_mean(f.frequency, weight=mask)
-  spread = weighted_variance(f.frequency, weight=mask, center=center).sqrt()
+  signal_center = weighted_mean(frequency, weight=mask)
+  signal_spread = weighted_variance(frequency, weight=mask, center=signal_center).sqrt()
+  weight = mark/signal_spread**2
+  center = weighted_mean(signal_center, weight=weight)
+  spread = weighted_variance(signal_center, weight=weight, center=center).sqrt()
 
 # Process (noise)
 if args.process == 'noise':
-  factor = torch.stack([spectrum[index] for index, spectrum in zip(f.ffrft_bin.to(torch.int64), f.ffrft_spectrum)])**2
-  weight = mask*factor/noise**2
-  weight = weight/weight.sum(-1)
-  center = weighted_mean(f.frequency, weight=weight)
-  spread = weighted_variance(f.frequency, weight=weight, center=center).sqrt()
-
-# Convert to numpy
-frequency = f.frequency.cpu().numpy()
-center = center.cpu().numpy()
-spread = spread.cpu().numpy()
+  weight = mask/noise**2
+  weight = weight/weight.sum(-1, keepdim=True)
+  signal_center = weighted_mean(frequency, weight=weight)
+  signal_spread = weighted_variance(frequency, weight=weight, center=signal_center).sqrt()
+  weight = mark/signal_spread**2
+  center = weighted_mean(signal_center, weight=weight)
+  spread = weighted_variance(signal_center, weight=weight, center=center).sqrt()
 
 # Flip
 if args.flip:
   frequency = 1.0 - frequency
+  signal_center = 1.0 - signal_center
   center = 1.0 - center
+
+# Convert to numpy
+frequency = frequency.cpu().numpy()
+center, spread = center.cpu().numpy(), spread.cpu().numpy()
+signal_center, signal_spread = signal_center.cpu().numpy(), signal_spread.cpu().numpy()
 
 # Plot
 if args.plot:
-  mask = mask.to(torch.bool).logical_not().cpu().numpy()
+  df = pandas.DataFrame()
+  for i, name in enumerate(bpm):
+    df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'FREQUENCY':frequency[i]})])
+  from plotly.express import scatter
+  title = f'{TIME}: FREQUENCY (SHIFTED) ({frequency.mean():12.9}, {frequency.std():12.9})<br>SAMPLE: {args.length}, SHIFT: {args.shift}, COUNT: {step}'
+  title = f'{title}<br>CENTER: {center:12.9}, SPREAD: {spread:12.9}'
+  plot = scatter(df, x='STEP', y='FREQUENCY', color='BPM', title=title, opacity=0.75, marginal_y='box')
+  plot.add_hline(center - spread, line_color='black', line_dash='dash', line_width=1.0)
+  plot.add_hline(center, line_color='black', line_dash='dash', line_width=1.0)
+  plot.add_hline(center + spread, line_color='black', line_dash='dash', line_width=1.0)
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
+  plot.show(config=config)
+  mark = mark.to(torch.bool).logical_not().cpu().numpy()
   df = pandas.DataFrame()
   df['BPM'] = [*bpm.keys()]
-  df['FREQUENCY'] = frequency
-  df['WEIGHT'] = (~mask).astype(numpy.float64) if args.process == 'none' else weight.cpu().numpy()
-  from plotly.express import scatter
-  title = f'{TIME}: FREQUENCY ({frequency.mean():12.9}, {frequency.std():12.9})<br>CENTER: {center:12.9}, SPREAD: {spread:12.9}'
-  plot = scatter(df, x='BPM', y='FREQUENCY', title=title, opacity=0.75, marginal_y='box', color_discrete_sequence = ['blue'],  hover_data=['BPM', 'FREQUENCY', 'WEIGHT'], symbol_sequence=['circle'])
+  df['FREQUENCY'] = signal_center
+  df['FLAG'] = (~mark).astype(numpy.float64)
+  df['ERROR'] = signal_spread
+  plot = scatter(df, x='BPM', y='FREQUENCY', error_y='ERROR', title=title, opacity=0.75, marginal_y='box', color_discrete_sequence = ['blue'],  hover_data=['BPM', 'FREQUENCY', 'ERROR', 'FLAG'], symbol_sequence=['circle'])
   plot.add_hline(center - spread, line_color='black', line_dash="dash", line_width=1.0)
   plot.add_hline(center, line_color='black', line_dash="dash", line_width=1.0)
   plot.add_hline(center + spread, line_color='black', line_dash="dash", line_width=1.0)
   plot.update_traces(marker={'size': 10})
-  if mask.sum() != 0:
-    mask = pandas.DataFrame({'BPM':df.BPM[mask], 'FREQUENCY':df.FREQUENCY[mask], 'WEIGHT':df.WEIGHT[mask]})
-    mask = scatter(mask, x='BPM', y='FREQUENCY', color_discrete_sequence = ['red'], hover_data=['BPM', 'FREQUENCY', 'WEIGHT'], symbol_sequence=['circle'])
-    mask.update_traces(marker={'size': 10})
-    mask, *_ = mask.data
-    plot.add_trace(mask)
+  if mark.sum() != 0:
+    mark = pandas.DataFrame({'BPM':df.BPM[mark], 'FREQUENCY':df.FREQUENCY[mark], 'FLAG':df.FLAG[mark], 'ERROR':df.ERROR[mark]})
+    mark = scatter(mark, x='BPM', y='FREQUENCY', error_y='ERROR', title=title, opacity=0.75, marginal_y='box', color_discrete_sequence = ['red'],  hover_data=['BPM', 'FREQUENCY', 'ERROR', 'FLAG'], symbol_sequence=['circle'])
+    mark.update_traces(marker={'size': 10})
+    mark, *_ = mark.data
+    plot.add_trace(mark)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
+  if args.process == 'noise':
+    df = pandas.DataFrame()
+    for i, name in enumerate(bpm):
+      df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'NOISE':noise[i]})])
+    title = f'{TIME}: NOISE (SHIFTED)<br>SAMPLE: {args.length}, SHIFT: {args.shift}, COUNT: {step}'
+    plot = scatter(df, x='STEP', y='NOISE', color='BPM', title=title, opacity=0.75)
+    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
+    plot.show(config=config)
 
 # Save to file
 if args.save:
-  filename = f'frequency_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  filename = f'frequency_shifted_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, frequency)
 
 # Save to epics
@@ -244,5 +287,5 @@ if args.update:
   plane = args.plane.upper()
   epics.caput(f'H:FREQUENCY:VALUE:{plane}', center)
   epics.caput(f'H:FREQUENCY:ERROR:{plane}', spread)
-  epics.caput_many([f'H:{name}:FREQUENCY:VALUE:{plane}' for name in bpm], frequency)
-  epics.caput_many([f'H:{name}:FREQUENCY:ERROR:{plane}' for name in bpm], numpy.zeros(frequency.shape))
+  epics.caput_many([f'H:{name}:FREQUENCY:VALUE:{plane}' for name in bpm], signal_center)
+  epics.caput_many([f'H:{name}:FREQUENCY:ERROR:{plane}' for name in bpm], signal_spread)

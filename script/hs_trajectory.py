@@ -8,7 +8,7 @@ import argparse
 parser = argparse.ArgumentParser(prog='hs_trajectory', description='Save/plot trajectory TbT data for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y', 'i'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=4)
-parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=1024)
+parser.add_argument('--load', type=int, help='number of turns to load (integer)', default=128)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='BPM', nargs='+', help='space separated list of valid BPM names to skip')
 select.add_argument('--only', metavar='BPM', nargs='+', help='space separated list of valid BPM names to use')
@@ -21,7 +21,7 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-f', '--filter', choices=('none', 'svd', 'hankel'), help='filter type', default='none')
 parser.add_argument('--rank', type=int, help='rank to use for svd & hankel filter', default=8)
-parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
+parser.add_argument('--type', choices=('full', 'randomized'), help='SVD computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
@@ -29,17 +29,6 @@ parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use 
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
-
-# Import
-import epics
-import numpy
-import pandas
-import torch
-from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
-from harmonica.window import Window
-from harmonica.data import Data
-from harmonica.filter import Filter
 
 # Import
 import epics
@@ -90,7 +79,7 @@ if not bpm:
   exit(f'error: BPM list is empty')
 
 # Set BPM positions
-position = numpy.array(epics.caget_many([f'H:{name}:S' for name in bpm]))
+position = numpy.array(epics.caget_many([f'H:{name}:TIME' for name in bpm]))
 
 # Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
@@ -137,20 +126,22 @@ if args.median:
 if args.normalize:
   tbt.normalize()
 
-# Filter
+# Filter (none)
 if args.filter == 'none':
   data = tbt.to_numpy()
-elif args.filter == 'svd':
+
+# Filter (svd)
+if args.filter == 'svd':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   data = tbt.to_numpy()
-  del flt
-elif args.filter == 'hankel':
+
+# Filter (hankel)
+if args.filter == 'hankel':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
   data = tbt.to_numpy()
-  del flt
 
 # Check mixed length
 if args.length < 0 or args.length > args.load:
@@ -160,15 +151,10 @@ if args.length < 0 or args.length > args.load:
 data = tbt.make_signal(args.length, tbt.work)
 
 # Convert to numpy
-data = data.detach().cpu().numpy()
+data = data.cpu().numpy()
 name = [name for name in bpm] * args.length
 turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
 time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
-
-# Clean
-del win, tbt
-if device == 'cuda':
-  torch.cuda.empty_cache()
 
 # Plot
 if args.plot:
@@ -179,16 +165,11 @@ if args.plot:
   df[args.plane.upper()] = data
   from plotly.express import line
   plot = line(df, x='TIME', y=args.plane.upper(), color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY)', markers=True)
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Save to file
 data = numpy.array([time, data])
 if args.save:
-  filename = f'tbt_all_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+  filename = f'tbt_trajectory_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, data)

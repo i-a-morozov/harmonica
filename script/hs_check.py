@@ -5,7 +5,7 @@ _, *flag = sys.argv
 
 # Parse arguments
 import argparse
-parser = argparse.ArgumentParser(prog='hs_phase', description='Estimate phase for selected plane and BPMs.')
+parser = argparse.ArgumentParser(prog='hs_check', description='Check phase synchronization for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=256)
 select = parser.add_mutually_exclusive_group()
@@ -19,13 +19,11 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-f', '--filter', choices=('none', 'svd', 'hankel'), help='filter type', default='none')
 parser.add_argument('--rank', type=int, help='rank to use for svd & hankel filter', default=8)
-parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
+parser.add_argument('--type', choices=('full', 'randomized'), help='svd computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('-w', '--window', type=float, help='window order', default=0.0)
-parser.add_argument('-m', '--method', choices=('quantile', 'dbscan'), help='detection method', default='quantile')
-parser.add_argument('--factor', type=float, help='quantile factor', default=10.0)
-parser.add_argument('--epsilon', type=float, help='dbscan epsilon', default=0.5)
+parser.add_argument('--factor', type=float, help='threshold factor', default=5.0)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -34,15 +32,13 @@ args = parser.parse_args(args=None if flag else ['--help'])
 
 # Import
 import epics
-import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
-from harmonica.frequency import Frequency
 from harmonica.decomposition import Decomposition
 
 # Time
@@ -56,10 +52,6 @@ if device == 'cuda' and not torch.cuda.is_available():
 
 # Set data plane
 plane = args.plane.upper()
-
-# Load frequency and frequency error
-value = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-error = epics.caget(f'H:FREQUENCY:ERROR:{plane}')
 
 # Load monitor data
 name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
@@ -88,6 +80,13 @@ if args.only:
 # Check BPM list
 if not bpm:
   exit(f'error: BPM list is empty')
+
+# Set model phase
+PHASE = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
+
+# Set tunes
+q = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
+Q = epics.caget(f'H:FREQUENCY:MODEL:{plane}')
 
 # Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
@@ -142,54 +141,30 @@ if args.normalize:
 if args.filter == 'svd':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
-  del flt
 
 # Filter (hankel)
 if args.filter == 'hankel':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
-  del flt
 
 # Estimate phase
 dec = Decomposition(tbt)
-phase, _, _ = dec.harmonic_phase(
-  value,
-  length=args.length,
-  name='cosine_window',
-  order=args.window,
-  error=False,
-  shift=False,
-  )
-
-# Set model phase
-PHASE = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
-
-# Set tunes
-q = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-Q = epics.caget(f'H:FREQUENCY:MODEL:{plane}')
+phase, _, _ = dec.harmonic_phase(q, length=args.length, order=args.window, factor=args.factor)
 
 # Check
-check, table= Decomposition.phase_check(
-  q,
-  Q,
-  phase,
-  PHASE,
-  method=args.method,
-  factor=args.factor,
-  epsilon=args.epsilon,
-  remove=True,
-  limit=5
-)
+check, table= Decomposition.phase_check(q, Q, phase, PHASE, factor=args.factor)
 
 # Legend
-print('-1: add one turn')
-print('+1: rem one turn')
+print('-1: increase rise by one turn')
+print('+1: decrease rise by one turn')
 print()
 
 # Print result
 for marked in check:
-  print(marked, [*bpm][marked], check[marked])
+  index, value = check[marked]
+  if index != 0:
+    print(marked, [*bpm][marked], check[marked])
 
 # Plot
 if args.plot:
@@ -197,13 +172,9 @@ if args.plot:
   flag = [-1 if key not in check else check[key][0]/2 - 1 for key in range(len(bpm))]
   df = pandas.DataFrame()
   for case, data in zip(['PHASE', 'MODEL', 'CHECK', 'FLAG'], [table['phase'], table['model'], table['check'], flag]):
-      df = pandas.concat([df, pandas.DataFrame({'CASE':case, 'INDEX':range(len(bpm)), 'ADVANCE':data})])
-  plot = scatter(df, x='INDEX', y='ADVANCE', color='CASE', title=f'{TIME}: ADVANCE ({plane})', opacity=0.75, color_discrete_sequence = ['red', 'black', 'blue', 'green'])
+      df = pandas.concat([df, pandas.DataFrame({'CASE':case, 'BPM':range(len(bpm)), 'ADVANCE':data})])
+  plot = scatter(df, x='BPM', y='ADVANCE', color='CASE', title=f'{TIME}: ADVANCE ({plane})', opacity=0.75, color_discrete_sequence = ['red', 'green', 'blue', 'black'])
   plot.update_layout(xaxis = dict(tickmode = 'array', tickvals = list(range(len(bpm))), ticktext = list(bpm.keys())))
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+  plot.update_traces(marker={'size': 10})
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)

@@ -8,7 +8,8 @@ Initialize Window class instance.
 import torch
 import numpy
 
-class Window:
+
+class Window():
     """
     Returns
     ----------
@@ -23,18 +24,18 @@ class Window:
     length: int
         window data length
     name: str
-        window name ('cosine_window' or kaiser_window)
+        window name ('cosine_window' or 'kaiser_window')
     order: float
         window order parameter, positive float
     **kwargs:
-        dtype, device
+        passed to torch.ones (use dtype and device)
 
     Attributes
     ----------
     length: int
         window data length
     name: str
-        window name ('cosine_window' or kaiser_window)
+        window name ('cosine_window' or 'kaiser_window')
     order: float
         window order parameter, positive float
     dtype: torch.dtype
@@ -67,8 +68,8 @@ class Window:
     __len__(self) -> int
         Window length.
     __call__(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None
-        Set self.window container for given input data with matching length or given name and order.
         Invoke set_data() method.
+        Set self.window container for given input data with matching length or given name and order.
 
     """
     def __init__(self, length:int=1024, name:str=None, order:float=None, **kwargs) -> None:
@@ -86,7 +87,7 @@ class Window:
         order: float
             window order parameter, positive float
         **kwargs:
-            dtype, device
+            passed to torch.ones (use dtype and device)
 
         Returns
         -------
@@ -94,7 +95,7 @@ class Window:
 
         """
         self.length = length
-        self.window = torch.ones(length, **kwargs)
+        self.window = torch.ones(self.length, **kwargs)
         self.dtype = self.window.dtype
         self.device = self.window.device
         self.name = name
@@ -160,8 +161,8 @@ class Window:
         """
         Set self.window container for given input data with matching length or given name and order.
 
-        If data == None, generate window data using staticmethod for given name and order.
-        If data != None, copy given input data to self.window, other parameters are be ignored.
+        If data == None, generate window data using staticmethod for given name and order
+        If data != None, copy given input data to self.window, other parameters are ignored
 
         Parameters
         ----------
@@ -185,13 +186,13 @@ class Window:
 
         if data != None:
             if data.shape != self.window.shape:
-                raise Exception(f'WINDOW: expected input data length {self.length}, got {len(data)}.')
+                raise Exception(f'WINDOW: expected input data length {self.length}, got {len(data)}')
             self.name = None
             self.order = None
             self.window.copy_(data)
             return
 
-        raise Exception(f'WINDOW: wrong input arguments in set_data.')
+        raise Exception(f'WINDOW: wrong input arguments in set_data')
 
 
     @property
@@ -222,7 +223,7 @@ class Window:
         Window instance (cosine window of given length and order)
 
         """
-        return Window(length, "cosine_window", order, **kwargs)
+        return Window(length, 'cosine_window', order, **kwargs)
 
 
     @classmethod
@@ -244,7 +245,7 @@ class Window:
         Window instance (kaiser window of given length and order)
 
         """
-        return Window(length, "kaiser_window", order, **kwargs)
+        return Window(length, 'kaiser_window', order, **kwargs)
 
 
     def __repr__(self) -> str:
@@ -265,11 +266,11 @@ class Window:
 
     def __call__(self, *, data:torch.Tensor=None, name:str=None, order:float=None) -> None:
         """
-        Set self.window container for given input data with matching length or given name and order.
         Invoke set_data() method.
+        Set self.window container for given input data with matching length or given name and order.
 
-        If data == None, generate window data using staticmethod for given name and order.
-        If data != None, copy given input data to self.window, other parameters are be ignored.
+        If data == None, generate window data using staticmethod for given name and order
+        If data != None, copy given input data to self.window, other parameters are ignored
 
         Parameters
         ----------

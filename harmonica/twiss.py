@@ -1,27 +1,153 @@
 """
 Twiss module.
+Compute twiss parameters from amplitude & phase data.
+Twiss filtering & processing.
 
 """
 
 import numpy
 import torch
+import pandas
 
-from collections import Counter
-from joblib import Parallel, delayed
-from statsmodels.api import OLS, WLS
-from sklearn.cluster import DBSCAN
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
+from .util import mod, generate_pairs, generate_other
+from .statistics import weighted_mean, weighted_variance
+from .statistics import median, biweight_midvariance, standardize
+from .anomaly import threshold, dbscan, local_outlier_factor, isolation_forest
+from .decomposition import Decomposition
+from .model import Model
+from .table import Table
 
-from harmonica.util import mod, generate_pairs
-from harmonica.model import Model
-from harmonica.table import Table
 
 class Twiss():
+    """
+    Returns
+    ----------
+    Twiss class instance.
 
-    job = 8
+    Parameters
+    ----------
+    model: 'Model'
+        Model instance
+    table: 'Table'
+        Table instance
+    limit: int
+        range limit to use
 
-    def __init__(self, model:'Model', table:'Table') -> None:
+    Attributes
+    ----------
+    model: 'Model'
+        Model instance
+    table: 'Table'
+        Table instance
+    limit: int
+        range limit to use
+    dtype: torch.dtype
+        data type (from model)
+    device: torch.device
+        data device (from model)
+    flag: torch.Tensor
+        location flags
+    data: torch.Tensor
+        list of other indices for each location
+    pair: torch.Tensor
+        list of pairs for each location
+    fx: torch.Tensor
+        x phase for each location
+    fy: torch.Tensor
+        y phase  for each location
+    sigma_fx: torch.Tensor
+        x phase error for each location
+    sigma_fy: torch.Tensor
+        y phase error for each location
+    fx_correct: torch.Tensor
+        corrected x phase for each location
+    fy_correct: torch.Tensor
+        corrected y phase  for each location
+    sigma_fx_correct: torch.Tensor
+        corrected x phase error for each location
+    sigma_fy_correct: torch.Tensor
+        corrected y phase error for each location
+    virtual_x: dict
+        x plane virtual phase data
+    virtual_y: dict
+        y plane virtual phase data
+    correct_x: dict
+        x plane corrected phase data
+    correct_y: dict
+        y plane corrected phase data
+    action: dict
+        action data
+        dict_keys(['jx', 'sigma_jx', 'center_jx', 'spread_jx', 'jy', 'sigma_jy', 'center_jy', 'spread_jy', 'mask'])
+    data_amplitude: dict
+        twiss from amplitude data
+        dict_keys(['bx', 'sigma_bx', 'by', 'sigma_by'])
+    data_phase: dict
+        twiss from phase data
+        dict_keys(['fx_ij', 'sigma_fx_ij', 'fx_m_ij', 'sigma_fx_m_ij', 'fx_ik', 'sigma_fx_ik', 'fx_m_ik', 'sigma_fx_m_ik', 'fy_ij', 'sigma_fy_ij', 'fy_m_ij', 'sigma_fy_m_ij', 'fy_ik', 'sigma_fy_ik', 'fy_m_ik', 'sigma_fy_m_ik', 'ax', 'sigma_ax', 'bx', 'sigma_bx', 'ay', 'sigma_ay', 'by', 'sigma_by'])
+    ax: torch.Tensor
+        alfa x
+    sigma_ax: torch.Tensor
+        sigma alfa x
+    bx: torch.Tensor
+        beta x
+    sigma_bx: torch.Tensor
+        sigma beta x
+    ay: torch.Tensor
+        alfa y
+    sigma_ay: torch.Tensor
+        sigma alfa y
+    by: torch.Tensor
+        beta y
+    sigma_by: torch.Tensor
+        sigma beta y
+
+    Methods
+    ----------
+    __init__(self, model:'Model', table:'Table', limit:int=8) -> None
+        Twiss instance initialization.
+    get_action(self, *, data_threshold:dict={'use': True, 'factor': 5.0}, data_dbscan:dict={'use': False, 'factor': 2.5}, data_local_outlier_factor:dict={'use': False, 'contamination': 0.01}, data_isolation_forest:dict={'use': False, 'contamination': 0.01}) -> None
+        Estimate actions at each monitor location with optional data cleaning and estimate action center and spread.
+    get_twiss_from_amplitude(self) -> None
+        Estimate twiss from amplitude.
+    phase_virtual(self, limit:int=None, exclude:list=None, **kwargs) -> None
+        Estimate x & y phase for virtual locations.
+    phase_correct(self, *, limit:int=None, **kwargs) -> None
+        Correct x & y phase for monitor locations.
+    phase_alfa(a_m:torch.Tensor, f_ij:torch.Tensor, f_m_ij:torch.Tensor, f_ik:torch.Tensor, f_m_ik:torch.Tensor, *, error:bool=True, model:bool=True, sigma_a_m:torch.Tensor=0.0, sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0, sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple
+        Estimate twiss alfa at index (i) from given triplet (i, j, k) phase data.
+    phase_beta(b_m:torch.Tensor, f_ij:torch.Tensor, f_m_ij:torch.Tensor, f_ik:torch.Tensor, f_m_ik:torch.Tensor, *, error:bool=True, model:bool=True, sigma_b_m:torch.Tensor=0.0, sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0, sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple
+        Estimate twiss beta at index (i) from given triplet (i, j, k) phase data.
+    get_twiss_from_phase(self, *, virtual:bool=True, error:bool=True, model:bool=False, use_correct:bool=False, use_correct_sigma:bool=False) -> None
+        Estimate twiss from phase data.
+    filter_twiss(self, plane:str = 'x', *, phase:dict={'use': True, 'threshold': 10.00}, model:dict={'use': True, 'threshold': 00.50}, value:dict={'use': True, 'threshold': 00.50}, sigma:dict={'use': True, 'threshold': 00.25}, limit:dict={'use': True, 'threshold': 05.00}) -> dict
+        Filter twiss for given data plane and cleaning options.
+    process_twiss(self, plane:str='x', *, weight:bool=True, mask:torch.Tensor=None) -> dict
+        Process twiss data.
+    get_ax(self, index:int) -> torch.Tensor
+        Get ax value and error at given index.
+    get_bx(self, index:int) -> torch.Tensor
+        Get bx value and error at given index.
+    get_fx(self, index:int) -> torch.Tensor
+        Get fx value and error at given index.
+    get_ay(self, index:int) -> torch.Tensor
+        Get ay value and error at given index.
+    get_by(self, index:int) -> torch.Tensor
+        Get by value and error at given index.
+    get_fy(self, index:int) -> torch.Tensor
+        Get fy value and error at given index.
+    get_twiss(self, index:int) -> dict
+        Return twiss data at given index.
+    get_table(self) -> pandas.DataFrame
+        Return twiss data at all locations as dataframe.
+    __repr__(self) -> str
+        String representation.
+    __len__(self) -> int:
+        Number of locations.
+    __call__(self, limit:int=None) -> pandas.DataFrame
+        Perform twiss loop with default parameters.
+
+    """
+    def __init__(self, model:'Model', table:'Table', limit:int=8) -> None:
         """
         Twiss instance initialization.
 
@@ -31,141 +157,78 @@ class Twiss():
             Model instance
         table: 'Table'
             Table instance
+        limit: int
+            range limit to use
 
         Returns
         -------
         None
 
         """
-        self.model, self.table = model, table
+        self.model, self.table, self.limit = model, table, limit
 
-        self.dtype, self.device = self.model.dtype, self.model.device
-
-        self.decomposition = self.model.decomposition
+        self.size, self.dtype, self.device = self.model.size, self.model.dtype, self.model.device
 
         if self.model.monitor_count != self.table.size:
-            raise Exception(f'error: expected {self.model.monitor_count} monitors in Model, got {self.table.size} in Table')
+            raise Exception(f'TWISS: expected {self.model.monitor_count} monitors in Model, got {self.table.size} in Table')
 
         if self.model.monitor_name != self.table.name:
-            raise Exception(f'error: expected monitor names to match')
+            raise Exception(f'TWISS: expected monitor names to match')
 
         self.flag = [flag if kind == self.model._monitor else 0 for flag, kind in zip(self.model.flag, self.model.kind)]
+        self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
 
-        self.fx = torch.zeros(self.model.size, dtype=self.dtype, device=self.device)
-        self.fy = torch.zeros(self.model.size, dtype=self.dtype, device=self.device)
+        self.data = [generate_other(probe, self.limit, self.flag) for probe in range(self.model.size)]
+        self.pair = [generate_pairs(self.limit, 1 + 1, probe=probe, table=table) for probe, table in enumerate(self.data)]
+
+        self.data = torch.tensor(self.data, dtype=torch.int64, device=self.device)
+        self.pair = torch.tensor(self.pair, dtype=torch.int64, device=self.device)
+
+        self.fx = torch.zeros_like(self.model.fx)
+        self.fy = torch.zeros_like(self.model.fy)
 
         self.fx[self.model.monitor_index] = self.table.fx
         self.fy[self.model.monitor_index] = self.table.fy
 
-        self.sigma_fx, self.sigma_fy = None, None
+        self.sigma_fx = torch.zeros_like(self.model.sigma_fx)
+        self.sigma_fy = torch.zeros_like(self.model.sigma_fy)
 
-        if self.table.sigma_fx != None:
-            self.sigma_fx = torch.zeros(self.model.size, dtype=self.dtype, device=self.device)
-            self.sigma_fx[self.model.monitor_index] = self.table.sigma_fx
-
-        if self.table.sigma_fy != None:
-            self.sigma_fy = torch.zeros(self.model.size, dtype=self.dtype, device=self.device)
-            self.sigma_fy[self.model.monitor_index] = self.table.sigma_fy
+        self.sigma_fx[self.model.monitor_index] = self.table.sigma_fx
+        self.sigma_fy[self.model.monitor_index] = self.table.sigma_fy
 
         self.fx_correct, self.sigma_fx_correct = torch.clone(self.fx), torch.clone(self.sigma_fx)
         self.fy_correct, self.sigma_fy_correct = torch.clone(self.fy), torch.clone(self.sigma_fy)
 
-        self.monitor_phase_x, self.monitor_sigma_x = torch.zeros_like(self.table.fx), torch.zeros_like(self.table.fx)
-        self.monitor_phase_y, self.monitor_sigma_y = torch.zeros_like(self.table.fy), torch.zeros_like(self.table.fy)
-
         self.virtual_x, self.correct_x = {}, {}
         self.virtual_y, self.correct_y = {}, {}
 
-        self.action = {}
-        self.twiss_from_amplitude = {}
-        self.twiss_from_phase = {}
+        self.action, self.data_amplitude, self.data_phase = {}, {}, {}
+
+        self.ax, self.sigma_ax = torch.zeros_like(self.model.ax), torch.zeros_like(self.model.sigma_ax)
+        self.bx, self.sigma_bx = torch.zeros_like(self.model.bx), torch.zeros_like(self.model.sigma_bx)
+
+        self.ay, self.sigma_ay = torch.zeros_like(self.model.ay), torch.zeros_like(self.model.sigma_ay)
+        self.by, self.sigma_by = torch.zeros_like(self.model.by), torch.zeros_like(self.model.sigma_by)
 
 
-    def count(self, probe:int, other:int) -> int:
+    def get_action(self, *,
+                   data_threshold:dict={'use': True, 'factor': 5.0},
+                   data_dbscan:dict={'use': False, 'factor': 2.5},
+                   data_local_outlier_factor:dict={'use': False, 'contamination': 0.01},
+                   data_isolation_forest:dict={'use': False, 'contamination': 0.01}) -> None:
         """
-        Count number of locations between probed and other.
-
-        Note, both can be negative
+        Estimate actions at each monitor location with optional data cleaning and estimate action center and spread.
 
         Parameters
         ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of locations (int)
-
-        """
-        return len(range(probe, other + 1) if probe < other else range(other, probe + 1))
-
-
-    def monitor_count(self, probe:int, other:int) -> int:
-        """
-        Count number of monitor locations between probed and other.
-
-        Note, both can be negative
-
-        Parameters
-        ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of monitor locations (int)
-
-        """
-        index = range(probe, other + 1) if probe < other else range(other, probe + 1)
-        index = mod(torch.tensor(index, dtype=torch.int64), self.model.size).to(torch.int64)
-        count = torch.tensor(self.flag, dtype=torch.int64)[index]
-        return count.sum().item()
-
-
-    def virtual_count(self, probe:int, other:int) -> int:
-        """
-        Count number of virtual locations between probed and other.
-
-        Note, both can be negative
-
-        Parameters
-        ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of virual locations (int)
-
-        """
-        index = range(probe, other + 1) if probe < other else range(other, probe + 1)
-        index = mod(torch.tensor(index, dtype=torch.int64), self.model.size).to(torch.int64)
-        count = torch.tensor(self.flag, dtype=torch.int64)[index] - 1
-        return count.abs().sum().item()
-
-
-    def get_action(self, *, remove:bool=True, factor:float=3.0, fitted:bool=True) -> None:
-        """
-        Estimate actions with optional data cleaning and fitting.
-
-        Note, data cleaning is performed with DBSCAN
-        DBSCAN epsilon parameter is set as a multiple of individual actions std
-        Fit is performed using WLS using (cleaned) individual actions
-
-        Parameters
-        ----------
-        remove: bool
-            flag to clean data (computed individual actions) using DBSCAN
-        factor: float
-            DBSCAN epsilon multiplication factor
-        fitted: bool
-            flag to fit action
+        data_threshold: dict
+            parameters for threshold detector
+        data_dbscan: dict
+            parameters for dbscan detector
+        data_local_outlier_factor: dict
+            parameters for local outlier factor detector
+        data_isolation_forest: dict
+            parameters for isolation forest detector
 
         Returns
         -------
@@ -174,80 +237,66 @@ class Twiss():
         """
         self.action = {}
 
-        self.action['remove'] = remove
-        self.action['factor'] = factor
-        self.action['fitted'] = fitted
+        index = self.model.monitor_index
 
-        jx = self.table.ax**2/(2.0*self.model.bx[self.model.monitor_index])
-        jy = self.table.ay**2/(2.0*self.model.by[self.model.monitor_index])
+        jx = self.table.ax**2/(2.0*self.model.bx[index])
+        jy = self.table.ay**2/(2.0*self.model.by[index])
 
-        normal_x, normal_y = list(range(len(jx))), list(range(len(jy)))
+        sigma_jx = self.table.ax/self.model.bx[index]*self.table.sigma_ax
+        sigma_jy = self.table.ay/self.model.by[index]*self.table.sigma_ay
 
-        self.action['remove_x'], self.action['remove_y'] = [], []
-        self.action['normal_x'], self.action['normal_y'] = normal_x, normal_y
+        mask = torch.clone(self.flag[index])
+        mask = torch.stack([mask, mask]).to(torch.bool)
 
-        self.action['jx'], self.action['jy'] = jx, jy
+        data = standardize(torch.stack([jx, jy]), center_estimator=median, spread_estimator=biweight_midvariance)
 
-        if remove:
+        if data_threshold['use']:
+            factor = data_threshold['factor']
+            center = median(data)
+            spread = biweight_midvariance(data).sqrt()
+            min_value, max_value = center - factor*spread, center + factor*spread
+            mask *= threshold(data, min_value, max_value)
 
-            epsilon_x = factor*jx.cpu().numpy().std()
-            epsilon_y = factor*jy.cpu().numpy().std()
+        if data_dbscan['use']:
+            factor = data_dbscan['factor']
+            for case in range(1):
+                mask[case] *= dbscan(data[case].reshape(-1, 1), epsilon=factor)
 
-            cluster_x = DBSCAN(eps=epsilon_x).fit(jx.cpu().numpy().reshape(-1, 1))
-            cluster_y = DBSCAN(eps=epsilon_y).fit(jy.cpu().numpy().reshape(-1, 1))
+        if data_local_outlier_factor['use']:
+            for case in range(1):
+                mask[case] *= local_outlier_factor(data[case].reshape(-1, 1), contamination=data_local_outlier_factor['contamination'])
 
-            primary_x, primary_y = Counter(cluster_x.labels_), Counter(cluster_y.labels_)
-            primary_x, primary_y = max(primary_x, key=primary_x.get), max(primary_y, key=primary_y.get)
+        if data_isolation_forest['use']:
+            for case in range(1):
+                mask[case] *= isolation_forest(data[case].reshape(-1, 1), contamination=data_isolation_forest['contamination'])
 
-            remove_x = [index for index, label in zip(normal_x, cluster_x.labels_) if label != primary_x]
-            remove_y = [index for index, label in zip(normal_y, cluster_y.labels_) if label != primary_y]
+        mask_jx, mask_jy = mask
+        mask_jx, mask_jy = mask_jx/sigma_jx**2, mask_jy/sigma_jy**2
 
-            normal_x = [index for index in normal_x if index not in remove_x]
-            normal_y = [index for index in normal_y if index not in remove_y]
+        center_jx = weighted_mean(jx, weight=mask_jx)
+        spread_jx = weighted_variance(jx, weight=mask_jx, center=center_jx).sqrt()
 
-            self.action['remove_x'], self.action['remove_y'] = remove_x, remove_y
-            self.action['normal_x'], self.action['normal_y'] = normal_x, normal_y
+        center_jy = weighted_mean(jy, weight=mask_jy)
+        spread_jy = weighted_variance(jy, weight=mask_jy, center=center_jy).sqrt()
 
-        self.action['mean_jx'], self.action['std_jx'] = jx[normal_x].mean(), jx[normal_x].std()
-        self.action['mean_jy'], self.action['std_jy'] = jy[normal_y].mean(), jy[normal_y].std()
+        self.action['jx'], self.action['sigma_jx'] = jx, sigma_jx
+        self.action['center_jx'], self.action['spread_jx'] = center_jx, spread_jx
 
-        self.action['sigma_jx'] = None
-        self.action['sigma_jy'] = None
+        self.action['jy'], self.action['sigma_jy'] = jy, sigma_jy
+        self.action['center_jy'], self.action['spread_jy'] = center_jy, spread_jy
 
-        if self.table.sigma_ax != None:
-            self.action['sigma_jx'] = self.table.ax/self.model.bx[self.model.monitor_index]*self.table.sigma_ax
-
-        if self.table.sigma_ay != None:
-            self.action['sigma_jy'] = self.table.ay/self.model.by[self.model.monitor_index]*self.table.sigma_ay
-
-        self.action['value_jx'], self.action['error_jx'] = None, None
-        self.action['value_jy'], self.action['error_jy'] = None, None
-
-        if fitted:
-
-            x = numpy.ones(len(normal_x))
-            y = jx[normal_x].cpu().numpy()
-            w = x if self.action['sigma_jx'] is None else (1/self.action['sigma_jx'][normal_x]**2).cpu().numpy()
-            fit = WLS(y, x, w).fit()
-            self.action['value_jx'], self.action['error_jx'] = torch.tensor([fit.params.item(), fit.bse.item()], dtype=self.dtype, device=self.device)
-
-            x = numpy.ones(len(normal_y))
-            y = jy[normal_y].cpu().numpy()
-            w = x if self.action['sigma_jy'] is None else (1/self.action['sigma_jy'][normal_y]**2).cpu().numpy()
-            fit = WLS(y, x, w).fit()
-            self.action['value_jy'], self.action['error_jy'] = torch.tensor([fit.params.item(), fit.bse.item()], dtype=self.dtype, device=self.device)
+        self.action['mask'] = mask
 
 
-    def get_twiss_from_amplitude(self, use_fitted:bool=True) -> None:
+    def get_twiss_from_amplitude(self) -> None:
         """
         Estimate twiss from amplitude.
 
-        Note, action data should be precomputed
+        Note, action dictionary should be precomputed
 
         Parameters
         ----------
-        use_fitted: bool
-            flag to use fitted action
+        None
 
         Returns
         -------
@@ -257,47 +306,38 @@ class Twiss():
         if self.action == {}:
             raise Exception('error: action dictionary is empty')
 
-        self.twiss_from_amplitude = {}
+        self.data_amplitude = {}
 
-        ax, ay = self.table.ax, self.table.ay
+        ax, sigma_ax = self.table.ax, self.table.sigma_ax
+        ay, sigma_ay = self.table.ay, self.table.sigma_ay
 
-        if use_fitted:
-            if self.action['value_jx'] is None or self.action['value_jy'] is None:
-                raise Exception('error: action fit data not found')
-            jx, sigma_jx = self.action['value_jx'], self.action['error_jx']
-            jy, sigma_jy = self.action['value_jy'], self.action['error_jy']
-        else:
-            jx, sigma_jx = self.action['mean_jx'], self.action['std_jx']
-            jy, sigma_jy = self.action['mean_jy'], self.action['std_jy']
+        jx, sigma_jx = self.action['center_jx'], self.action['spread_jx']
+        jy, sigma_jy = self.action['center_jy'], self.action['spread_jy']
 
         bx, by = ax**2/(2.0*jx), ay**2/(2.0*jy)
 
-        sigma_ax, sigma_ay = self.table.sigma_ax, self.table.sigma_ay
+        sigma_bx = torch.sqrt(ax**2/jx**2*sigma_ax**2 + 0.25*ax**4/jx**4*sigma_jx**2)
+        sigma_by = torch.sqrt(ay**2/jy**2*sigma_ay**2 + 0.25*ay**4/jy**4*sigma_jy**2)
 
-        sigma_bx = torch.sqrt(ax**2/jx**2*sigma_ax**2 + 0.25*ax**4/jx**4*sigma_jx**2) if sigma_ax != None else None
-        sigma_by = torch.sqrt(ay**2/jy**2*sigma_ay**2 + 0.25*ay**4/jy**4*sigma_jy**2) if sigma_ay != None else None
+        index = self.model.monitor_index
+        bx_model, by_model = self.model.bx[index], self.model.by[index]
 
-        self.twiss_from_amplitude['bx'], self.twiss_from_amplitude['sigma_bx'] = bx, sigma_bx
-        self.twiss_from_amplitude['by'], self.twiss_from_amplitude['sigma_by'] = by, sigma_by
-
-        bx_model, by_model = self.model.bx[self.model.monitor_index], self.model.by[self.model.monitor_index]
-
-        self.twiss_from_amplitude['error_bx'] = 100.0*(bx_model - bx)/bx_model
-        self.twiss_from_amplitude['error_by'] = 100.0*(by_model - by)/by_model
+        self.data_amplitude['bx'], self.data_amplitude['sigma_bx'] = bx, sigma_bx
+        self.data_amplitude['by'], self.data_amplitude['sigma_by'] = by, sigma_by
 
 
-    def phase_virtual(self, *, limit:int=None, fitted:bool=True, **kwargs) -> None:
+    def phase_virtual(self, limit:int=None, exclude:list=None, **kwargs) -> None:
         """
         Estimate x & y phase for virtual locations.
 
         Parameters
         ----------
         limit: int
-            range limit
-        fitted: bool
-            flag to fit data
+            range limit to use
+        exclude: list
+            list of virtual location to exclude
         **kwargs:
-            passed to phase_virtual Decomposition method
+            passed to Decomposition.phase_virtual
 
         Returns
         -------
@@ -306,9 +346,9 @@ class Twiss():
         """
         self.virtual_x, self.virtual_y = {}, {}
 
-        limit = limit if limit else self.model.size - 1
-
-        index = self.model.virtual_index
+        limit = self.limit if limit is None else limit
+        exclude = [] if exclude is None else exclude
+        index = [index for index in self.model.virtual_index if index not in exclude]
 
         nux, sigma_nux = self.table.nux, self.table.sigma_nux
         NUX, sigma_NUX = self.model.nux, self.model.sigma_nux
@@ -323,40 +363,37 @@ class Twiss():
         FY, sigma_FY = self.model.fy, self.model.sigma_fy
 
         def auxiliary_x(probe):
-            return self.decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
-                                                    sigma_q=sigma_nux, sigma_Q=sigma_NUX,
-                                                    sigma_phase=sigma_fx, sigma_PHASE=sigma_FX,
-                                                    fit=fitted, **kwargs)
+            return Decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
+                                                    sigma_frequency=sigma_nux, sigma_frequency_model=sigma_NUX,
+                                                    sigma_phase=sigma_fx, sigma_phase_model=sigma_FX,
+                                                    **kwargs)
 
         def auxiliary_y(probe):
-            return self.decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
-                                                    sigma_q=sigma_nuy, sigma_Q=sigma_NUY,
-                                                    sigma_phase=sigma_fy, sigma_PHASE=sigma_FY,
-                                                    fit=fitted, **kwargs)
+            return Decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
+                                                    sigma_frequency=sigma_nuy, sigma_frequency_model=sigma_NUY,
+                                                    sigma_phase=sigma_fy, sigma_phase_model=sigma_FY,
+                                                    **kwargs)
 
-        data_x = Parallel(n_jobs=self.job)(delayed(auxiliary_x)(probe) for probe in index)
-        data_y = Parallel(n_jobs=self.job)(delayed(auxiliary_y)(probe) for probe in index)
+        data_x = [auxiliary_x(probe) for probe in index]
+        data_y = [auxiliary_y(probe) for probe in index]
 
         for count, probe in enumerate(index):
             self.virtual_x[probe], self.virtual_y[probe] = data_x[count], data_y[count]
-            if fitted:
-                self.fx[probe], self.sigma_fx[probe] = self.virtual_x[probe].get('model')
-                self.fy[probe], self.sigma_fy[probe] = self.virtual_y[probe].get('model')
-            else:
-                self.fx[probe], self.sigma_fx[probe] = self.virtual_x[probe].get('phase').mean(), self.virtual_x[probe].get('phase').std()
-                self.fy[probe], self.sigma_fy[probe] = self.virtual_y[probe].get('phase').mean(), self.virtual_y[probe].get('phase').std()
+            self.fx[probe], self.sigma_fx[probe] = self.virtual_x[probe].get('model')
+            self.fy[probe], self.sigma_fy[probe] = self.virtual_y[probe].get('model')
 
 
-    def phase_correct(self, *, limit:int=None, fitted:bool=True, **kwargs) -> None:
+    def phase_correct(self, *, limit:int=None, **kwargs) -> None:
         """
         Correct x & y phase for monitor locations.
+
+        Note, this introduce strong bias towards model, do not use large range limit
+        Note, phase at the location is not used
 
         Parameters
         ----------
         limit: int
             range limit
-        fitted: bool
-            flag to fit data
         **kwargs:
             passed to phase_virtual Decomposition method
 
@@ -367,8 +404,7 @@ class Twiss():
         """
         self.correct_x, self.correct_y = {}, {}
 
-        limit = limit if limit else self.model.size - 1
-
+        limit = self.limit if limit is None else limit
         index = self.model.monitor_index
 
         self.fx_correct, self.sigma_fx_correct = torch.clone(self.fx), torch.clone(self.sigma_fx)
@@ -387,93 +423,24 @@ class Twiss():
         FY, sigma_FY = self.model.fy, self.model.sigma_fy
 
         def auxiliary_x(probe):
-            table = self.decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
-                                                    sigma_q=sigma_nux, sigma_Q=sigma_NUX,
-                                                    sigma_phase=sigma_fx, sigma_PHASE=sigma_FX,
-                                                    fit=None, **kwargs)
-            if fitted:
-                phase = table['phase'].cpu().numpy()
-                error = table['error'].cpu().numpy()
-                phase = numpy.append(self.fx[probe].item(), phase)
-                error = numpy.append(self.sigma_fx[probe].item(), error)
-                x = numpy.ones((len(phase), 1))
-                y = phase
-                s = error
-                w = 1/s**2
-                fit = WLS(y, x, w).fit()
-                value, error = [fit.params.item(), fit.bse.item()]
-            else:
-                value, error = table.get('phase').mean(), table.get('phase').std()
-
-            return [table, torch.tensor([value, error])]
+            return Decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
+                                                    sigma_frequency=sigma_nux, sigma_frequency_model=sigma_NUX,
+                                                    sigma_phase=sigma_fx, sigma_phase_model=sigma_FX,
+                                                    **kwargs)
 
         def auxiliary_y(probe):
-            table = self.decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
-                                                    sigma_q=sigma_nuy, sigma_Q=sigma_NUY,
-                                                    sigma_phase=sigma_fy, sigma_PHASE=sigma_FY,
-                                                    fit=None, **kwargs)
-            if fitted:
-                phase = table['phase'].cpu().numpy()
-                error = table['error'].cpu().numpy()
-                phase = numpy.append(self.fy[probe].item(), phase)
-                error = numpy.append(self.sigma_fy[probe].item(), error)
-                x = numpy.ones((len(phase), 1))
-                y = phase
-                s = error
-                w = 1/s**2
-                fit = WLS(y, x, w).fit()
-                value, error = [fit.params.item(), fit.bse.item()]
-            else:
-                value, error = table.get('phase').mean(), table.get('phase').std()
+            return Decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
+                                                    sigma_frequency=sigma_nuy, sigma_frequency_model=sigma_NUY,
+                                                    sigma_phase=sigma_fy, sigma_phase_model=sigma_FY,
+                                                    **kwargs)
 
-            return [table, torch.tensor([value, error])]
-
-        data_x = Parallel(n_jobs=self.job)(delayed(auxiliary_x)(probe) for probe in index)
-        data_y = Parallel(n_jobs=self.job)(delayed(auxiliary_y)(probe) for probe in index)
+        data_x = [auxiliary_x(probe) for probe in index]
+        data_y = [auxiliary_y(probe) for probe in index]
 
         for count, probe in enumerate(index):
-            self.correct_x[probe], self.correct_x[probe]['model'] = data_x[count]
-            self.correct_y[probe], self.correct_y[probe]['model'] = data_y[count]
-            self.fx_correct[probe], self.sigma_fx_correct[probe] = self.correct_x[probe]['model']
-            self.fy_correct[probe], self.sigma_fy_correct[probe] = self.correct_y[probe]['model']
-
-
-    def phase_adjacent(self, use_correct:bool=False, use_correct_sigma:bool=False) -> None:
-        """
-        Compute adjacent phase advance between monitors.
-
-        Note, phase advance is computed for each monitor to the next monitor
-
-        Parameters
-        ----------
-        use_correct: bool
-            flag to use corrected phases
-        use_correct_sigma: bool
-            flag to use corrected phase errors
-
-        Returns
-        -------
-        None, set self.monitor_phase_x, self.monitor_phase_y, monitor_sigma_x and monitor_sigma_y
-
-        """
-
-        fx = self.fx_correct if use_correct else self.fx
-        fy = self.fy_correct if use_correct else self.fy
-
-        sigma_fx = self.sigma_fx_correct if use_correct_sigma else self.sigma_fx
-        sigma_fy = self.sigma_fy_correct if use_correct_sigma else self.sigma_fy
-
-        for index, probe in enumerate(self.model.monitor_index):
-
-            other = self.model.monitor_index.index(probe) + 1
-            count = 1 if other >= self.model.monitor_count else 0
-            other = self.model.monitor_index[int(mod(other, self.model.monitor_count))] + count*self.model.size
-
-            self.monitor_phase_x[index], self.monitor_sigma_x[index] = self.decomposition.phase_advance(probe, other, self.table.nux, fx, False, self.table.sigma_nux, sigma_fx)
-            self.monitor_phase_y[index], self.monitor_sigma_y[index] = self.decomposition.phase_advance(probe, other, self.table.nuy, fy, False, self.table.sigma_nuy, sigma_fx)
-
-        self.monitor_phase_x = mod(self.monitor_phase_x, 2.0*numpy.pi)
-        self.monitor_phase_y = mod(self.monitor_phase_y, 2.0*numpy.pi)
+            self.correct_x[probe], self.correct_y[probe] = data_x[count], data_y[count]
+            self.fx_correct[probe], self.sigma_fx_correct[probe] = self.correct_x[probe].get('model')
+            self.fy_correct[probe], self.sigma_fy_correct[probe] = self.correct_y[probe].get('model')
 
 
     @staticmethod
@@ -481,56 +448,60 @@ class Twiss():
                    f_ij:torch.Tensor, f_m_ij:torch.Tensor,
                    f_ik:torch.Tensor, f_m_ik:torch.Tensor,
                    *,
-                   error:bool=True,
+                   error:bool=True, model:bool=True,
                    sigma_a_m:torch.Tensor=0.0,
                    sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0,
                    sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple:
         """
-        Estimate twiss alfa at location (i) from given triplet (i, j, k) phase data.
+        Estimate twiss alfa at index (i) from given triplet (i, j, k) phase data.
 
-        Note, probed location (i), other locations (j) and (k)
-        Phase advance is assumed to be from (i) to other locations, should be negative if (i) is ahead of the other location (timewise)
+        Note, probed index (i), other indices (j) and (k), pairs (i, j) and (i, k)
+        Phase advance is assumed to be from (i) to other indices, should be negative if (i) is ahead of the other index (timewise)
 
         Parameters
         ----------
         a_m: torch.Tensor
             model value
         f_ij: torch.Tensor
-            phase advance between probed and 1st location
+            phase advance between probed and the 1st index (j)
         f_m_ij: torch.Tensor
-            model phase advance between probed and 1st location
+            model phase advance between probed and the 1st index (j)
         f_ik: torch.Tensor
-            phase advance between probed and 2nd location
+            phase advance between probed and the 2nd index (k)
         f_m_ik: torch.Tensor
-            model phase advance between probed and 2nd location
+            model phase advance between probed and 2nd index (k)
         error: bool
             flag to compute error
+        model: bool
+            flag to include model error
         sigma_a_m: torch.Tensor
             model value error
         sigma_f_ij: torch.Tensor
-            phase advance error between probed and 1st location
+            phase advance error between probed and the 1st index (j)
         sigma_f_m_ij: torch.Tensor
-            model phase advance error between probed and 1st location
+            model phase advance error between probed and the 1st index (j)
         sigma_f_ik: torch.Tensor
-            phase advance error between probed and 2nd location
+            phase advance error between probed and the 2nd index (k)
         sigma_f_m_ik: torch.Tensor
-            model phase advance error between probed and 2nd location
+            model phase advance error between probed and the 2nd index (k)
 
         Returns
         -------
-        (a, None) or (a, sigma_a)
+        (a, 0) or (a, sigma_a)
 
         """
         a = a_m*(1.0/torch.tan(f_ij)-1.0/torch.tan(f_ik))/(1.0/torch.tan(f_m_ij)-1.0/torch.tan(f_m_ik))-1.0/torch.tan(f_ij)*1.0/torch.sin(f_m_ij - f_m_ik)*torch.cos(f_m_ik)*torch.sin(f_m_ij) + 1.0/torch.tan(f_ik)*1.0/torch.sin(f_m_ij - f_m_ik)*torch.cos(f_m_ij)*torch.sin(f_m_ik)
 
         if not error:
-            return (a, None)
+            return (a, torch.zeros_like(a))
 
-        sigma_a  = sigma_a_m**2*((1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2)
-        sigma_a += sigma_f_ij**2*(1.0/torch.sin(f_ij))**4*(1.0/torch.tan(f_m_ik) + a_m)**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
+        sigma_a  = sigma_f_ij**2*(1.0/torch.sin(f_ij))**4*(1.0/torch.tan(f_m_ik) + a_m)**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
         sigma_a += sigma_f_ik**2*(1.0/torch.sin(f_ik))**4*(1.0/torch.tan(f_m_ij) + a_m)**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
-        sigma_a += sigma_f_m_ik**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij - f_m_ik))**4*torch.sin(f_m_ij)**2*(torch.cos(f_m_ij) + a_m*torch.sin(f_m_ij))**2
-        sigma_a += sigma_f_m_ij**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij - f_m_ik))**4*torch.sin(f_m_ik)**2*(torch.cos(f_m_ik) + a_m*torch.sin(f_m_ik))**2
+
+        if model:
+            sigma_a += sigma_a_m**2*((1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2)
+            sigma_a += sigma_f_m_ik**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij - f_m_ik))**4*torch.sin(f_m_ij)**2*(torch.cos(f_m_ij) + a_m*torch.sin(f_m_ij))**2
+            sigma_a += sigma_f_m_ij**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij - f_m_ik))**4*torch.sin(f_m_ik)**2*(torch.cos(f_m_ik) + a_m*torch.sin(f_m_ik))**2
 
         sigma_a.sqrt_()
         return (a, sigma_a)
@@ -541,63 +512,66 @@ class Twiss():
                    f_ij:torch.Tensor, f_m_ij:torch.Tensor,
                    f_ik:torch.Tensor, f_m_ik:torch.Tensor,
                    *,
-                   error:bool=True,
+                   error:bool=True, model:bool=True,
                    sigma_b_m:torch.Tensor=0.0,
                    sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0,
                    sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple:
         """
-        Estimate twiss beta at location (i) from given triplet (i, j, k) phase data.
+        Estimate twiss beta at index (i) from given triplet (i, j, k) phase data.
 
-        Note, probed location (i), other locations (j) and (k)
-        Phase advance is assumed to be from (i) to other location, should be negative if (i) is ahead of the other location (timewise)
+        Note, probed index (i), other indices (j) and (k), pairs (i, j) and (i, k)
+        Phase advance is assumed to be from (i) to other indices, should be negative if (i) is ahead of the other index (timewise)
 
         Parameters
         ----------
         b_m: torch.Tensor
             model value
         f_ij: torch.Tensor
-            phase advance between probed and 1st location
+            phase advance between probed and the 1st index (j)
         f_m_ij: torch.Tensor
-            model phase advance between probed and 1st location
+            model phase advance between probed and the 1st index (j)
         f_ik: torch.Tensor
-            phase advance between probed and 2nd location
+            phase advance between probed and the 2nd index (k)
         f_m_ik: torch.Tensor
-            model phase advance between probed and 2nd location
+            model phase advance between probed and 2nd index (k)
         error: bool
             flag to compute error
+        model: bool
+            flag to include model error
         sigma_b_m: torch.Tensor
             model value error
         sigma_f_ij: torch.Tensor
-            phase advance error between probed and 1st location
+            phase advance error between probed and the 1st index (j)
         sigma_f_m_ij: torch.Tensor
-            model phase advance error between probed and 1st location
+            model phase advance error between probed and the 1st index (j)
         sigma_f_ik: torch.Tensor
-            phase advance error between probed and 2nd location
+            phase advance error between probed and the 2nd index (k)
         sigma_f_m_ik: torch.Tensor
-            model phase advance error between probed and 2nd location
+            model phase advance error between probed and the 2nd index (k)
 
         Returns
         -------
-        (b, None) or (b, sigma_b)
+        (b, 0) or (b, sigma_b)
 
         """
         b = b_m*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))
 
         if not error:
-            return (b, None)
+            return (b, torch.zeros_like(b))
 
-        sigma_b  = sigma_b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
-        sigma_b += sigma_f_ij**2*b_m**2*(1.0/torch.sin(f_ij))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
+        sigma_b  = sigma_f_ij**2*b_m**2*(1.0/torch.sin(f_ij))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
         sigma_b += sigma_f_ik**2*b_m**2*(1.0/torch.sin(f_ik))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
-        sigma_b += sigma_f_m_ij**2*b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**4
-        sigma_b += sigma_f_m_ik**2*b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ik))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**4
+
+        if model:
+            sigma_b += sigma_b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**2
+            sigma_b += sigma_f_m_ij**2*b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ij))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**4
+            sigma_b += sigma_f_m_ik**2*b_m**2*(1.0/torch.tan(f_ij) - 1.0/torch.tan(f_ik))**2*(1.0/torch.sin(f_m_ik))**4/(1.0/torch.tan(f_m_ij) - 1.0/torch.tan(f_m_ik))**4
 
         sigma_b.sqrt_()
         return (b, sigma_b)
 
 
-    def get_twiss_from_phase(self, limit:int=8,
-                             use_virtual:bool=False, error:bool=True,
+    def get_twiss_from_phase(self, *, virtual:bool=True, error:bool=True, model:bool=False,
                              use_correct:bool=False, use_correct_sigma:bool=False) -> None:
         """
         Estimate twiss from phase data.
@@ -607,23 +581,21 @@ class Twiss():
 
         Parameters
         ----------
+        error: bool
+            flag to compute twiss errors
+        model: bool
+            flag to include model error
         use_correct: bool
             flag to use corrected phases
         use_correct_sigma: bool
             flag to use corrected phase errors
-        limit: int
-            range limit
-        use_virtual: bool
-            flag to use virtual locations in combinations
-        error: bool
-            flag to compute errors
 
         Returns
         -------
         None, update self.twiss_from_phase dictionary
 
         """
-        self.twiss_from_phase = {}
+        self.data_phase = {}
 
         fx = self.fx_correct if use_correct else self.fx
         fy = self.fy_correct if use_correct else self.fy
@@ -631,318 +603,425 @@ class Twiss():
         sigma_fx = self.sigma_fx_correct if use_correct_sigma else self.sigma_fx
         sigma_fy = self.sigma_fy_correct if use_correct_sigma else self.sigma_fy
 
-        count, table = [], []
+        ax_m, bx_m = self.model.ax, self.model.bx
+        ay_m, by_m = self.model.ay, self.model.by
 
-        for distance, triplet in generate_pairs(limit, len([1, 1])):
-            count.append(distance)
-            table.append(triplet)
+        index = self.pair.swapaxes(0, -1)
 
-        count = numpy.array(count)
-        table = numpy.array(table)
+        value, sigma = Decomposition.phase_advance(*index, self.table.nux, fx, error=error, model=False, sigma_frequency=self.table.sigma_nux, sigma_phase=sigma_fx)
+        fx_ij, fx_ik = value.swapaxes(0, 1)
+        sx_ij, sx_ik = sigma.swapaxes(0, 1)
 
-        def auxiliary(probe):
+        value, sigma = Decomposition.phase_advance(*index, self.table.nuy, fy, error=error, model=False, sigma_frequency=self.table.sigma_nuy, sigma_phase=sigma_fy)
+        fy_ij, fy_ik = value.swapaxes(0, 1)
+        sy_ij, sy_ik = sigma.swapaxes(0, 1)
 
-            twiss = {}
+        value, sigma = Decomposition.phase_advance(*index, self.model.nux, self.model.fx, error=error*model, model=True, sigma_frequency=self.model.sigma_nux, sigma_phase=self.model.sigma_fx)
+        fx_m_ij, fx_m_ik = value.swapaxes(0, 1)
+        sx_m_ij, sx_m_ik = sigma.swapaxes(0, 1)
 
-            ax_m, bx_m = self.model.ax[probe], self.model.bx[probe]
-            ay_m, by_m = self.model.ay[probe], self.model.by[probe]
+        value, sigma = Decomposition.phase_advance(*index, self.model.nuy, self.model.fy, error=error*model, model=True, sigma_frequency=self.model.sigma_nuy, sigma_phase=self.model.sigma_fy)
+        fy_m_ij, fy_m_ik = value.swapaxes(0, 1)
+        sy_m_ij, sy_m_ik = sigma.swapaxes(0, 1)
 
-            other, limit = [], []
+        ax, sigma_ax = self.phase_alfa(ax_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, model=model, sigma_a_m=self.model.sigma_ax, sigma_f_ij=sx_ij, sigma_f_ik=sx_ik, sigma_f_m_ij=sx_m_ij, sigma_f_m_ik=sx_m_ik)
+        bx, sigma_bx = self.phase_beta(bx_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, model=model, sigma_b_m=self.model.sigma_bx, sigma_f_ij=sx_ij, sigma_f_ik=sx_ik, sigma_f_m_ij=sx_m_ij, sigma_f_m_ik=sx_m_ik)
 
-            fx_ij, fx_ik, fx_m_ij, fx_m_ik = [], [], [], []
-            fy_ij, fy_ik, fy_m_ij, fy_m_ik = [], [], [], []
+        ay, sigma_ay = self.phase_alfa(ay_m, fy_ij, fy_m_ij, fy_ik, fy_m_ik, error=error, model=model, sigma_a_m=self.model.sigma_ay, sigma_f_ij=sy_ij, sigma_f_ik=sy_ik, sigma_f_m_ij=sy_m_ij, sigma_f_m_ik=sy_m_ik)
+        by, sigma_by = self.phase_beta(by_m, fy_ij, fy_m_ij, fy_ik, fy_m_ik, error=error, model=model, sigma_b_m=self.model.sigma_by, sigma_f_ij=sy_ij, sigma_f_ik=sy_ik, sigma_f_m_ij=sy_m_ij, sigma_f_m_ik=sy_m_ik)
 
-            for distance, triplet in zip(count, table + probe):
+        self.data_phase['fx_ij'], self.data_phase['sigma_fx_ij'], self.data_phase['fx_m_ij'], self.data_phase['sigma_fx_m_ij'] = fx_ij.T, sx_ij.T, fx_m_ij.T, sx_m_ij.T
+        self.data_phase['fx_ik'], self.data_phase['sigma_fx_ik'], self.data_phase['fx_m_ik'], self.data_phase['sigma_fx_m_ik'] = fx_ik.T, sx_ik.T, fx_m_ik.T, sx_m_ik.T
 
-                ij, ik = triplet
+        self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij'] = fy_ij.T, sy_ij.T, fy_ij.T, sy_m_ij.T
+        self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik'] = fy_ik.T, sy_ik.T, fy_ik.T, sy_m_ik.T
 
-                i, j = ij
-                i, k = ik
-
-                if self.model.is_same(i, j) or self.model.is_same(i, k) or self.model.is_same(j, k):
-                    continue
-
-                if not use_virtual:
-                    if not self.model.is_monitor(j) or not self.model.is_monitor(k):
-                        continue
-
-                limit.append(distance)
-                other.append([j, k])
-
-                fx_ij.append(self.decomposition.phase_advance(*ij, self.table.nux, fx, model=False, sigma_frequency=self.table.sigma_nux, sigma_phase=sigma_fx))
-                fx_ik.append(self.decomposition.phase_advance(*ik, self.table.nux, fx, model=False, sigma_frequency=self.table.sigma_nux, sigma_phase=sigma_fx))
-                fy_ij.append(self.decomposition.phase_advance(*ij, self.table.nuy, fy, model=False, sigma_frequency=self.table.sigma_nuy, sigma_phase=sigma_fy))
-                fy_ik.append(self.decomposition.phase_advance(*ik, self.table.nuy, fy, model=False, sigma_frequency=self.table.sigma_nuy, sigma_phase=sigma_fy))
-
-                fx_m_ij.append(self.decomposition.phase_advance(*ij, self.model.nux, self.model.fx, model=True, sigma_frequency=self.model.sigma_nux, sigma_phase=self.model.sigma_fx))
-                fx_m_ik.append(self.decomposition.phase_advance(*ik, self.model.nux, self.model.fx, model=True, sigma_frequency=self.model.sigma_nux, sigma_phase=self.model.sigma_fx))
-                fy_m_ij.append(self.decomposition.phase_advance(*ij, self.model.nuy, self.model.fy, model=True, sigma_frequency=self.model.sigma_nuy, sigma_phase=self.model.sigma_fy))
-                fy_m_ik.append(self.decomposition.phase_advance(*ik, self.model.nuy, self.model.fy, model=True, sigma_frequency=self.model.sigma_nuy, sigma_phase=self.model.sigma_fy))
-
-            twiss['limit'], twiss['other'] = limit, other
-
-            twiss['ax_m'], twiss['bx_m'] = ax_m, bx_m
-            twiss['ay_m'], twiss['by_m'] = ay_m, by_m
-
-            if len(limit) > 0:
-
-                fx_ij, sigma_fx_ij = torch.stack(fx_ij).T
-                fx_ik, sigma_fx_ik = torch.stack(fx_ik).T
-
-                fy_ij, sigma_fy_ij = torch.stack(fy_ij).T
-                fy_ik, sigma_fy_ik = torch.stack(fy_ik).T
-
-                fx_m_ij, sigma_fx_m_ij = torch.stack(fx_m_ij).T
-                fx_m_ik, sigma_fx_m_ik = torch.stack(fx_m_ik).T
-
-                fy_m_ij, sigma_fy_m_ij = torch.stack(fy_m_ij).T
-                fy_m_ik, sigma_fy_m_ik = torch.stack(fy_m_ik).T
-
-                ax, sigma_ax = self.phase_alfa(ax_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, sigma_a_m=0.0, sigma_f_ij=sigma_fx_ij, sigma_f_ik=sigma_fx_ik, sigma_f_m_ij=sigma_fx_m_ij, sigma_f_m_ik=sigma_fx_m_ik)
-                bx, sigma_bx = self.phase_beta(bx_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, sigma_b_m=0.0, sigma_f_ij=sigma_fx_ij, sigma_f_ik=sigma_fx_ik, sigma_f_m_ij=sigma_fx_m_ij, sigma_f_m_ik=sigma_fx_m_ik)
-
-                ay, sigma_ay = self.phase_alfa(ay_m, fy_ij, fy_m_ij, fy_ik, fy_m_ik, error=error, sigma_a_m=0.0, sigma_f_ij=sigma_fy_ij, sigma_f_ik=sigma_fy_ik, sigma_f_m_ij=sigma_fy_m_ij, sigma_f_m_ik=sigma_fy_m_ik)
-                by, sigma_by = self.phase_beta(by_m, fy_ij, fy_m_ij, fy_ik, fy_m_ik, error=error, sigma_b_m=0.0, sigma_f_ij=sigma_fy_ij, sigma_f_ik=sigma_fy_ik, sigma_f_m_ij=sigma_fy_m_ij, sigma_f_m_ik=sigma_fy_m_ik)
-
-                twiss['fx_ij'], twiss['sigma_fx_ij'], twiss['fx_m_ij'], twiss['sigma_fx_m_ij'] = fx_ij, sigma_fx_ij, fx_m_ij, sigma_fx_m_ij
-                twiss['fx_ik'], twiss['sigma_fx_ik'], twiss['fx_m_ik'], twiss['sigma_fx_m_ik'] = fx_ik, sigma_fx_ik, fx_m_ik, sigma_fx_m_ik
-
-                twiss['fy_ij'], twiss['sigma_fy_ij'], twiss['fy_m_ij'], twiss['sigma_fy_m_ij'] = fy_ij, sigma_fy_ij, fy_ij, sigma_fy_m_ij
-                twiss['fy_ik'], twiss['sigma_fy_ik'], twiss['fy_m_ik'], twiss['sigma_fy_m_ik'] = fy_ik, sigma_fy_ik, fy_ik, sigma_fy_m_ik
-
-                twiss['ax'], twiss['sigma_ax'], twiss['bx'], twiss['sigma_bx'] = ax, sigma_ax, bx, sigma_bx
-                twiss['ay'], twiss['sigma_ay'], twiss['by'], twiss['sigma_by'] = ay, sigma_ay, by, sigma_by
-
-            return twiss
-
-        data = Parallel(n_jobs=self.job)(delayed(auxiliary)(probe) for probe in range(self.model.size))
-
-        for index, probe in enumerate(range(self.model.size)):
-            self.twiss_from_phase[probe] = data[index]
+        self.data_phase['ax'], self.data_phase['sigma_ax'], self.data_phase['bx'], self.data_phase['sigma_bx'] = ax.T, sigma_ax.T, bx.T, sigma_bx.T
+        self.data_phase['ay'], self.data_phase['sigma_ay'], self.data_phase['by'], self.data_phase['sigma_by'] = ay.T, sigma_ay.T, by.T, sigma_by.T
 
 
-    def filter_twiss(self, probe:int, plane:str='x',
-                     limit:dict={'use': True, 'limit': 16, 'flag': True},
-                     flag:dict={'use': True},
-                     phase:dict={'use': True, 'threshold': 5.00},
-                     value:dict={'use': True, 'threshold': 0.50},
-                     error:dict={'use': True, 'threshold': 0.25},
-                     quantile:dict={'use': True, 'factor': 5.00},
-                     dbscan:dict={'use': True, 'factor': 3.00},
-                     lof:dict={'use': True, 'count': 25, 'contamination': 0.05},
-                     iforest:dict={'use': True, 'count': 25, 'contamination': 0.05}) -> dict:
+    def filter_twiss(self, plane:str = 'x', *,
+                     phase:dict={'use': True, 'threshold': 10.00},
+                     model:dict={'use': True, 'threshold': 00.50},
+                     value:dict={'use': True, 'threshold': 00.50},
+                     sigma:dict={'use': True, 'threshold': 00.25},
+                     limit:dict={'use': True, 'threshold': 05.00}) -> dict:
         """
-        Filter twiss data for given location, data plane and cleaning methods.
-
-        Cleaning is performed for a single location, since depending on location, different cleaning settings apply
-        Note, cleaning is nested
-        Note, if some method generates empty result, it is ignored
+        Filter twiss for given data plane and cleaning options.
 
         Parameters
         ----------
-        probe: int
-            probe location
         plane: str
             data plane ('x' or 'y')
-        limit: dict
-            clean based on number of (monitor) location in a combination
-            used if 'use' is True, maximum number of locations is set by 'limit', if 'flag' is True, only monitor locations are used
-        flag: dict
-            clean based on location flag
-            used if 'use' is True, remove combinations with zero flag locations, probed location can have zero flag
         phase: dict
-            clean based on phase data
-            used if 'use' is True, remove combinations with cot of phase advance above threshold value
-        value: dict
-            clean based on model proximity
+            clean based on advance phase data
+            used if 'use' is True, remove combinations with absolute value of phase advance cotangents above threshold value
+        model: dict
+            clean based on phase advance proximity to model
             used if 'use' is True, remove combinations with (x - x_model)/x_model > threshold value
-        error: dict
-            clean based on estimated error
+        value: dict
+            clean based on estimated twiss beta error value
             used if 'use' is True, remove combinations with x/sigma_x < 1/threshold value
-        quantile: dict
-            clean outliers outside scaled interquantile region
+        sigma: dict
+            clean based on estimated phase advance error value
+            used if 'use' is True, remove combinations with x/sigma_x < 1/threshold value
+        limit: dict
+            clean outliers outside scaled interval
             used if 'use' is True
-        dbscan: dict
-            clean outliers with DBSCAN
-            used if 'use' is True, eplilon = factor*std
-        lof: dict
-            clean outliers with LOF
-            used if 'use' is True, always removes some data
-        iforest:
-            clean outliers with Isolation Forest
-            used if 'use' is True, always removes some data
 
         Returns
         -------
-        dictionary with normal indices
+        mask (torch.Tensor)
 
         """
-        table = {}
+        mask = torch.ones((self.model.size, self.limit*(2*self.limit - 1)), device=self.device).to(torch.bool)
 
-        other = torch.tensor(self.twiss_from_phase[probe]['other'], dtype=torch.int64)
+        if plane == 'x':
+            a_m, b_m = self.model.ax.reshape(-1, 1), self.model.bx.reshape(-1, 1)
+            a, b, sigma_a, sigma_b = self.data_phase['ax'], self.data_phase['bx'], self.data_phase['sigma_ax'], self.data_phase['sigma_bx']
+            f_ij, sigma_f_ij, f_m_ij, sigma_f_m_ij = self.data_phase['fx_ij'], self.data_phase['sigma_fx_ij'], self.data_phase['fx_m_ij'], self.data_phase['sigma_fx_m_ij']
+            f_ik, sigma_f_ik, f_m_ik, sigma_f_m_ik = self.data_phase['fx_ik'], self.data_phase['sigma_fx_ik'], self.data_phase['fx_m_ik'], self.data_phase['sigma_fx_m_ik']
 
-        index = torch.tensor([*range(len(other))], dtype=torch.int64)
-
-        if limit['use']:
-            if limit['flag']:
-                mask = [self.monitor_count(probe, i) < limit['limit'] and self.monitor_count(probe, j) < limit['limit'] for i, j in other]
-            else:
-                mask = [self.count(probe, i) < limit['limit'] and self.count(probe, j) < limit['limit'] for i, j in other]
-            table['limit'] = index[mask]
-            if len(table['limit']) != 0:
-                index = table['limit']
-
-        if flag['use']:
-            mask = [all(map(self.model.is_monitor, pair)) for pair in other[index]]
-            table['flag'] = index[mask]
-            if len(table['flag']) != 0:
-                index = table['flag']
+        if plane == 'y':
+            a_m, b_m = self.model.ay.reshape(-1, 1), self.model.by.reshape(-1, 1)
+            a, b, sigma_a, sigma_b = self.data_phase['ay'], self.data_phase['by'], self.data_phase['sigma_ay'], self.data_phase['sigma_by']
+            f_ij, sigma_f_ij, f_m_ij, sigma_f_m_ij = self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij']
+            f_ik, sigma_f_ik, f_m_ik, sigma_f_m_ik = self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik']
 
         if phase['use']:
-            f_ij, f_m_ij = self.twiss_from_phase[probe][f'f{plane}_ij'][index], self.twiss_from_phase[probe][f'f{plane}_m_ij'][index]
-            f_ik, f_m_ik = self.twiss_from_phase[probe][f'f{plane}_ik'][index], self.twiss_from_phase[probe][f'f{plane}_m_ik'][index]
             cot_ij, cot_m_ij = torch.abs(1.0/torch.tan(f_ij)), torch.abs(1.0/torch.tan(f_m_ij))
             cot_ik, cot_m_ik = torch.abs(1.0/torch.tan(f_ij)), torch.abs(1.0/torch.tan(f_m_ij))
-            mask  = phase['threshold'] > cot_ij
+            mask *= phase['threshold'] > cot_ij
             mask *= phase['threshold'] > cot_m_ij
             mask *= phase['threshold'] > cot_ik
             mask *= phase['threshold'] > cot_m_ik
-            table['phase'] = index[mask]
-            if len(table['phase']) != 0:
-                index = table['phase']
+
+        if model['use']:
+            mask *= model['threshold'] > torch.abs((f_ij - f_m_ij)/f_m_ij)
+            mask *= model['threshold'] > torch.abs((f_ik - f_m_ik)/f_m_ik)
 
         if value['use']:
-            a, a_m = self.twiss_from_phase[probe][f'a{plane}'][index], self.twiss_from_phase[probe][f'a{plane}_m']
-            b, b_m = self.twiss_from_phase[probe][f'b{plane}'][index], self.twiss_from_phase[probe][f'b{plane}_m']
-            mask  = a*a_m > 0
-            mask *= value['threshold'] > torch.abs((a - a_m)/a_m)
             mask *= value['threshold'] > torch.abs((b - b_m)/b_m)
-            table['value'] = index[mask]
-            if len(table['value']) != 0:
-                index = table['value']
 
-        if error['use']:
-            f_ij, sigma_f_ij = self.twiss_from_phase[probe][f'f{plane}_ij'][index], self.twiss_from_phase[probe][f'sigma_f{plane}_ij'][index]
-            f_ik, sigma_f_ik = self.twiss_from_phase[probe][f'f{plane}_ik'][index], self.twiss_from_phase[probe][f'sigma_f{plane}_ik'][index]
-            a, sigma_a = self.twiss_from_phase[probe][f'a{plane}'][index], self.twiss_from_phase[probe][f'sigma_a{plane}'][index]
-            b, sigma_b = self.twiss_from_phase[probe][f'b{plane}'][index], self.twiss_from_phase[probe][f'sigma_b{plane}'][index]
-            mask  = 1/error['threshold'] < torch.abs(f_ij/sigma_f_ij)
-            mask *= 1/error['threshold'] < torch.abs(f_ik/sigma_f_ik)
-            mask *= 1/error['threshold'] < torch.abs(a/sigma_a)
-            mask *= 1/error['threshold'] < torch.abs(b/sigma_b)
-            table['error'] = index[mask]
-            if len(table['error']) != 0:
-                index = table['error']
+        if sigma['use']:
+            mask *= 1/sigma['threshold'] < torch.abs(f_ij/sigma_f_ij)
+            mask *= 1/sigma['threshold'] < torch.abs(f_ik/sigma_f_ik)
 
-        if quantile['use']:
-            a = self.twiss_from_phase[probe][f'a{plane}'][index]
-            b = self.twiss_from_phase[probe][f'b{plane}'][index]
-            a_ql, a_qu = torch.quantile(a, 0.25), torch.quantile(a, 0.75)
-            a_ql, a_qu = a_ql - quantile['factor']*(a_qu - a_ql), a_qu + quantile['factor']*(a_qu - a_ql)
-            b_ql, b_qu = torch.quantile(b, 0.25), torch.quantile(b, 0.75)
-            b_ql, b_qu = b_ql - quantile['factor']*(b_qu - b_ql), b_qu + quantile['factor']*(b_qu - b_ql)
-            mask  = (a_ql < a)*(a < a_qu)
-            mask *= (b_ql < b)*(b < b_qu)
-            table['quantile'] = index[mask]
-            if len(table['quantile']) != 0:
-                index = table['quantile']
+        if limit['use']:
+            factor = torch.tensor(limit['threshold'], dtype=self.dtype, device=self.device)
+            mask *= threshold(standardize(a, center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
+            mask *= threshold(standardize(b, center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
 
-        if dbscan['use']:
-            a = self.twiss_from_phase[probe][f'a{plane}'][index].cpu().numpy()
-            b = self.twiss_from_phase[probe][f'b{plane}'][index].cpu().numpy()
-            a_group = DBSCAN(eps=dbscan['factor']*a.std()).fit(a.reshape(-1, 1))
-            b_group = DBSCAN(eps=dbscan['factor']*b.std()).fit(b.reshape(-1, 1))
-            a_label = Counter(a_group.labels_)
-            b_label = Counter(b_group.labels_)
-            a_label = max(a_label, key=a_label.get)
-            b_label = max(b_label, key=b_label.get)
-            mask  = a_group.labels_ == a_label
-            mask *= b_group.labels_ == b_label
-            table['dbscan'] = index[mask]
-            if len(table['dbscan']) != 0:
-                index = table['dbscan']
-
-        if lof['use']:
-            indicator = LocalOutlierFactor(n_neighbors=lof['count'], contamination=lof['contamination'])
-            a = self.twiss_from_phase[probe][f'a{plane}'][index].cpu().numpy()
-            b = self.twiss_from_phase[probe][f'b{plane}'][index].cpu().numpy()
-            a, b = (a - a.mean())/a.std(), (b - b.mean())/b.std()
-            c = numpy.array([a, b]).T
-            mask = indicator.fit_predict(c) > 0
-            table['lof'] = index[mask]
-            if len(table['lof']) != 0:
-                index = table['lof']
-
-        if iforest['use']:
-            indicator = IsolationForest(n_estimators=iforest['count'], contamination=iforest['contamination'])
-            a = self.twiss_from_phase[probe][f'a{plane}'][index].cpu().numpy()
-            b = self.twiss_from_phase[probe][f'b{plane}'][index].cpu().numpy()
-            a, b = (a - a.mean())/a.std(), (b - b.mean())/b.std()
-            c = numpy.array([a, b]).T
-            mask = indicator.fit(c).predict(c) > 0
-            table['iforest'] = index[mask]
-            if len(table['iforest']) != 0:
-                index = table['iforest']
-
-        table['normal'] = index
-        return table
+        return mask
 
 
-    def process_twiss(self, probe:int, plane:str='x', *,
-                      index:torch.Tensor=None, fitted:bool=True) -> dict:
+    def process_twiss(self, plane:str='x', *,
+                      weight:bool=True, mask:torch.Tensor=None) -> dict:
         """
         Process twiss data.
 
         Parameters
         ----------
-        probe: int
-            probe location
         plane: str
             data plane ('x' or 'y')
-        index: torch.Tensor
-            index list to use
-        fitted: bool
-            flag to fit data
+        weight: bool
+            flag to use weights
+        mask: torch.Tensor
+            mask
 
         Returns
         -------
-        processed twiss data (dict)
+        twiss data (dict)
+        dict_keys(['value_a', 'sigma_a', 'error_a', 'value_b', 'sigma_b', 'error_b'])
 
         """
+        result = {}
+
+        if mask == None:
+            mask = torch.ones((self.model.size, self.limit*(2*self.limit - 1)), dtype=self.dtype, device=self.device)
+
+        if plane == 'x':
+            a, sigma_a, a_m = self.data_phase['ax'], self.data_phase['sigma_ax'], self.model.ax
+            b, sigma_b, b_m = self.data_phase['bx'], self.data_phase['sigma_bx'], self.model.bx
+
+        if plane == 'y':
+            a, sigma_a, a_m = self.data_phase['ay'], self.data_phase['sigma_ay'], self.model.ay
+            b, sigma_b, b_m = self.data_phase['by'], self.data_phase['sigma_by'], self.model.by
+
+        if not weight:
+
+            center = weighted_mean(a, weight=mask)
+            spread = weighted_variance(a, weight=mask, center=center).sqrt()
+            result['value_a'] = center
+            result['sigma_a'] = spread
+            result['error_a'] = (center - a_m)/a_m
+
+            center = weighted_mean(b, weight=mask)
+            spread = weighted_variance(b, weight=mask, center=center).sqrt()
+            result['value_b'] = center
+            result['sigma_b'] = spread
+            result['error_b'] = (center - b_m)/b_m
+
+            return result
+
+        weight = (mask.to(self.dtype)/sigma_a**2).nan_to_num()
+        center = weighted_mean(a, weight=weight)
+        spread = weighted_variance(a, weight=weight, center=center).sqrt()
+        result['value_a'] = center
+        result['sigma_a'] = spread
+        result['error_a'] = (center - a_m)/a_m
+
+        weight = (mask.to(self.dtype)/sigma_b**2).nan_to_num()
+        center = weighted_mean(b, weight=weight)
+        spread = weighted_variance(b, weight=weight, center=center).sqrt()
+        result['value_b'] = center
+        result['sigma_b'] = spread
+        result['error_b'] = (center - b_m)/b_m
+
+        if plane == 'x':
+            self.ax, self.sigma_ax = result['value_a'], result['sigma_a']
+            self.bx, self.sigma_bx = result['value_b'], result['sigma_b']
+
+        if plane == 'y':
+            self.ay, self.sigma_ay = result['value_a'], result['sigma_a']
+            self.by, self.sigma_by = result['value_b'], result['sigma_b']
+
+        return result
+
+
+    def get_ax(self, index:int) -> torch.Tensor:
+        """
+        Get ax value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [ax, sigma_ax] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_ax(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.ax[index], self.sigma_ax[index]])
+
+
+    def get_bx(self, index:int) -> torch.Tensor:
+        """
+        Get bx value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [bx, sigma_bx] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_bx(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.bx[index], self.sigma_bx[index]])
+
+
+    def get_fx(self, index:int) -> torch.Tensor:
+        """
+        Get fx value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [fx, sigma_fx] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_fx(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.fx[index], self.sigma_fx[index]])
+
+
+    def get_ay(self, index:int) -> torch.Tensor:
+        """
+        Get ay value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [ay, sigma_ay] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_ay(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.ay[index], self.sigma_ay[index]])
+
+
+    def get_by(self, index:int) -> torch.Tensor:
+        """
+        Get by value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [by, sigma_by] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_by(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.by[index], self.sigma_by[index]])
+
+
+    def get_fy(self, index:int) -> torch.Tensor:
+        """
+        Get fy value and error at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        [fy, sigma_fy] (torch.Tensor)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_fy(self.model.get_index(index))
+
+        index = int(mod(index, self.size))
+        return torch.stack([self.fy[index], self.sigma_fy[index]])
+
+
+    def get_twiss(self, index:int) -> dict:
+        """
+        Return twiss data at given index.
+
+        Parameters
+        ----------
+        index: int
+            index or location name
+
+        Returns
+        -------
+        twiss data (dict)
+
+        """
+        if isinstance(index, str) and index in self.model.name:
+            return self.get_twiss(self.model.get_index(index))
+
         table = {}
-
-        index = index if index != None else torch.tensor([*range(len(self.twiss_from_phase[probe]['other']))], dtype=torch.int64)
-
-        table['probe'] = probe
-        table['name'] = self.model.name[probe]
-
-        a_m, b_m = self.twiss_from_phase[probe][f'a{plane}_m'], self.twiss_from_phase[probe][f'b{plane}_m']
-        table[f'a{plane}_m'], table[f'b{plane}_m'] = a_m, b_m
-
-        a, b = self.twiss_from_phase[probe][f'a{plane}'][index], self.twiss_from_phase[probe][f'b{plane}'][index]
-
-        table[f'mean_a{plane}'], table[f'mean_b{plane}'] = a.mean(), b.mean()
-        table[f'std_a{plane}'], table[f'std_b{plane}'] = a.std(), b.std()
-
-        if not fitted:
-            return table
-
-        sigma_a, sigma_b = self.twiss_from_phase[probe][f'sigma_a{plane}'][index], self.twiss_from_phase[probe][f'sigma_b{plane}'][index]
-
-        x = numpy.ones((len(index), 1))
-        y = a.cpu().numpy()
-        s = sigma_a.cpu().numpy()
-        w = 1/s**2 if sigma_a != None else x
-        fit = WLS(y, x, w).fit()
-        value, error = fit.params.item(), fit.bse.item()
-        table[f'value_a{plane}'], table[f'error_a{plane}'] = torch.tensor([value, error], dtype=self.dtype, device=self.device)
-
-        x = numpy.ones((len(index), 1))
-        y = b.cpu().numpy()
-        s = sigma_b.cpu().numpy()
-        w = 1/s**2 if sigma_b != None else x
-        fit = WLS(y, x, w).fit()
-        value, error = fit.params.item(), fit.bse.item()
-        table[f'value_b{plane}'], table[f'error_b{plane}'] = torch.tensor([value, error], dtype=self.dtype, device=self.device)
+        table['ax'], table['sigma_ax'] = self.get_ax(index)
+        table['bx'], table['sigma_bx'] = self.get_bx(index)
+        table['fx'], table['sigma_fx'] = self.get_fx(index)
+        table['ay'], table['sigma_ay'] = self.get_ay(index)
+        table['by'], table['sigma_by'] = self.get_by(index)
+        table['fy'], table['sigma_fy'] = self.get_fy(index)
 
         return table
+
+
+    def get_table(self) -> pandas.DataFrame:
+        """
+        Return twiss data at all locations as dataframe.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        twiss data (pandas.DataFrame)
+
+        """
+        df = pandas.DataFrame()
+
+        df['name'] = self.model.name
+        df['kind'] = self.model.kind
+
+        df['flag'] = self.flag.cpu().numpy()
+        df['time'] = self.model.time.cpu().numpy()
+
+        df['ax'], df['sigma_ax'] = self.ax.cpu().numpy(), self.sigma_ax.cpu().numpy()
+        df['bx'], df['sigma_bx'] = self.bx.cpu().numpy(), self.sigma_bx.cpu().numpy()
+        df['fx'], df['sigma_fx'] = self.fx.cpu().numpy(), self.sigma_fx.cpu().numpy()
+
+        df['ay'], df['sigma_ay'] = self.ay.cpu().numpy(), self.sigma_ay.cpu().numpy()
+        df['by'], df['sigma_by'] = self.by.cpu().numpy(), self.sigma_by.cpu().numpy()
+        df['fy'], df['sigma_fy'] = self.fy.cpu().numpy(), self.sigma_fy.cpu().numpy()
+
+        return df
+
+    def __repr__(self) -> str:
+        """
+        String representation.
+
+        """
+        return f'{self.__class__.__name__}({self.model}, {self.table}, {self.limit})'
+
+
+    def __len__(self) -> int:
+        """
+        Number of locations.
+
+        """
+        return self.size
+
+
+    def __call__(self, limit:int=None) -> pandas.DataFrame:
+        """
+        Perform twiss loop with default parameters.
+
+        Parameters
+        ----------
+        limit: int
+            range limit for virtual phase computation
+
+        Returns
+        -------
+        twiss table (pandas.DataFrame)
+
+        """
+        limit = self.limit if limit is None else limit
+
+        self.get_action()
+        self.get_twiss_from_amplitude()
+        self.phase_virtual(limit=limit)
+        self.get_twiss_from_phase()
+
+        mask_x = self.filter_twiss(plane='x')
+        mask_y = self.filter_twiss(plane='y')
+
+        _ = self.process_twiss(plane='x', mask=mask_x, weight=True)
+        _ = self.process_twiss(plane='y', mask=mask_y, weight=True)
+
+        return self.get_table()
+
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()

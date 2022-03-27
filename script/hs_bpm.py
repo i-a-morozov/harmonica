@@ -17,12 +17,13 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-f', '--filter', choices=('none', 'hankel'), help='filter type', default='none')
 parser.add_argument('--rank', type=int, help='rank to use for hankel filter', default=8)
-parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
+parser.add_argument('--type', choices=('full', 'randomized'), help='SVD computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('--envelope', action='store_true', help='flag to compute envelope')
 parser.add_argument('--frequency', action='store_true', help='flag to compute instantaneous frequency')
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
+parser.add_argument('--drop', type=int, help='number of endpoints to drop for mean frequency', default=32)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -35,7 +36,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.frequency import Frequency
@@ -130,11 +131,6 @@ if args.envelope:
 # Convert to numpy
 data = tbt.to_numpy().flatten()
 
-# Clean
-del win, tbt
-if device == 'cuda':
-  torch.cuda.empty_cache()
-
 # Set turns
 turn = numpy.linspace(0, length - 1, length, dtype=numpy.int32)
 
@@ -148,19 +144,17 @@ if args.plot:
   if args.envelope:
     df['ENVELOPE'] = envelope
     plot = scatter(df, x='TURN', y=[args.plane.upper(), 'ENVELOPE'], title=f'{TIME}: TbT ({args.bpm.upper()})', opacity=0.75)
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+    plot.update_layout(yaxis_title=args.plane.upper())
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
   if args.frequency:
     df = pandas.DataFrame()
     df['TURN'] = turn[:-1]
     df['FREQUENCY'] = frequency
-    mean = frequency.mean()
-    std = frequency.std()
+    drop = args.drop
+    mean = frequency[drop:-drop].mean()
+    std = frequency[drop:-drop].std()
     plot = scatter(df, x='TURN', y='FREQUENCY', title=f'{TIME}: Frequency ({args.bpm.upper()})<br>MEAN: {mean}, STD:{std}', opacity=0.75)
     plot.add_hline(mean, line_color='red', line_dash="dash", line_width=0.5)
+    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
     plot.show(config=config)

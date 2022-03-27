@@ -6,7 +6,10 @@ Noise estimation.
 
 import torch
 
+from kneed import KneeLocator
+
 from .data import Data
+
 
 class Filter():
     """
@@ -44,6 +47,8 @@ class Filter():
         Compute list of singular values for a given batch of matrices (staticmethod).
     svd_list_randomized(cls, rank:int, matrix:torch.Tensor, buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> torch.Tensor
         Compute list of singular values for a given batch of matrices (classmethod).
+    locate(data:torch.Tensor, **kwargs) -> int
+        Find the point of maximum curvature.
     svd_truncation(rank:int, matrix:torch.Tensor, cpu:bool=True) -> tuple
         Compute SVD truncation for given rank and a batch of matrices (staticmethod).
     svd_truncation_randomized(cls, rank:int, matrix:torch.Tensor, buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> tuple
@@ -66,7 +71,6 @@ class Filter():
         Perform TbT filtering based on RPCA of full TbT matrix.
 
     """
-
     def __init__(self, data:'Data', *, random_seed:int=0) -> None:
         self.data = data
         self.random_seed = random_seed
@@ -222,6 +226,15 @@ class Filter():
         projection = cls.randomized_range(rank + buffer, count, matrix, random_seed)
         matrix = torch.matmul(torch.transpose(projection, 1, 2), matrix)
         return torch.linalg.svdvals(matrix.cpu() if cpu else matrix)[:, :rank].to(matrix.device)
+
+
+    @staticmethod
+    def locate(data:torch.Tensor, **kwargs) -> int:
+        """
+        Find the point of maximum curvature.
+
+        """
+        return KneeLocator(range(len(data)), data.cpu().numpy(), **kwargs).knee
 
 
     @staticmethod

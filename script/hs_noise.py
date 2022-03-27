@@ -33,7 +33,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
@@ -124,7 +124,7 @@ if args.normalize:
 # Estimate rank & noise
 flt = Filter(tbt)
 if args.std:
-  rnk = -torch.ones(len(bpm), dtype=torch.int32, device=device)
+  rnk = -torch.ones(len(bpm), dtype=torch.int64, device=device)
   std = torch.std(tbt.work, 1)
 else:
   rnk, std = flt.estimate_noise(limit=args.limit, cpu=True)
@@ -133,37 +133,22 @@ else:
 if args.auto:
   auto = Frequency.autocorrelation(tbt.work).cpu().numpy()
 
-# Clean
-del win, tbt, flt
-if device == 'cuda':
-  torch.cuda.empty_cache()
-
 # Plot
 if args.plot:
   df = pandas.DataFrame()
   df['BPM'] = [*bpm.keys()]
-  df['RANK'] = rnk.cpu()
+  df['RANK'] = rnk.cpu().numpy()
   df['RANK'] = df['RANK'].astype(str)
-  df['SIGMA'] = std.cpu()
+  df['SIGMA'] = std.cpu().numpy()
   from plotly.express import bar
   title = f'{TIME}: NOISE'
   plot = bar(df, x='BPM', y='SIGMA', color='RANK', category_orders={'BPM':df['BPM']}, title=title)
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
   if args.auto:
     from plotly.express import imshow
-    plot = imshow(
-      auto,
-      labels=dict(x="SHIFT", y="BPM", color=f"AUTO"),
-      y=[*bpm.keys()],
-      aspect=0.5,
-      title=f'{TIME}: AUTO'
-    )
+    plot = imshow(auto, labels=dict(x="SHIFT", y="BPM", color=f"AUTO"), y=[*bpm.keys()], aspect=0.5, title=f'{TIME}: AUTO')
+    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
     plot.show(config=config)
 
 # Save to file

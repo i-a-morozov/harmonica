@@ -1,8 +1,7 @@
 """
 Data module.
 Generate, save and load TbT data.
-Apply window to data.
-Data normalization.
+Data processing (apply window & normalization).
 
 """
 
@@ -14,7 +13,8 @@ import epics
 from .util import LIMIT
 from .window import Window
 
-class Data:
+
+class Data():
     """
     Returns
     ----------
@@ -27,6 +27,7 @@ class Data:
 
     Data type and device are inherited from window if dtype==None and device==None
     Data type and device are inherited from input data for Data.from_data
+    Data type can be complex
 
     Parameters
     ----------
@@ -41,9 +42,9 @@ class Data:
     pv_list: list
         list of TbT PV names (from_epics)
     pv_rise: list
-        list of TbT PV starting indices (from_epics)
+        list of TbT PV rise indices (from_epics)
     shift: int
-        start shift for all TbT PVs (from_epics)
+        rise shift for all TbT PVs (from_epics)
     count: int
         maximum length to read from TbT PVs (from_epics)
     dtype: torch.dtype
@@ -74,7 +75,7 @@ class Data:
     pv_list: list
         list of TbT PV names (from_epics)
     pv_rise: list
-        list of TbT PV starting indices (from_epics)
+        list of TbT PV rise indices (from_epics)
 
     Methods
     ----------
@@ -254,7 +255,7 @@ class Data:
         None
 
         """
-        numpy.save(file, self.work.detach().cpu().numpy())
+        numpy.save(file, self.work.cpu().numpy())
 
 
     def load_data(self, file:str) -> None:
@@ -333,7 +334,7 @@ class Data:
         None
 
         """
-        epics.caput(pv, data.detach().cpu().numpy(), wait=wait)
+        epics.caput(pv, data.cpu().numpy(), wait=wait)
 
 
     @staticmethod
@@ -381,7 +382,7 @@ class Data:
         if len(self.pv_list) != self.size:
             raise Exception(f'DATA: self.pv_list length {len(self.pv_list)} and self.work length {self.size} expected to match')
 
-        epics.caput_many(self.pv_list, self.work.detach().cpu().numpy(), wait=wait)
+        epics.caput_many(self.pv_list, self.work.cpu().numpy(), wait=wait)
 
 
     def load_epics(self, shift:int=0, count:int=LIMIT) -> None:

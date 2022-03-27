@@ -3,21 +3,19 @@ Decomposition module.
 
 """
 
-import epics
 import numpy
-import pandas
 import torch
-import nufft
 
-from collections import Counter
-from statsmodels.api import OLS, WLS
-from sklearn.cluster import DBSCAN
-
-from .util import LIMIT, mod, chain
+from .util import mod, chain, generate_other, make_mark
+from .statistics import weighted_mean, weighted_variance
+from .statistics import median, biweight_midvariance
+from .statistics import standardize
+from .anomaly import threshold, dbscan
 from .window import Window
 from .data import Data
 from .frequency import Frequency
 from .filter import Filter
+
 
 class Decomposition():
     """
@@ -45,13 +43,24 @@ class Decomposition():
         Estimate parameters (and corresponding errors) for given batch of frequencies and batch of signals using (weighted) Fourier sum and direct error propagation.
     harmonic_sum_automatic(frequency:float, window:torch.Tensor, data:torch.Tensor, *, error:bool=False, sigma:torch.Tensor=None, sigma_frequency:float=None) -> tuple
         Estimate parameters (and corresponding errors) for given frequency and batch of signals using (weighted) Fourier sum and automatic error propagation.
-    harmonic_amplitude(self, frequency:float, *, length:int=64, name:str='cosine_window', order:float=1.0, error:bool=False, limit:int=16, cpu:bool=True, sigma_frequency:float=None, shift:bool=False, count:int=64, step:int=1, fit:str='none') -> tuple
+    harmonic_amplitude(self, frequency:float, length:int=128, *, order:float=1.0, window:str='cosine_window', error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True, shift:bool=False, count:int=64, step:int=8, clean:bool=False, factor:float=5.0, method:str='none') -> tuple
         Estimate amplitude (and corresponding errors) for given frequency.
-    harmonic_phase(self, frequency:float, *, length:int=64, name:str='cosine_window', order:float=1.0, error:bool=False, limit:int=16, cpu:bool=True, sigma_frequency:float=None, shift:bool=False, count:int=64, step:int=1, fit:str='none') -> tuple
+    harmonic_phase(self, frequency:float, length:int=256, *, order:float=0.0, window:str='cosine_window', error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True, shift:bool=False, count:int=64, step:int=8, tolerance:float=1.0, clean:bool=False, factor:float=5.0, method:str='none') -> tuple
         Estimate phase (and corresponding errors) for given frequency.
+    phase_adjust(probe:torch.Tensor, frequency:float, phase:torch.Tensor, *, error:bool=True, sigma_frequency:float=None, sigma_phase:torch.Tensor=None) -> tuple
+        Adjust phase of given probe indices.
+    phase_advance(cls, probe:torch.Tensor, other:torch.Tensor, frequency:float, phase:torch.Tensor, *, error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple
+        Compute phase advance mod 2*pi from probe to other indices for given measured or model phases.
+    phase_adjacent(cls, frequency:float, phase:torch.Tensor, *, error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple
+        Compute phase advance mod 2*pi between adjacent locations.
+    phase_check(cls, frequency:float, frequency_model:float, phase:torch.Tensor, phase_model:torch.Tensor, *, drop_endpoints:bool=True, trust_sequence_length:int=5, clean:bool=False, factor:float=5.0) -> tuple
+        Perform synchronization check based on adjacent advance difference for measured and model values.
+    phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict
+        Estimate phase at virtual or monitor location using other monitor locations and model phase data.
+    __repr__(self) -> str
+        String representation.
 
     """
-
     def __init__(self, data:'Data'=None) -> None:
         """
         Decomposition instance initialization.
@@ -211,7 +220,7 @@ class Decomposition():
         a = torch.sqrt(c*c + s*s)
         b = torch.atan2(-s, +c)
 
-        param = torch.stack([c.T, s.T, a.T, b.T]).T
+        param = torch.stack([c.T, s.T, a.T, b.T]).swapaxes(0, -1)
 
         if not error:
             return (param, None)
@@ -246,7 +255,7 @@ class Decomposition():
         sigma_a = torch.sqrt(sigma_a)
         sigma_b = torch.sqrt(sigma_b)
 
-        sigma = torch.stack([sigma_c.T, sigma_s.T, sigma_a.T, sigma_b.T]).T
+        sigma = torch.stack([sigma_c.T, sigma_s.T, sigma_a.T, sigma_b.T]).swapaxes(0, -1)
 
         return (param, sigma)
 
@@ -352,11 +361,12 @@ class Decomposition():
         return (param, error)
 
 
-    def harmonic_amplitude(self, frequency:float, *,
-                           length:int=64, name:str='cosine_window', order:float=1.0,
-                           error:bool=False, limit:int=16, cpu:bool=True, sigma_frequency:float=None,
-                           shift:bool=False, count:int=64, step:int=1,
-                           fit:str='none') -> tuple:
+    def harmonic_amplitude(self, frequency:float, length:int=128, *,
+                           order:float=1.0, window:str='cosine_window',
+                           error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True,
+                           shift:bool=False, count:int=64, step:int=8,
+                           clean:bool=False, factor:float=5.0,
+                           method:str='none') -> tuple:
         """
         Estimate amplitude (and corresponding errors) for given frequency.
 
@@ -371,12 +381,14 @@ class Decomposition():
             frequency sigma, ignored if None (default)
         length: int
             length to use for amplitude estimation
-        name: str
-            window name ('cosine_window' or 'kaiser_window')
         order: float
             window order
+        window: str
+            window name ('cosine_window' or 'kaiser_window')
         error: bool
-            flag to estimate standard errors using error propagation, if True, noise is estimated for given length
+            flag to estimate errors using error propagation, if True, noise is estimated for given length
+        sigma_frequency:float
+            frequency error
         limit: int
             number of columns to use for noise estimation
         cpu: bool
@@ -386,95 +398,92 @@ class Decomposition():
         count: int
             maximum number of samples to use
         step: int
-            shift step
-        fit: str
-            fit method for sampled case
-            'none'     - mean & std over samples
-            'noise'    - estimate noise for each sample and perform WLS fit using estimated noise as weights
-            'average'  - estimate error for each sample and average result
-            'fit'      - estimate error for each sample and perform WLS fit
-
-            Note, 'none' and 'average' seem to give more realistic error estimates, while other options underestimate errors
-            If both data and work are filtered errors are underestimated
+            shift step size
+        clean: bool
+            flag to remove outliers for sampled case using robust threshold
+        factor: float
+            threshold factor
+        method: str
+            data processing method for sampled case
+            'none'     - return mean & std over samples
+            'noise'    - return weighted mean & std over samples (use noise for weighting)
+            'error'    - return weighted mean & std over samples (use error for weighting)
 
         Returns
         -------
-        estimated amplitude (and error) for each signal
+        (amplitude, [error], [sample data])
 
         """
-        window = self.data.window.__class__(length, name, order, dtype=self.data.dtype, device=self.data.device)
+        window = self.data.window.__class__(length, window, order, dtype=self.data.dtype, device=self.data.device)
 
         if shift == False and error == False:
-            out, std  = self.harmonic_sum(frequency, window.window, self.data.work)
-            _, _, out, _ = out.T
-            return (out, None, None)
+            res, _ = self.harmonic_sum(frequency, window.window, self.data.work)
+            *_, res, _ = res.T
+            return (res, None, None)
 
         if shift == False and error == True:
-            _, sigma = Filter.svd_optimal(Filter.make_matrix(self.data.data)[:, :, :limit], cpu=cpu)
-            out, std = self.harmonic_sum(frequency, window.window, self.data.work,
-                                         error=True, sigma=sigma, sigma_frequency=sigma_frequency)
-            _, _, out, _ = out.T
-            _, _, std, _ = std.T
-            return (out, std, None)
+            _, err = Filter.svd_optimal(Filter.make_matrix(self.data.data)[:, :length, :limit], cpu=cpu)
+            res, err = self.harmonic_sum(frequency, window.window, self.data.work, error=True, sigma=err, sigma_frequency=sigma_frequency)
+            *_, res, _ = res.T
+            *_, err, _ = err.T
+            return (res, err, None)
 
-        size, total = self.data.data.shape
+        size, _ = self.data.data.shape
         work = torch.stack([self.data.make_matrix(length, step, self.data.work[i])[:count, :] for i in range(size)])
         _, count, _ = work.shape
         work = work.reshape(-1, length)
-        work = Data.from_data(window, work)
+        work = self.data.__class__.from_data(window, work)
 
-        out, std = self.harmonic_sum(frequency, window.window, work.work)
-        _, _, out, _ = out.T
-        out = out.reshape(size, count)
+        res, _ = self.harmonic_sum(frequency, window.window, work.work)
+        *_, res, _ = res.T
+        res = res.reshape(size, count)
 
-        if fit == 'none':
-            return (out.mean(1), out.std(1), out)
+        if clean:
+            center = median(res)
+            spread = biweight_midvariance(res).sqrt()
+            min_value, max_value = center - factor*spread, center + factor*spread
+            mask = threshold(res, min_value, max_value).to(window.dtype)
+        else:
+            mask = torch.ones_like(res)
+
+        if method == 'none':
+            center = weighted_mean(res, weight=mask)
+            spread = weighted_variance(res, weight=mask, center=center).sqrt()
+            return (center, spread, res)
 
         data = torch.stack([self.data.make_matrix(length, step, self.data.data[i])[:count, :] for i in range(size)])
         _, count, _ = data.shape
         data = data.reshape(-1, length)
         data = Data.from_data(window, data)
-        _, sigma = Filter.svd_optimal(Filter.make_matrix(data.data)[:, :, :limit], cpu=cpu)
-        sigma = sigma.reshape(size, count)
 
-        if fit == 'noise':
-            x = numpy.ones((count, 1))
-            result = []
-            for y, w in zip(out, sigma):
-                y = y.cpu().numpy()
-                w = (1/w**2).cpu().numpy()
-                fit = WLS(y, x, w).fit()
-                result.append([fit.params.item(), fit.bse.item()])
-            result = tuple(torch.tensor(result, dtype=self.data.dtype, device=self.data.device).T)
-            return (*result, out)
+        _, err = Filter.svd_optimal(Filter.make_matrix(data.data)[:, :, :limit], cpu=cpu)
+        err = err.reshape(size, count)
 
-        out, std = self.harmonic_sum(frequency, window.window, work.data.reshape(size*count, -1),
-                                     error=True, sigma=sigma.flatten(), sigma_frequency=sigma_frequency)
-        _, _, out, _ = out.T
-        _, _, std, _ = std.T
-        out = out.reshape(size, count)
-        std = std.reshape(size, count)
+        if method == 'noise':
+            weight = mask/err**2
+            center = weighted_mean(res, weight=weight)
+            spread = weighted_variance(res, weight=weight, center=center).sqrt()
+            return (center, spread, res)
 
-        if fit == 'average':
-            return (out.mean(1), std.mean(1), out)
+        if method != 'error':
+            raise Exception(f'DECOMPOSITION: unknown method {method}')
 
-        if fit == 'fit':
-            x = numpy.ones((count, 1))
-            result = []
-            for y, w in zip(out, std):
-                y = y.cpu().numpy()
-                w = (1/w**2).cpu().numpy()
-                fit = WLS(y, x, w).fit()
-                result.append([fit.params.item(), fit.bse.item()])
-            result = tuple(torch.tensor(result, dtype=self.data.dtype, device=self.data.device).T)
-            return (*result, out)
+        _, err = self.harmonic_sum(frequency, window.window, work.work, error=True, sigma=err.flatten(), sigma_frequency=sigma_frequency)
+        *_, err, _ = err.T
+        err = err.reshape(size, count)
+
+        weight = mask/err**2
+        center = weighted_mean(res, weight=weight)
+        spread = weighted_variance(res, weight=weight, center=center).sqrt()
+        return (center, spread, res)
 
 
-    def harmonic_phase(self, frequency:float, *,
-                           length:int=64, name:str='cosine_window', order:float=1.0,
-                           error:bool=False, limit:int=16, cpu:bool=True, sigma_frequency:float=None,
-                           shift:bool=False, count:int=64, step:int=1,
-                           fit:str='none') -> tuple:
+    def harmonic_phase(self, frequency:float, length:int=256, *,
+                           order:float=0.0, window:str='cosine_window',
+                           error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True,
+                           shift:bool=False, count:int=64, step:int=8, tolerance:float=1.0,
+                           clean:bool=False, factor:float=5.0,
+                           method:str='none') -> tuple:
         """
         Estimate phase (and corresponding errors) for given frequency.
 
@@ -489,12 +498,14 @@ class Decomposition():
             frequency sigma, ignored if None (default)
         length: int
             length to use for amplitude estimation
-        name: str
-            window name ('cosine_window' or 'kaiser_window')
         order: float
             window order
+        window: str
+            window name ('cosine_window' or 'kaiser_window')
         error: bool
-            flag to estimate standard errors using error propagation, if True, noise is estimated for given length
+            flag to estimate errors using error propagation, if True, noise is estimated for given length
+        sigma_frequency:float
+            frequency error
         limit: int
             number of columns to use for noise estimation
         cpu: bool
@@ -504,191 +515,210 @@ class Decomposition():
         count: int
             maximum number of samples to use
         step: int
-            shift step
-        fit: str
-            fit method for sampled case
-            'none'     - mean & std over samples
-            'noise'    - estimate noise for each sample and perform WLS fit using estimated noise as weights
-            'average'  - estimate error for each sample and average result
-            'fit'      - estimate error for each sample and perform WLS fit
-
-            Note, 'none' and 'average' seem to give more realistic error estimates, while other options underestimate errors
-            If both data and work are filtered errors are underestimated
+            shift step size
+        tolerance: float
+            zero-crossing tolerance
+        clean: bool
+            flag to remove outliers for sampled case using robust threshold
+        factor: float
+            threshold factor
+        method: str
+            data processing method for sampled case
+            'none'     - return mean & std over samples
+            'noise'    - return weighted mean & std over samples (use noise for weighting)
+            'error'    - return weighted mean & std over samples (use error for weighting)
 
         Returns
         -------
-        estimated phase (and error) for each signal
+        (phase, [error], [sample data])
 
         """
-        window = self.data.window.__class__(length, name, order, dtype=self.data.dtype, device=self.data.device)
+        window = self.data.window.__class__(length, window, order, dtype=self.data.dtype, device=self.data.device)
 
         if shift == False and error == False:
-            out, std  = self.harmonic_sum(frequency, window.window, self.data.work)
-            _, _, _, out = out.T
-            return (out, None, None)
+            res, _ = self.harmonic_sum(frequency, window.window, self.data.work)
+            *_, res = res.T
+            return (res, None, None)
 
         if shift == False and error == True:
-            _, sigma = Filter.svd_optimal(Filter.make_matrix(self.data.data)[:, :, :limit], cpu=cpu)
-            out, std = self.harmonic_sum(frequency, window.window, self.data.work,
-                                         error=True, sigma=sigma, sigma_frequency=sigma_frequency)
-            _, _, _, out = out.T
-            _, _, _, std = std.T
-            return (out, std, None)
+            _, err = Filter.svd_optimal(Filter.make_matrix(self.data.data)[:, :length, :limit], cpu=cpu)
+            res, err = self.harmonic_sum(frequency, window.window, self.data.work, error=True, sigma=err, sigma_frequency=sigma_frequency)
+            *_, res = res.T
+            *_, err = err.T
+            return (res, err, None)
 
-        size, total = self.data.data.shape
+        size, _ = self.data.data.shape
         work = torch.stack([self.data.make_matrix(length, step, self.data.work[i])[:count, :] for i in range(size)])
         _, count, _ = work.shape
         work = work.reshape(-1, length)
-        work = Data.from_data(window, work)
+        work = self.data.__class__.from_data(window, work)
 
-        out, std = self.harmonic_sum(frequency, window.window, work.work)
-        _, _, _, out = out.T
-        out = out.reshape(size, count)
+        res, _ = self.harmonic_sum(frequency, window.window, work.work)
+        *_, res = res.T
+        res = res.reshape(size, count)
 
         add = torch.linspace(0, (count - 1)*step*2.0*numpy.pi*frequency, count, dtype=self.data.dtype, device=self.data.device)
-        out = mod(out - add, 2.0*numpy.pi, -numpy.pi)
+        res = mod(res - add, 2.0*numpy.pi, -numpy.pi)
 
-        if fit == 'none':
-            return (out.mean(1), out.std(1), out)
+        msk = res.sign()
+        res[:, 1:] += numpy.pi*(msk[:, 0].reshape(-1, 1) - msk[:, 1:])
+
+        msk = torch.abs(res[:, 0].reshape(-1, 1) - res[:, 1:]) > tolerance
+        res[:, 1:][msk] = mod(res[:, 1:][msk], 2.0*numpy.pi, -numpy.pi)
+
+        if clean:
+            center = median(res)
+            spread = biweight_midvariance(res).sqrt()
+            min_value, max_value = center - factor*spread, center + factor*spread
+            mask = threshold(res, min_value, max_value).to(window.dtype)
+        else:
+            mask = torch.ones_like(res)
+
+        if method == 'none':
+            center = weighted_mean(res, weight=mask)
+            spread = weighted_variance(res, weight=mask, center=center).sqrt()
+            return (center, spread, res)
 
         data = torch.stack([self.data.make_matrix(length, step, self.data.data[i])[:count, :] for i in range(size)])
         _, count, _ = data.shape
         data = data.reshape(-1, length)
         data = Data.from_data(window, data)
-        _, sigma = Filter.svd_optimal(Filter.make_matrix(data.data)[:, :, :limit], cpu=cpu)
-        sigma = sigma.reshape(size, count)
 
-        if fit == 'noise':
-            x = numpy.ones((count, 1))
-            result = []
-            for y, w in zip(out, sigma):
-                y = y.cpu().numpy()
-                w = (1/w**2).cpu().numpy()
-                fit = WLS(y, x, w).fit()
-                result.append([fit.params.item(), fit.bse.item()])
-            result = tuple(torch.tensor(result, dtype=self.data.dtype, device=self.data.device).T)
-            return (*result, out)
+        _, err = Filter.svd_optimal(Filter.make_matrix(data.data)[:, :, :limit], cpu=cpu)
+        err = err.reshape(size, count)
 
-        out, std = self.harmonic_sum(frequency, window.window, work.data.reshape(size*count, -1),
-                                     error=True, sigma=sigma.flatten(), sigma_frequency=sigma_frequency)
-        _, _, _, out = out.T
-        _, _, _, std = std.T
-        out = out.reshape(size, count)
-        std = std.reshape(size, count)
-        out = mod(out - add, 2.0*numpy.pi, -numpy.pi)
+        if method == 'noise':
+            weight = mask/err**2
+            center = weighted_mean(res, weight=weight)
+            spread = weighted_variance(res, weight=weight, center=center).sqrt()
+            return (center, spread, res)
 
-        if fit == 'average':
-            return (out.mean(1), std.mean(1), out)
+        if method != 'error':
+            raise Exception(f'DECOMPOSITION: unknown method {method}')
 
-        if fit == 'fit':
-            x = numpy.ones((count, 1))
-            result = []
-            for y, w in zip(out, std):
-                y = y.cpu().numpy()
-                w = (1/w**2).cpu().numpy()
-                fit = WLS(y, x, w).fit()
-                result.append([fit.params.item(), fit.bse.item()])
-            result = tuple(torch.tensor(result, dtype=self.data.dtype, device=self.data.device).T)
-            return (*result, out)
+        _, err = self.harmonic_sum(frequency, window.window, work.work, error=True, sigma=err.flatten(), sigma_frequency=sigma_frequency)
+        *_, err, _ = err.T
+        err = err.reshape(size, count)
+
+        weight = mask/err**2
+        center = weighted_mean(res, weight=weight)
+        spread = weighted_variance(res, weight=weight, center=center).sqrt()
+        return (center, spread, res)
 
 
     @staticmethod
-    def phase_adjust(probe:int, frequency:float, phase:torch.Tensor,
-                     sigma_frequency:float=None, sigma_phase:torch.Tensor=None) -> torch.Tensor:
+    def phase_adjust(probe:torch.Tensor, frequency:float, phase:torch.Tensor, *,
+                    error:bool=True, sigma_frequency:float=None, sigma_phase:torch.Tensor=None) -> tuple:
         """
-        Adjust phase for given location, total number of location and frequency.
+        Adjust phase of given probe indices.
 
         Parameters
         ----------
-        probe: int
-            location index
+        probe: torch.Tensor
+            probe indices
         frequency: float
-            frequency (fractional part)
+            frequency value (fractional part)
         phase: torch.Tensor
-            phase data for each location
+            phase data for all location
+        error: bool
+            flag to compute errors
         sigma_frequency: float
             frequency error
         sigma_phase: torch.Tensor
-            measured phase data errors
+            phase error data for all locations
 
         Returns
         -------
-        adjusted phase and optional error (list)
+        adjusted phase and error (tuple)
 
         """
         count, *_ = phase.shape
 
-        probe_index = int(mod(probe, count))
+        dtype, device = phase.dtype, phase.device
 
-        shift = (probe - probe_index) // count
+        probe = probe.to(dtype).to(device)
+        probe_index = mod(probe, count).to(torch.int64).to(device)
+
+        shift = torch.div(probe - probe_index, count, rounding_mode='floor')
         phase = mod(phase[probe_index] + shift*2.0*numpy.pi*frequency, 2.0*numpy.pi, -numpy.pi)
 
+        if not error:
+            return (phase, torch.zeros_like(phase))
+
         if sigma_phase is None:
-            return torch.tensor([phase, 0.0])
+            return (phase, torch.zeros_like(phase))
 
         if sigma_frequency is None:
-            return torch.tensor([phase, sigma_phase[probe_index]])
+            return (phase, sigma_phase[probe_index])
 
-        error = (sigma_phase[probe_index]**2 + (2.0*numpy.pi*shift)**2*sigma_frequency**2)**0.5
+        error = (sigma_phase[probe_index]**2 + (2.0*numpy.pi*shift)**2*sigma_frequency**2).sqrt()
 
-        return torch.tensor([phase, error])
+        return (phase, error)
 
 
     @classmethod
-    def phase_advance(cls, probe:int, other:int, frequency:float, phase:torch.Tensor, model:bool=False,
-                      sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None) -> torch.Tensor:
+    def phase_advance(cls, probe:torch.Tensor, other:torch.Tensor, frequency:float, phase:torch.Tensor, *,
+                      error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple:
         """
-        Compute phase advance mod 2*pi from i to j locations for given measured phases.
+        Compute phase advance mod 2*pi from probe to other indices for given measured or model phases.
 
-        Note, phase advance is computed from i to j, if i > j, phase advance is negative
+        Note, phase advance is computed from probe to other, where probe > other, phase advance is negative
 
         Parameters
         ----------
-        probe: int
-            probe location
-        other: int
-            other location
+        probe: torch.Tensor
+            probe indices
+        other: torch.Tensor
+            other indices
         frequency: float
             frequency (fractional part)
         phase: torch.Tensor
-            model or measured phase data
-        model: bool
-            flag to compute errors for model
+            phase data for all location
+        error: bool
+            flag to compute errors
         sigma_frequency: float
             frequency error
         sigma_phase: torch.Tensor
-            model or measured phase data errors
+            phase error data for all locations
+        model: bool
+            input is for model flag
 
         Returns
         -------
-        phase advance mod 2*pi and optional error (list)
+        phase advance mod 2*pi and error (tuple)
 
         """
         count, *_ = phase.shape
 
-        if probe < other:
+        probe_phase, probe_sigma = cls.phase_adjust(probe, frequency, phase,
+                                                    error=error, sigma_frequency=sigma_frequency, sigma_phase=sigma_phase)
+        other_phase, other_sigma = cls.phase_adjust(other, frequency, phase,
+                                                    error=error, sigma_frequency=sigma_frequency, sigma_phase=sigma_phase)
 
-            probe_phase, probe_sigma = cls.phase_adjust(probe, frequency, phase, sigma_frequency, sigma_phase)
-            other_phase, other_sigma = cls.phase_adjust(other, frequency, phase, sigma_frequency, sigma_phase)
+        mask = probe < other
 
-            if sigma_phase is None:
-                return torch.tensor([mod(other_phase - probe_phase, 2.0*numpy.pi), 0.0])
+        advance = (-1)**(mask.logical_not())*mod((-1)**mask*(probe_phase - other_phase), 2.0*numpy.pi)
 
-            if not model:
-                return torch.tensor([mod(other_phase - probe_phase, 2.0*numpy.pi), (probe_sigma**2 + other_sigma**2)**0.5])
+        if not error:
+            return (advance, torch.zeros_like(advance))
 
-            index = [int(mod(index, count)) for index in range(probe, other)]
-            error = torch.sqrt(torch.sum(sigma_phase[index]**2))
+        if sigma_phase is None:
+            return (advance, torch.zeros_like(advance))
 
-            return torch.tensor([mod(other_phase - probe_phase, 2.0*numpy.pi), error])
+        if not model:
+            return (advance, (probe_sigma**2 + other_sigma**2).sqrt())
 
-        phase, error = cls.phase_advance(other, probe, frequency, phase, model, sigma_frequency, sigma_phase)
-        return torch.tensor([-phase, error])
+        error = []
+        for i, j in zip(probe.flatten(), other.flatten()):
+            index = mod(torch.tensor(range(*sorted((i.item(), j.item()))), dtype=torch.int64), count).to(torch.int64)
+            error.append(torch.sqrt(torch.sum(sigma_phase[index]**2)))
+
+        return (advance, torch.stack(error).reshape_as(advance))
 
 
     @classmethod
-    def phase_adjacent(cls, frequency:float, phase:torch.Tensor, model:bool=False,
-                      sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None) -> torch.Tensor:
+    def phase_adjacent(cls, frequency:float, phase:torch.Tensor, *,
+                       error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple:
         """
         Compute phase advance mod 2*pi between adjacent locations.
 
@@ -697,140 +727,128 @@ class Decomposition():
         frequency: float
             frequency (fractional part)
         phase: torch.Tensor
-            model or measured phase data
-        model: bool
-            flag to compute errors for model
+            phase data for all location
+        error: bool
+            flag to compute errors
         sigma_frequency: float
             frequency error
         sigma_phase: torch.Tensor
-            model or measured phase data errors
+            phase error data for all locations
+        model: bool
+            input is for model flag
 
         Returns
         -------
-        adjacent phase advance mod 2*pi and optional error (list)
+        adjacent phase advance mod 2*pi and error (tuple)
 
         """
         size, *_ = phase.shape
-        data = [cls.phase_advance(i, i + 1, frequency, phase, model, sigma_frequency, sigma_phase) for i in range(size)]
-        return torch.stack(data).T
+        index = torch.arange(0, size, dtype=torch.int64, device=phase.device)
+        return cls.phase_advance(index, index + 1, frequency, phase,
+                                 error=error, sigma_frequency=sigma_frequency, sigma_phase=sigma_phase, model=model)
 
 
     @classmethod
-    def phase_check(cls, q:float, Q:float, phase:torch.Tensor, PHASE:torch.Tensor, *,
-                    method:str='quantile', factor:float=10.0, epsilon:float=0.5,
-                    remove:bool=True, limit:int=5, **kwargs) -> tuple:
+    def phase_check(cls, frequency:float, frequency_model:float, phase:torch.Tensor, phase_model:torch.Tensor, *,
+                    drop_endpoints:bool=True, trust_sequence_length:int=5, factor:float=5.0) -> tuple:
         """
-        Perform synchronization check based on adjacent locations advance difference with model values.
+        Perform synchronization check based on adjacent advance difference for measured and model values.
 
         Only one turn error is checked
         Empty dict is returned if all locations pass
 
         Parameters
         ----------
-        q: float
+        frequency: float
             measured tune (fractional part)
-        Q: float
+        frequency_model: float
             model tune
         phase: torch.Tensor
             measured phase data
-        PHASE: torch.Tensor
+        phase_model: torch.Tensor
             model phase data
-        method: str
-            detection method ('quantile' or 'dbscan')
+        drop_endpoints: bool
+            flag to drop endpoints
+        trust_sequence_length: int
+            minimun trust sequence length
         factor: float
-            factor for quantile method
-        epsilon: float
-            epsilon for dbscan method
-        remove: bool
-            flag to remove endpoints
-        limit: int
-            sequence length limit
-        **kwargs:
-            passed to DBSCAN
+            threshold factor
 
         Returns
         -------
         ({marked: (shift, phase)}, auxiliary)
 
         """
-
         select = {}
         result = {}
 
-        advance_phase, _ = cls.phase_adjacent(q, phase)
-        advance_model, _ = cls.phase_adjacent(Q, PHASE)
+        advance_phase, _ = cls.phase_adjacent(frequency, phase, error=False)
+        advance_model, _ = cls.phase_adjacent(frequency_model, phase_model, error=False)
+
         advance_error = (advance_phase - advance_model)/advance_model
+        advance_error = standardize(advance_error, center_estimator=median, spread_estimator=biweight_midvariance)
 
         select['phase'] = advance_phase
         select['model'] = advance_model
         select['check'] = advance_phase
 
-        if method == 'dbscan':
-            advance_error = advance_error.cpu().numpy()
-            group = DBSCAN(eps=epsilon, **kwargs).fit(advance_error.reshape(-1, 1))
-            label = Counter(group.labels_)
-            label = max(label, key=label.get)
-            pairs, *_ = numpy.in1d(advance_error, advance_error[group.labels_ != label]).nonzero()
-            pairs = [[i, i + 1] for i in tuple(pairs)]
+        pair = set()
 
-        if method == 'quantile':
-            q_25 = torch.quantile(advance_error, 0.25).cpu().numpy()
-            q_75 = torch.quantile(advance_error, 0.75).cpu().numpy()
-            q_l = q_25 - factor*(q_75 - q_25)
-            q_u = q_75 + factor*(q_75 - q_25)
-            advance_error = advance_error.cpu().numpy()
-            pairs_l, *_ = numpy.where(advance_error < q_l)
-            pairs_u, *_ = numpy.where(advance_error > q_u)
-            pairs = (*tuple(pairs_l), *tuple(pairs_u))
-            pairs = [[i, i + 1] for i in pairs]
+        factor = torch.tensor(factor, dtype=advance_error.dtype, device=advance_error.device)
+        mask = threshold(advance_error, -factor, +factor).squeeze(0)
+        mark = make_mark(len(mask), mask.logical_not()).cpu().numpy()
+        pair.update(set((i, i + 1) for i in mark))
 
-        if pairs == []:
+        if len(pair) == 0:
             return result, select
 
-        table = chain(pairs)
+        table = chain([list(pair) for  pair in pair])
 
-        if remove:
+        if drop_endpoints:
             table = [*map(lambda chain: chain[1:-1] if len(chain) > len([1, 1]) else chain, table)]
 
         marked = [j for i in table for j in i]
         passed = chain([i for i in range(len(phase)) if i not in marked])
-        passed = numpy.array([element for sequence in passed for element in sequence if len(sequence) > limit])
+        passed = numpy.array([element for sequence in passed for element in sequence if len(sequence) > trust_sequence_length])
         for i in range(len(advance_error)):
             if i not in passed:
                 marked.append(i)
         marked = numpy.unique(numpy.array(marked))
 
+        marked = torch.tensor(marked, dtype=torch.int64)
+        passed = torch.tensor(passed, dtype=torch.int64)
+
         for index in marked:
 
-            local_model = torch.stack([cls.phase_advance(index, other, Q, PHASE) for other in passed])
+            local_model, _ = torch.stack([torch.tensor(cls.phase_advance(index, other, frequency_model, phase_model, error=False, model=True)) for other in passed]).T
 
             local_phase = torch.clone(phase)
-            phase_x = mod(local_phase[index] + 1.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            phase_x = mod(local_phase[index] + 1.0*2.0*numpy.pi*frequency, 2*numpy.pi, -numpy.pi).cpu().item()
             local_phase[index] = phase_x
-            local_phase = torch.stack([cls.phase_advance(index, other, q, local_phase) for other in passed])
+            local_phase, _ = torch.stack([torch.tensor(cls.phase_advance(index, other, frequency, local_phase, error=False, model=False)) for other in passed]).T
             error_x = torch.sum((local_model - local_phase)**2)
 
             local_phase = torch.clone(phase)
-            phase_y = mod(local_phase[index] + 0.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            phase_y = mod(local_phase[index] + 0.0*2.0*numpy.pi*frequency, 2*numpy.pi, -numpy.pi).cpu().item()
             local_phase[index] = phase_y
-            local_phase = torch.stack([cls.phase_advance(index, other, q, local_phase) for other in passed])
+            local_phase, _ = torch.stack([torch.tensor(cls.phase_advance(index, other, frequency, local_phase, error=False, model=False)) for other in passed]).T
             error_y = torch.sum((local_model - local_phase)**2)
 
             local_phase = torch.clone(phase)
-            phase_z = mod(local_phase[index] - 1.0*2.0*numpy.pi*q, 2*numpy.pi, -numpy.pi).cpu().item()
+            phase_z = mod(local_phase[index] - 1.0*2.0*numpy.pi*frequency, 2*numpy.pi, -numpy.pi).cpu().item()
             local_phase[index] = phase_z
-            local_phase = torch.stack([cls.phase_advance(index, other, q, local_phase) for other in passed])
+            local_phase, _ = torch.stack([torch.tensor(cls.phase_advance(index, other, frequency, local_phase, error=False, model=False)) for other in passed]).T
             error_z = torch.sum((local_model - local_phase)**2)
 
             error = torch.stack([error_x, error_y, error_z]).argmin().item()
-            select[index] = [phase_x, phase_y, phase_z][error]
-            result[index] = (error - 1, [phase_x, phase_y, phase_z][error])
+            select[index.item()] = [phase_x, phase_y, phase_z][error]
+            result[index.item()] = (error - 1, [phase_x, phase_y, phase_z][error])
 
         if result != {}:
             check = torch.clone(phase)
             for index in result:
                 check[index] = select[index]
-            advance_check, _ = cls.phase_adjacent(q, check)
+            advance_check, _ = cls.phase_adjacent(frequency, check)
             select['check'] = advance_check
 
         return result, select
@@ -838,11 +856,10 @@ class Decomposition():
 
     @classmethod
     def phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor,
-                      q:torch.Tensor, Q:torch.Tensor, phase:torch.Tensor, PHASE:torch.Tensor, *,
-                      full:bool=True, clean:bool=True, fit:bool=True, error:bool=True,
-                      factor:float=3.0,
-                      sigma_q:torch.Tensor=None, sigma_Q:torch.Tensor=None,
-                      sigma_phase:torch.Tensor=None, sigma_PHASE:torch.Tensor=None) -> dict:
+                    frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *,
+                    full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True,
+                    sigma_frequency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None,
+                    sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict:
         """
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
 
@@ -857,93 +874,93 @@ class Decomposition():
             range limit around probe location
         flags: torch.Tensor
             virtual/monitor flags 0/1 for each location
-        q: float
+        frequency: float
             measured tune (fractional part)
-        Q: float
+        frequency_model: float
             model tune
         phase: torch.Tensor
             measured phase data
-        PHASE: torch.Tensor
+        phase_model: torch.Tensor
             model phase data
         full: bool
-            flag to use locations on different turns
+            flag to allow indices on different turns
         clean: bool
-            flag to clean data using DBSCAN
+            flag to clean data (threashold)
         factor: float
-            epsilon = factor*data.std()
-        fit: bool
-            flag to fit data
+            threshold factor
         error:
             flag to compute errors
-        sigma_q: torch.Tensor
+        sigma_frequency: torch.Tensor
             measured tune error
-        sigma_Q: torch.Tensor
+        sigma_frequency_model: torch.Tensor
             model tune error
         sigma_phase: torch.Tensor
             measured phase error
-        sigma_PHASE: torch.Tensor
+        sigma_phase_model: torch.Tensor
             model phase error
 
         Returns
         -------
-        vrtual phase dict
+        virtual phase dictionary
 
         """
         result = {}
 
         count = len(phase)
-
-        limit = min(limit, count - 1)
+        limit = min(limit, count // 2 - 1)
 
         index = {}
-        for i in (i + probe for i in range(-limit, 1 + limit) if i != 0):
+        other = generate_other(probe, limit, flags)
+        for i in other:
             if flags[int(mod(i, count))] == 1:
                 index[i] = int(mod(i, count))
 
         if not full:
             index = {key: value for key, value in index.items() if key > 0 and key < count}
 
-        table = []
-        error = []
-        for i in index:
-            correct, correct_error = cls.phase_adjust(i, q, phase, sigma_q, sigma_phase)
-            advance, advance_error = cls.phase_advance(probe, i, Q, PHASE, True, sigma_Q, sigma_PHASE)
-            virtual, virtual_error = mod(correct - advance, 2.0*numpy.pi, -numpy.pi), (correct_error**2 + advance_error**2)**0.5
-            table.append(virtual)
-            error.append(virtual_error)
-
-        table = torch.stack(table)
-        error = torch.stack(error)
-
         result['model'] = None
         result['probe'] = probe
         result['limit'] = limit
         result['index'] = index
         result['clean'] = None
-        result['phase'] = table
-        result['error'] = error
+
+        other = torch.tensor(list(index.keys()), dtype=torch.int64, device=flags.device)
+        probe = probe*torch.ones_like(other)
+
+        correct, correct_error = cls.phase_adjust(other, frequency, phase,
+                                                  error=error, sigma_frequency=sigma_frequency, sigma_phase=sigma_phase)
+        advance, advance_error = cls.phase_advance(probe, other, frequency_model, phase_model,
+                                                   error=error, sigma_frequency=sigma_frequency_model, sigma_phase=sigma_phase_model, model=True)
+        virtual, virtual_error = mod(correct - advance, 2.0*numpy.pi, -numpy.pi), (correct_error**2 + advance_error**2).sqrt()
+
+        result['phase'] = virtual
+        result['error'] = virtual_error
 
         if clean:
-            epsilon = factor*table.std().cpu().numpy()
-            cluster = DBSCAN(eps=epsilon).fit(table.cpu().numpy().reshape(-1, 1))
-            primary = Counter(cluster.labels_)
-            primary = max(primary, key=primary.get)
-            clean = {key: index[key] for key, cluster in zip(index, cluster.labels_) if cluster != primary}
-            index = {key: index[key] for key, cluster in zip(index, cluster.labels_) if cluster == primary}
-            result['index'] = index
-            result['clean'] = clean
-            result['phase'] = table[cluster.labels_ == primary]
-            result['error'] = error[cluster.labels_ == primary]
+            center = median(virtual)
+            spread = biweight_midvariance(virtual).sqrt()
+            min_value, max_value = center - factor*spread, center + factor*spread
+            mask = threshold(virtual, min_value, max_value).squeeze(0)
+        else:
+            mask = torch.ones_like(virtual).to(torch.bool)
 
-        if fit:
-            x = numpy.ones((len(result['phase']), 1))
-            y = result['phase'].cpu().numpy()
-            s = result['error'].cpu().numpy()
-            w = x if error == None else (1/s**2)
-            fit = WLS(y, x, w).fit()
-            result['model'] = [fit.params.item(), fit.bse.item()]
+        result['clean'] = mask
+
+        weight = mask.to(virtual_error.dtype) if torch.allclose(virtual_error, torch.zeros_like(virtual_error)) else mask/virtual_error**2
+        center = weighted_mean(virtual, weight=weight)
+        spread = weighted_variance(virtual, weight=weight, center=center).sqrt()
+        result['model'] = torch.stack([center, spread])
 
         return result
+
+
+    def __repr__(self) -> str:
+        """
+        String representation.
+
+        """
+        return f'{self.__class__.__name__}({self.data})'
+
 
 def main():
     pass

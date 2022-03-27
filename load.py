@@ -26,16 +26,16 @@ with open('config.yaml', 'r') as stream:
     exit(exception)
 
 # Sort locations by position
-config = {key: config[key] for key in sorted(config.keys(), key=lambda name: config[name]['S'])}
+config = {key: config[key] for key in sorted(config.keys(), key=lambda name: config[name]['TIME'])}
 
-# Check START & END
-for name in ['START', 'END']:
+# Check HEAD & TAIN
+for name in ['HEAD', 'TAIL']:
   if name not in config:
     exit(f'error: {name} location is missing')
 
 # Load model frequency
-epics.caput('H:FREQUENCY:MODEL:X', config['END']['FX']/(2.0*numpy.pi))
-epics.caput('H:FREQUENCY:MODEL:Y', config['END']['FY']/(2.0*numpy.pi))
+epics.caput('H:FREQUENCY:MODEL:X', config['TAIL']['FX']/(2.0*numpy.pi))
+epics.caput('H:FREQUENCY:MODEL:Y', config['TAIL']['FY']/(2.0*numpy.pi))
 
 # Load monitor & virtual
 table = [*config.keys()]
@@ -60,13 +60,19 @@ for name, data in tqdm(config.items(), unit='record'):
   epics.caput(f'H:{name}:FLAG', data['FLAG'])
   epics.caput(f'H:{name}:JOIN', data['JOIN'])
   epics.caput(f'H:{name}:RISE', data['RISE'])
-  epics.caput(f'H:{name}:S', data['S'])
+  epics.caput(f'H:{name}:TIME', data['TIME'])
   epics.caput(f'H:{name}:MODEL:BX', data['BX'])
   epics.caput(f'H:{name}:MODEL:AX', data['AX'])
   epics.caput(f'H:{name}:MODEL:FX', data['FX'])
   epics.caput(f'H:{name}:MODEL:BY', data['BY'])
   epics.caput(f'H:{name}:MODEL:AY', data['AY'])
   epics.caput(f'H:{name}:MODEL:FY', data['FY'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_BX', data['SIGMA_BX'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_AX', data['SIGMA_AX'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_FX', data['SIGMA_FX'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_BY', data['SIGMA_BY'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_AY', data['SIGMA_AY'])
+  epics.caput(f'H:{name}:MODEL:SIGMA_FY', data['SIGMA_FY'])
   if args.test and name in table:
     epics.caput(f'H:{name}:DATA:X', frame['X'][name])
     epics.caput(f'H:{name}:DATA:Y', frame['Y'][name])

@@ -14,7 +14,7 @@ select.add_argument('--only', metavar='BPM', nargs='+', help='space separated li
 parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
 parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
 parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
-parser.add_argument('--median', action='store_true', help='flag to compute as median instead of mean')
+parser.add_argument('--median', action='store_true', help='flag to compute median instead of mean')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -27,7 +27,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 
@@ -69,7 +69,7 @@ if not bpm:
   exit(f'error: BPM list is empty')
 
 # Set BPM positions
-position = numpy.array(epics.caget_many([f'H:{name}:S' for name in bpm]))
+position = numpy.array(epics.caget_many([f'H:{name}:TIME' for name in bpm]))
 
 # Generate PV names
 pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
@@ -107,11 +107,6 @@ tbt = Data.from_epics(win, pv_list, pv_rise if args.rise else None, shift=offset
 # Compute orbit
 orbit = tbt.median().flatten().cpu().numpy() if args.median else tbt.mean().flatten().cpu().numpy()
 
-# Clean
-del win, tbt
-if device == 'cuda':
-  torch.cuda.empty_cache()
-
 # Plot
 if args.plot:
   df = pandas.DataFrame()
@@ -122,12 +117,7 @@ if args.plot:
   from plotly.express import line
   plot = line(df, x='POSITION', y=args.plane.upper(), hover_data=['S'], title=f'{TIME}: TbT (ORBIT)', markers=True)
   plot.update_layout(xaxis = dict(tickmode='array', tickvals=df['POSITION'], ticktext=df['BPM']))
-  config = {
-    'toImageButtonOptions': {'height':None, 'width':None},
-    'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-    'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
-    'scrollZoom': True
-  }
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Save to file

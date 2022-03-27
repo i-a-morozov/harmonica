@@ -16,11 +16,11 @@ transform.add_argument('--median', action='store_true', help='flag to remove med
 transform.add_argument('--normalize', action='store_true', help='flag to normalize data')
 parser.add_argument('-f', '--filter', choices=('none', 'svd', 'hankel'), help='filter type', default='none')
 parser.add_argument('--rank', type=int, help='rank to use for svd & hankel filter', default=8)
-parser.add_argument('--type', choices=('full', 'randomized'), help='computation type for hankel filter', default='randomized')
+parser.add_argument('--type', choices=('full', 'randomized'), help='SVD computation type for hankel filter', default='randomized')
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('--input', choices=('data', 'file'), help='input target', default='data')
-parser.add_argument('--file', type=str, help='input file name', default=None)
+parser.add_argument('--file', type=str, help='input file name (for --input file)', default=None)
 parser.add_argument('--output', choices=('data', 'file'), help='output target', default='file')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -33,7 +33,7 @@ import numpy
 import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make
+from harmonica.util import LIMIT, pv_make
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
