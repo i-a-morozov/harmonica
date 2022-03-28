@@ -55,7 +55,7 @@ class Decomposition():
         Compute phase advance mod 2*pi between adjacent locations.
     phase_check(cls, frequency:float, frequency_model:float, phase:torch.Tensor, phase_model:torch.Tensor, *, drop_endpoints:bool=True, trust_sequence_length:int=5, clean:bool=False, factor:float=5.0) -> tuple
         Perform synchronization check based on adjacent advance difference for measured and model values.
-    phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict
+    phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
     __repr__(self) -> str
         String representation.
@@ -857,7 +857,7 @@ class Decomposition():
     @classmethod
     def phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor,
                     frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *,
-                    full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True,
+                    use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True,
                     sigma_frequency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None,
                     sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict:
         """
@@ -882,6 +882,8 @@ class Decomposition():
             measured phase data
         phase_model: torch.Tensor
             model phase data
+        use_probe: bool
+            flag to use probe phase
         full: bool
             flag to allow indices on different turns
         clean: bool
@@ -911,6 +913,8 @@ class Decomposition():
 
         index = {}
         other = generate_other(probe, limit, flags)
+        if use_probe:
+            other.append(probe)
         for i in other:
             if flags[int(mod(i, count))] == 1:
                 index[i] = int(mod(i, count))

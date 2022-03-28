@@ -30,8 +30,12 @@ class Twiss():
         Model instance
     table: 'Table'
         Table instance
-    limit: int
-        range limit to use
+    flag: torch.Tensor
+            external flags for each model location
+    limit: int | tuple
+        range limit to use, (min, max), 1 <= min <= max, mim is excluded, for full range min==max
+    use_model: bool
+        flag to use precomputed model data
 
     Attributes
     ----------
@@ -39,18 +43,20 @@ class Twiss():
         Model instance
     table: 'Table'
         Table instance
-    limit: int
-        range limit to use
+    limit: int | tuple
+        range limit to use, (min, max), 1 <= min <= max, mim is excluded, for full range min==max
+    use_model: bool
+        flag to use precomputed model data
     dtype: torch.dtype
         data type (from model)
     device: torch.device
         data device (from model)
     flag: torch.Tensor
         location flags
-    data: torch.Tensor
-        list of other indices for each location
-    pair: torch.Tensor
-        list of pairs for each location
+    count: torch.Tensor
+        (uncoupled) range limit endpoints [1, 6, 15, 28, 45, 66, 91, 120, ...]
+    combo: torch.Tensor
+        (uncoupled) index combinations [..., [..., [[i, j], [i, k]], ...], ...]
     fx: torch.Tensor
         x phase for each location
     fy: torch.Tensor
@@ -103,7 +109,7 @@ class Twiss():
 
     Methods
     ----------
-    __init__(self, model:'Model', table:'Table', limit:int=8) -> None
+    __init__(self, model:'Model', table:'Table', limit:int=8, use_model:bool=False) -> None
         Twiss instance initialization.
     get_action(self, *, data_threshold:dict={'use': True, 'factor': 5.0}, data_dbscan:dict={'use': False, 'factor': 2.5}, data_local_outlier_factor:dict={'use': False, 'contamination': 0.01}, data_isolation_forest:dict={'use': False, 'contamination': 0.01}) -> None
         Estimate actions at each monitor location with optional data cleaning and estimate action center and spread.
@@ -147,7 +153,7 @@ class Twiss():
         Perform twiss loop with default parameters.
 
     """
-    def __init__(self, model:'Model', table:'Table', limit:int=8) -> None:
+    def __init__(self, model:'Model', table:'Table', flag:torch.Tensor=None, limit:int=8, use_model:bool=False) -> None:
         """
         Twiss instance initialization.
 
@@ -157,15 +163,27 @@ class Twiss():
             Model instance
         table: 'Table'
             Table instance
-        limit: int
-            range limit to use
+        flag: torch.Tensor
+            external flags for each model location
+        limit: int | tuple
+            range limit to use, (min, max), 1 <= min <= max, mim is excluded, for full range min==max
+        use_model: bool
+            flag to use precomputed model data
 
         Returns
         -------
         None
 
         """
-        self.model, self.table, self.limit = model, table, limit
+        self.model, self.table, self.limit, self.use_model = model, table, limit, use_model
+
+        self.limit = self.limit if isinstance(self.limit, tuple) else (self.limit, self.limit)
+
+        if self.use_model:
+            if self.model.limit is None:
+                raise Exception(f'TWISS: model limit is None')
+            if self.model.limit < max(self.limit):
+                raise Exception(f'TWISS: requested limit={self.limit} should be less than model limit={self.model.limit}')
 
         self.size, self.dtype, self.device = self.model.size, self.model.dtype, self.model.device
 
@@ -175,14 +193,40 @@ class Twiss():
         if self.model.monitor_name != self.table.name:
             raise Exception(f'TWISS: expected monitor names to match')
 
-        self.flag = [flag if kind == self.model._monitor else 0 for flag, kind in zip(self.model.flag, self.model.kind)]
-        self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
+        if flag is None:
+            self.flag = [flag if kind == self.model._monitor else 0 for flag, kind in zip(self.model.flag, self.model.kind)]
+            self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
+        else:
+            if len(flag) != self.size:
+                raise Exception(f'TWISS: external flag length {len(flag)}, expected length {self.size}')
+            self.flag = flag.to(torch.int64).to(self.device)
 
-        self.data = [generate_other(probe, self.limit, self.flag) for probe in range(self.model.size)]
-        self.pair = [generate_pairs(self.limit, 1 + 1, probe=probe, table=table) for probe, table in enumerate(self.data)]
+        if self.use_model:
+            self.count = self.model.count
+            self.combo = self.model.combo
+            self.index = self.model.index
+        else:
+            self.count = torch.tensor([limit*(2*limit - 1) for limit in range(1, max(self.limit) + 1)], dtype=torch.int64, device=self.device)
+            self.combo = [generate_other(probe, max(self.limit), self.flag) for probe in range(self.size)]
+            self.combo = torch.stack([generate_pairs(max(self.limit), 1 + 1, probe=probe, table=table, dtype=torch.int64, device=self.device) for probe, table in enumerate(self.combo)])
+            self.index = mod(self.combo, self.size).to(torch.int64)
 
-        self.data = torch.tensor(self.data, dtype=torch.int64, device=self.device)
-        self.pair = torch.tensor(self.pair, dtype=torch.int64, device=self.device)
+        limit_min, limit_max = self.limit
+
+        if limit_min == limit_max:
+            self.count = self.count[:limit_max]
+            *_, count_max = self.count
+            self.combo = self.combo[:, :count_max]
+            self.index = self.index[:, :count_max]
+
+        if limit_min < limit_max:
+            self.count = self.count[limit_min - 1:limit_max]
+            count_min, *_, count_max = self.count
+            self.combo = self.combo[:, count_min:count_max]
+            self.index = self.index[:, count_min:count_max]
+
+        if limit_min > limit_max:
+            raise Exception(f'TWISS: invalid limit={self.limit}')
 
         self.fx = torch.zeros_like(self.model.fx)
         self.fy = torch.zeros_like(self.model.fy)
@@ -209,6 +253,21 @@ class Twiss():
 
         self.ay, self.sigma_ay = torch.zeros_like(self.model.ay), torch.zeros_like(self.model.sigma_ay)
         self.by, self.sigma_by = torch.zeros_like(self.model.by), torch.zeros_like(self.model.sigma_by)
+
+        if self.use_model:
+            self.fx_ij, self.sigma_fx_ij = self.model.fx_ij.to(self.dtype).to(self.device), self.model.sigma_fx_ij.to(self.dtype).to(self.device)
+            self.fx_ik, self.sigma_fx_ik = self.model.fx_ik.to(self.dtype).to(self.device), self.model.sigma_fx_ik.to(self.dtype).to(self.device)
+            self.fy_ij, self.sigma_fy_ij = self.model.fy_ij.to(self.dtype).to(self.device), self.model.sigma_fy_ij.to(self.dtype).to(self.device)
+            self.fy_ik, self.sigma_fy_ik = self.model.fy_ik.to(self.dtype).to(self.device), self.model.sigma_fy_ik.to(self.dtype).to(self.device)
+
+        if self.use_model and flag != None:
+            size, length, *_ = self.index.shape
+            self.mask = torch.ones((size, length)).to(torch.bool).to(self.device)
+            for location, flag in enumerate(self.flag):
+                if not flag:
+                    _, other = self.index.swapaxes(0, -1)
+                    other = torch.mul(*(other != location).swapaxes(0, 1)).T
+                    self.mask = (self.mask == other)
 
 
     def get_action(self, *,
@@ -346,7 +405,7 @@ class Twiss():
         """
         self.virtual_x, self.virtual_y = {}, {}
 
-        limit = self.limit if limit is None else limit
+        limit = max(self.limit) if limit is None else limit
         exclude = [] if exclude is None else exclude
         index = [index for index in self.model.virtual_index if index not in exclude]
 
@@ -404,7 +463,7 @@ class Twiss():
         """
         self.correct_x, self.correct_y = {}, {}
 
-        limit = self.limit if limit is None else limit
+        limit = max(self.limit) if limit is None else limit
         index = self.model.monitor_index
 
         self.fx_correct, self.sigma_fx_correct = torch.clone(self.fx), torch.clone(self.sigma_fx)
@@ -572,7 +631,7 @@ class Twiss():
 
 
     def get_twiss_from_phase(self, *, virtual:bool=True, error:bool=True, model:bool=False,
-                             use_correct:bool=False, use_correct_sigma:bool=False) -> None:
+                             use_correct:bool=False, use_correct_sigma:bool=False, use_model:bool=False) -> None:
         """
         Estimate twiss from phase data.
 
@@ -589,6 +648,8 @@ class Twiss():
             flag to use corrected phases
         use_correct_sigma: bool
             flag to use corrected phase errors
+        use_model: bool
+            flag to use precomputed model data
 
         Returns
         -------
@@ -606,7 +667,7 @@ class Twiss():
         ax_m, bx_m = self.model.ax, self.model.bx
         ay_m, by_m = self.model.ay, self.model.by
 
-        index = self.pair.swapaxes(0, -1)
+        index = self.combo.swapaxes(0, -1)
 
         value, sigma = Decomposition.phase_advance(*index, self.table.nux, fx, error=error, model=False, sigma_frequency=self.table.sigma_nux, sigma_phase=sigma_fx)
         fx_ij, fx_ik = value.swapaxes(0, 1)
@@ -616,13 +677,23 @@ class Twiss():
         fy_ij, fy_ik = value.swapaxes(0, 1)
         sy_ij, sy_ik = sigma.swapaxes(0, 1)
 
-        value, sigma = Decomposition.phase_advance(*index, self.model.nux, self.model.fx, error=error*model, model=True, sigma_frequency=self.model.sigma_nux, sigma_phase=self.model.sigma_fx)
-        fx_m_ij, fx_m_ik = value.swapaxes(0, 1)
-        sx_m_ij, sx_m_ik = sigma.swapaxes(0, 1)
+        if use_model:
 
-        value, sigma = Decomposition.phase_advance(*index, self.model.nuy, self.model.fy, error=error*model, model=True, sigma_frequency=self.model.sigma_nuy, sigma_phase=self.model.sigma_fy)
-        fy_m_ij, fy_m_ik = value.swapaxes(0, 1)
-        sy_m_ij, sy_m_ik = sigma.swapaxes(0, 1)
+            fx_m_ij, fx_m_ik = self.fx_ij, self.fx_ik
+            sx_m_ij, sx_m_ik = self.sigma_fx_ij, self.sigma_fx_ik
+
+            fy_m_ij, fy_m_ik = self.fy_ij, self.fy_ik
+            sy_m_ij, sy_m_ik = self.sigma_fy_ij, self.sigma_fy_ik
+
+        else:
+
+            value, sigma = Decomposition.phase_advance(*index, self.model.nux, self.model.fx, error=error*model, model=True, sigma_frequency=self.model.sigma_nux, sigma_phase=self.model.sigma_fx)
+            fx_m_ij, fx_m_ik = value.swapaxes(0, 1)
+            sx_m_ij, sx_m_ik = sigma.swapaxes(0, 1)
+
+            value, sigma = Decomposition.phase_advance(*index, self.model.nuy, self.model.fy, error=error*model, model=True, sigma_frequency=self.model.sigma_nuy, sigma_phase=self.model.sigma_fy)
+            fy_m_ij, fy_m_ik = value.swapaxes(0, 1)
+            sy_m_ij, sy_m_ik = sigma.swapaxes(0, 1)
 
         ax, sigma_ax = self.phase_alfa(ax_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, model=model, sigma_a_m=self.model.sigma_ax, sigma_f_ij=sx_ij, sigma_f_ik=sx_ik, sigma_f_m_ij=sx_m_ij, sigma_f_m_ik=sx_m_ik)
         bx, sigma_bx = self.phase_beta(bx_m, fx_ij, fx_m_ij, fx_ik, fx_m_ik, error=error, model=model, sigma_b_m=self.model.sigma_bx, sigma_f_ij=sx_ij, sigma_f_ik=sx_ik, sigma_f_m_ij=sx_m_ij, sigma_f_m_ik=sx_m_ik)
@@ -674,7 +745,8 @@ class Twiss():
         mask (torch.Tensor)
 
         """
-        mask = torch.ones((self.model.size, self.limit*(2*self.limit - 1)), device=self.device).to(torch.bool)
+        size, length, *_ = self.index.shape
+        mask = torch.ones((size, length), device=self.device).to(torch.bool)
 
         if plane == 'x':
             a_m, b_m = self.model.ax.reshape(-1, 1), self.model.bx.reshape(-1, 1)
@@ -738,7 +810,8 @@ class Twiss():
         result = {}
 
         if mask == None:
-            mask = torch.ones((self.model.size, self.limit*(2*self.limit - 1)), dtype=self.dtype, device=self.device)
+                size, length, *_ = self.index.shape
+                mask = torch.ones((size, length), device=self.device).to(torch.bool)
 
         if plane == 'x':
             a, sigma_a, a_m = self.data_phase['ax'], self.data_phase['sigma_ax'], self.model.ax
@@ -974,6 +1047,7 @@ class Twiss():
 
         return df
 
+
     def __repr__(self) -> str:
         """
         String representation.
@@ -1004,7 +1078,7 @@ class Twiss():
         twiss table (pandas.DataFrame)
 
         """
-        limit = self.limit if limit is None else limit
+        limit = max(self.limit) if limit is None else limit
 
         self.get_action()
         self.get_twiss_from_amplitude()

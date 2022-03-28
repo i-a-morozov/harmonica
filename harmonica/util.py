@@ -214,36 +214,6 @@ def chain(pairs):
     return table
 
 
-# Generate pairs
-def generate_pairs(limit:int, count:int, *, probe:int=0, table:list=None) -> list:
-    """
-    Generate combinations of unique pairs of the probed location with other locations.
-
-    Note, the probed location has index 0, other locations are in range defined by limit
-
-    Parameters
-    ----------
-    limit: int
-        maximum distance from the probed location
-    count: int
-        number of unique locations in combination
-    table: list
-        list of other indices
-
-    Returns
-    -------
-    [..., [combination_i], ...]
-
-    """
-    other = [i for i in range(-limit, 1 + limit) if i != 0] if table is None else table
-    pairs = [(probe, i) for i in other]
-    stock = {pair: abs(sum(pair)) for pair in pairs}
-    combo = list(combinations(pairs, count))
-    stock = [sum(stock[j] for j in i) for i in combo]
-    combo = [[stock, list(map(list, combo))] for combo, stock in zip(combo, stock)]
-    return [pair for _, pair in sorted(combo)]
-
-
 # Generate indices of other locations
 def generate_other(probe:int, limit:int, flags:list, *, inverse:bool=True, forward:bool=True) -> list:
     """
@@ -292,6 +262,34 @@ def generate_other(probe:int, limit:int, flags:list, *, inverse:bool=True, forwa
     other.extend(local)
 
     return other
+
+
+# Generate pairs
+def generate_pairs(limit:int, count:int, *, probe:int=0, table:list=None, dtype=torch.int64, device='cpu') -> torch.Tensor:
+    """
+    Generate combinations of unique pairs of the probed location with other locations.
+
+    Note, the probed location has index 0, other locations are in range defined by limit if table is None
+
+    Parameters
+    ----------
+    limit: int
+        maximum distance from the probed location
+    count: int
+        number of unique locations in combination
+    table: list
+        list of other indices
+
+    Returns
+    -------
+    [..., [combination_i], ...]
+
+    """
+    other = [i for i in range(-limit, 1 + limit) if i != 0] if table is None else table
+    pairs = [[probe, i] for i in other]
+    combo = torch.tensor([*combinations(pairs, count)], dtype=dtype, device=device)
+    return combo[(combo - probe).abs().flatten(1).max(1).values.argsort()]
+
 
 # Make mark from mask
 def make_mark(size:int, mask:torch.Tensor, *,

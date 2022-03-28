@@ -7,12 +7,10 @@ import torch
 import numpy
 import pandas
 import yaml
+import json
 
-from .util import mod
-from .util import make_mask
-from .util import generate_other
+from .util import mod, make_mask, generate_other, generate_pairs
 from .decomposition import Decomposition
-
 
 class Model():
     """
@@ -24,6 +22,10 @@ class Model():
     ----------
     path: str
         path to config file
+    limit: int
+        maximum range limit
+    error: bool
+        flag to compute model advance errors
     dtype: torch.dtype
         data type
     device: torch.device
@@ -47,6 +49,10 @@ class Model():
         torch device
     path: str
         path to yaml file
+    limit: int
+        maximum range limit
+    error: bool
+        flag to compute model advance errors
     model: str
         model type ('uncoupled')
     dict: dict
@@ -59,7 +65,7 @@ class Model():
         location names
     kind: list
         location kinds (expected kinds _virtual or _monitor)
-    flag: list
+    flag: torch.Tensor
         flags
     join: list
         join flags
@@ -67,7 +73,7 @@ class Model():
         starting turn
     time: torch.Tensor
         position
-    length: flaot
+    length: torch.Tensor
         total length
     monitor_index: list
         list of monitor location indices
@@ -137,13 +143,41 @@ class Model():
         (uncoupled) y phase advance from each monitor location to the next one
     monitor_sigma_y: torch.Tensor
         (uncoupled) y phase advance error from each monitor location to the next one
+    count: torch.Tensor
+        (uncoupled) range limit endpoints [1, 6, 15, 28, 45, 66, 91, 120, ...]
+    combo: torch.Tensor
+        (uncoupled) index combinations [..., [..., [[i, j], [i, k]], ...], ...]
+    index: torch.Tensor
+        (uncoupled) index combimations mod number of locations
+    fx_ij: torch.Tensor
+        (uncoupled) x model advance i to j
+    fx_ik: torch.Tensor
+        (uncoupled) x model advance i to k
+    sigma_fx_ij: torch.Tensor
+        (uncoupled) x model advance error i to j
+    sigma_fx_ik: torch.Tensor
+        (uncoupled) x model advance error i to k
+    fy_ij: torch.Tensor
+        (uncoupled) y model advance i to j
+    fy_ik: torch.Tensor
+        (uncoupled) y model advance i to k
+    sigma_fy_ij: torch.Tensor
+        (uncoupled) y model advance error i to j
+    sigma_fy_ik: torch.Tensor
+        (uncoupled) y model advance error i to k
 
     Methods
     ----------
-    __init__(self, path:str=None, model:str='uncoupled', *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> None
+    __init__(self, path:str=None, limit:int=8, error:bool=False, model:str='uncoupled', *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> None
         Model instance initialization.
     uncoupled(self) -> None
         Set attributes for uncoupled model.
+    save_uncoupled(self, file:str='model.json') -> None
+        Save uncoupled model.
+    load_uncoupled(self, file:str='model.json') -> None
+        Load uncoupled model.
+    from_uncoupled(cls, file:str='model.json', *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> 'Model'
+        Initialize uncoupled model from file.
     get_name(self, index:int) -> str:
         Return name of given location index.
     get_index(self, name:str) -> int
@@ -176,7 +210,7 @@ class Model():
         Count number of virtual locations between probed and other including endpoints.
 
     """
-    def __init__(self, path:str=None, model:str='uncoupled', *,
+    def __init__(self, path:str=None, limit:int=None, error:bool=False, model:str='uncoupled', *,
                  dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> None:
         """
         Model instance initialization.
@@ -185,8 +219,10 @@ class Model():
         ----------
         path: str
             path to config file
-        decomposition: 'Decomposition'
-            Decomposition() class instance
+        limit: int
+            maximum rangle limit
+        model: str
+            model type ('uncoupled')
         dtype: torch.dtype
             data type
         device: torch.device
@@ -208,6 +244,8 @@ class Model():
         self.dtype, self.device = dtype, device
 
         self.path = path
+        self.limit = limit
+        self.error = error
         self.model = model
         self.dict = None
 
@@ -229,10 +267,13 @@ class Model():
             self.name = [*self.data_frame.columns]
 
             self.kind = [*self.data_frame.loc['TYPE'].values]
-            self.flag = [*self.data_frame.loc['FLAG'].values]
+            self.flag = [flag if kind == self._monitor else 0 for flag, kind in zip([*self.data_frame.loc['FLAG'].values], self.kind)]
             self.join = [*self.data_frame.loc['JOIN'].values]
             self.rise = [*self.data_frame.loc['RISE'].values]
-            self.time = torch.tensor([*self.data_frame.loc['TIME'].values], dtype=self.dtype, device=self.device)
+            self.time = [*self.data_frame.loc['TIME'].values]
+
+            self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
+            self.time = torch.tensor(self.time, dtype=self.dtype, device=self.device)
 
             *_, self.length = self.time
 
@@ -298,6 +339,151 @@ class Model():
         other = torch.tensor([generate_other(index.item(), 1, flags, inverse=False) for index in probe], dtype=torch.int64, device=self.device).flatten()
         self.monitor_phase_x, self.monitor_sigma_x = Decomposition.phase_advance(probe, other, self.nux, self.fx, error=True, sigma_frequency=self.sigma_nux, sigma_phase=self.sigma_fx, model=True)
         self.monitor_phase_y, self.monitor_sigma_y = Decomposition.phase_advance(probe, other, self.nuy, self.fy, error=True, sigma_frequency=self.sigma_nuy, sigma_phase=self.sigma_fy, model=True)
+
+        if self.limit != None:
+
+            self.count = torch.tensor([limit*(2*limit - 1) for limit in range(1, self.limit + 1)], dtype=torch.int64, device=self.device)
+            self.combo = [generate_other(probe, self.limit, self.flag) for probe in range(self.size)]
+            self.combo = torch.stack([generate_pairs(self.limit, 1 + 1, probe=probe, table=table, dtype=torch.int64, device=self.device) for probe, table in enumerate(self.combo)])
+            self.index = mod(self.combo, self.size).to(torch.int64)
+
+            index = self.combo.swapaxes(0, -1)
+
+            value, sigma = Decomposition.phase_advance(*index, self.nux, self.fx, error=self.error, model=True, sigma_frequency=self.sigma_nux, sigma_phase=self.sigma_fx)
+            self.fx_ij, self.fx_ik = value.swapaxes(0, 1)
+            self.sigma_fx_ij, self.sigma_fx_ik = sigma.swapaxes(0, 1)
+
+            value, sigma = Decomposition.phase_advance(*index, self.nuy, self.fy, error=self.error, model=True, sigma_frequency=self.sigma_nuy, sigma_phase=self.sigma_fy)
+            self.fy_ij, self.fy_ik = value.swapaxes(0, 1)
+            self.sigma_fy_ij, self.sigma_fy_ik = sigma.swapaxes(0, 1)
+
+
+    def save_uncoupled(self, file:str='model.json') -> None:
+        """
+        Save uncoupled model.
+
+        Parameters
+        ----------
+        file: str
+            file name
+
+        Returns
+        -------
+        None
+
+        """
+        skip = ['dtype', 'device', 'data_frame']
+
+        data = {}
+        for key, value in self.__dict__.items():
+            if key not in skip:
+                data[key] = value.cpu().tolist() if isinstance(value, torch.Tensor) else value
+
+        with open(file, 'w') as stream:
+            json.dump(data, stream)
+
+
+    def load_uncoupled(self, file:str='model.json') -> None:
+        """
+        Load uncoupled model.
+
+        Parameters
+        ----------
+        file: str
+            file name
+
+        Returns
+        -------
+        None
+
+        """
+        with open(file) as stream:
+            data = json.load(stream)
+
+        for key, value in data.items():
+            setattr(self, key, value)
+
+        self.data_frame = pandas.DataFrame.from_dict(self.dict)
+
+        self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
+        self.time = torch.tensor(self.time, dtype=self.dtype, device=self.device)
+
+        self.length = torch.tensor(self.length, dtype=self.dtype, device=self.device)
+
+        self.bx = torch.tensor(self.bx, dtype=self.dtype, device=self.device)
+        self.ax = torch.tensor(self.ax, dtype=self.dtype, device=self.device)
+        self.fx = torch.tensor(self.fx, dtype=self.dtype, device=self.device)
+        self.sigma_bx = torch.tensor(self.sigma_bx, dtype=self.dtype, device=self.device)
+        self.sigma_ax = torch.tensor(self.sigma_ax, dtype=self.dtype, device=self.device)
+        self.sigma_fx = torch.tensor(self.sigma_fx, dtype=self.dtype, device=self.device)
+
+        self.by = torch.tensor(self.by, dtype=self.dtype, device=self.device)
+        self.ay = torch.tensor(self.ay, dtype=self.dtype, device=self.device)
+        self.fy = torch.tensor(self.fy, dtype=self.dtype, device=self.device)
+        self.sigma_by = torch.tensor(self.sigma_by, dtype=self.dtype, device=self.device)
+        self.sigma_ay = torch.tensor(self.sigma_ay, dtype=self.dtype, device=self.device)
+        self.sigma_fy = torch.tensor(self.sigma_fy, dtype=self.dtype, device=self.device)
+
+        self.mux = torch.tensor(self.mux, dtype=self.dtype, device=self.device)
+        self.muy = torch.tensor(self.muy, dtype=self.dtype, device=self.device)
+        self.sigma_mux = torch.tensor(self.sigma_mux, dtype=self.dtype, device=self.device)
+        self.sigma_muy = torch.tensor(self.sigma_muy, dtype=self.dtype, device=self.device)
+
+        self.nux = torch.tensor(self.nux, dtype=self.dtype, device=self.device)
+        self.nuy = torch.tensor(self.nuy, dtype=self.dtype, device=self.device)
+        self.sigma_nux = torch.tensor(self.sigma_nux, dtype=self.dtype, device=self.device)
+        self.sigma_nuy = torch.tensor(self.sigma_nuy, dtype=self.dtype, device=self.device)
+
+        self.phase_x = torch.tensor(self.phase_x, dtype=self.dtype, device=self.device)
+        self.sigma_x = torch.tensor(self.sigma_x, dtype=self.dtype, device=self.device)
+        self.phase_y = torch.tensor(self.phase_y, dtype=self.dtype, device=self.device)
+        self.sigma_y = torch.tensor(self.sigma_y, dtype=self.dtype, device=self.device)
+
+        self.monitor_phase_x = torch.tensor(self.monitor_phase_x, dtype=self.dtype, device=self.device)
+        self.monitor_sigma_x = torch.tensor(self.monitor_sigma_x, dtype=self.dtype, device=self.device)
+        self.monitor_phase_y = torch.tensor(self.monitor_phase_y, dtype=self.dtype, device=self.device)
+        self.monitor_sigma_y = torch.tensor(self.monitor_sigma_y, dtype=self.dtype, device=self.device)
+
+        if self.limit != None:
+
+            self.count = torch.tensor(self.count, dtype=torch.int64, device=self.device)
+            self.combo = torch.tensor(self.combo, dtype=torch.int64, device=self.device)
+            self.index = torch.tensor(self.index, dtype=torch.int64, device=self.device)
+
+            self.fx_ij = torch.tensor(self.fx_ij, dtype=self.dtype, device=self.device)
+            self.fx_ik = torch.tensor(self.fx_ik, dtype=self.dtype, device=self.device)
+            self.sigma_fx_ij = torch.tensor(self.sigma_fx_ij, dtype=self.dtype, device=self.device)
+            self.sigma_fx_ik = torch.tensor(self.sigma_fx_ik, dtype=self.dtype, device=self.device)
+
+            self.fy_ij = torch.tensor(self.fy_ij, dtype=self.dtype, device=self.device)
+            self.fy_ik = torch.tensor(self.fy_ik, dtype=self.dtype, device=self.device)
+            self.sigma_fy_ij = torch.tensor(self.sigma_fy_ij, dtype=self.dtype, device=self.device)
+            self.sigma_fy_ik = torch.tensor(self.sigma_fy_ik, dtype=self.dtype, device=self.device)
+
+
+    @classmethod
+    def from_uncoupled(cls, file:str='model.json', *,
+                       dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> 'Model':
+        """
+        Initialize uncoupled model from file.
+
+        Parameters
+        ----------
+        file: str
+            file name
+        dtype: torch.dtype
+            data type
+        device: torch.device
+            data device
+
+        Returns
+        -------
+        Model
+
+        """
+        model = cls(path=None, dtype=dtype, device=device)
+        model.load_uncoupled(file=file)
+        return model
 
 
     def get_name(self, index:int) -> str:

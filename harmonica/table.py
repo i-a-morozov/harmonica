@@ -11,7 +11,7 @@ class Table():
     """
     Returns
     ----------
-    Model class instance.
+    Table class instance.
 
     Parameters
     ----------
