@@ -57,6 +57,10 @@ class Twiss():
         (uncoupled) range limit endpoints [1, 6, 15, 28, 45, 66, 91, 120, ...]
     combo: torch.Tensor
         (uncoupled) index combinations [..., [..., [[i, j], [i, k]], ...], ...]
+    shape: torch.Size
+        initial shape of combo
+    distance: torch.Tensor
+        (uncoupled) distance
     fx: torch.Tensor
         x phase for each location
     fy: torch.Tensor
@@ -127,6 +131,12 @@ class Twiss():
         Estimate twiss from phase data.
     filter_twiss(self, plane:str = 'x', *, phase:dict={'use': True, 'threshold': 10.00}, model:dict={'use': True, 'threshold': 00.50}, value:dict={'use': True, 'threshold': 00.50}, sigma:dict={'use': True, 'threshold': 00.25}, limit:dict={'use': True, 'threshold': 05.00}) -> dict
         Filter twiss for given data plane and cleaning options.
+    mask_range(self, limit:tuple) -> torch.Tensor
+        Generate weight mask based on given range limit.
+    mask_location(self, table:list) -> torch.Tensor
+        Generate weight mask based on given range limit.
+    mask_distance(self, function) -> torch.Tensor
+        Generate weight mask based on given range limit.
     process_twiss(self, plane:str='x', *, weight:bool=True, mask:torch.Tensor=None) -> dict
         Process twiss data.
     get_ax(self, index:int) -> torch.Tensor
@@ -211,6 +221,12 @@ class Twiss():
             self.combo = torch.stack([generate_pairs(max(self.limit), 1 + 1, probe=probe, table=table, dtype=torch.int64, device=self.device) for probe, table in enumerate(self.combo)])
             self.index = mod(self.combo, self.size).to(torch.int64)
 
+        self.shape = self.combo.shape
+
+        self.distance = torch.ones(max(self.limit)*(2*max(self.limit) - 1), dtype=self.dtype, device=self.device)
+        for index in self.count:
+            self.distance[index:] += 1.0
+
         limit_min, limit_max = self.limit
 
         if limit_min == limit_max:
@@ -218,12 +234,14 @@ class Twiss():
             *_, count_max = self.count
             self.combo = self.combo[:, :count_max]
             self.index = self.index[:, :count_max]
+            self.distance = self.distance[:count_max]
 
         if limit_min < limit_max:
             self.count = self.count[limit_min - 1:limit_max]
             count_min, *_, count_max = self.count
             self.combo = self.combo[:, count_min:count_max]
             self.index = self.index[:, count_min:count_max]
+            self.distance = self.distance[count_min:count_max]
 
         if limit_min > limit_max:
             raise Exception(f'TWISS: invalid limit={self.limit}')
@@ -264,7 +282,7 @@ class Twiss():
             size, length, *_ = self.index.shape
             self.mask = torch.ones((size, length)).to(torch.bool).to(self.device)
             for location, flag in enumerate(self.flag):
-                if not flag:
+                if not flag and self.model.flag[location] != 0:
                     _, other = self.index.swapaxes(0, -1)
                     other = torch.mul(*(other != location).swapaxes(0, 1)).T
                     self.mask = (self.mask == other)
@@ -784,6 +802,97 @@ class Twiss():
             mask *= threshold(standardize(a, center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
             mask *= threshold(standardize(b, center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
 
+        return mask
+
+
+    def mask_range(self, limit:tuple) -> torch.Tensor:
+        """
+        Generate weight mask based on given range limit.
+
+        Parameters
+        ----------
+        limit: tuple
+            range limit to use, (min, max), 1 <= min <= max, mim is excluded, for full range min==max
+
+        Returns
+        -------
+        weight mask (torch.Tensor)
+
+        """
+        size, length, *_ = self.shape
+        mask = torch.zeros((size, length), dtype=torch.int64, device=self.device)
+
+        count = torch.tensor([limit*(2*limit - 1) for limit in range(1, max(self.limit) + 1)], dtype=torch.int64, device=self.device)
+        limit_min, limit_max = limit
+
+        if limit_min == limit_max:
+            count = count[:limit_max]
+            *_, count_max = count
+            mask[:, :count_max] = 1
+
+        if limit_min < limit_max:
+            count = count[limit_min - 1:limit_max]
+            count_min, *_, count_max = count
+            mask[:, count_min:count_max] = 1
+
+        count = torch.tensor([limit*(2*limit - 1) for limit in range(1, max(self.limit) + 1)], dtype=torch.int64, device=self.device)
+
+        limit_min, limit_max = self.limit
+
+        if limit_min == limit_max:
+            count = count[:limit_max]
+            *_, count_max = count
+            mask = mask[:, :count_max]
+
+        if limit_min < limit_max:
+            count = count[limit_min - 1:limit_max]
+            count_min, *_, count_max = count
+            mask = mask[:, count_min:count_max]
+
+        return mask
+
+
+    def mask_location(self, table:list) -> torch.Tensor:
+        """
+        Generate weight mask based on given range limit.
+
+        Parameters
+        ----------
+        table: list
+            list of locations to remove
+
+        Returns
+        -------
+        weight mask (torch.Tensor)
+
+        """
+        size, length, *_ = self.combo.shape
+        mask = torch.zeros((size, length), dtype=torch.int64, device=self.device)
+
+        for location in table:
+            _, other = self.index.swapaxes(0, -1)
+            other = torch.mul(*(other != location).swapaxes(0, 1)).T
+            mask = (mask == other)
+
+        return mask.logical_not()
+
+
+    def mask_distance(self, function) -> torch.Tensor:
+        """
+        Generate weight mask based on given range limit.
+
+        Parameters
+        ----------
+        function: Callable
+            function to apply to distance data
+
+        Returns
+        -------
+        weight mask (torch.Tensor)
+
+        """
+        mask = torch.stack([function(distance) for distance in self.distance])
+        mask = torch.stack([mask for _ in range(self.size)])
         return mask
 
 
