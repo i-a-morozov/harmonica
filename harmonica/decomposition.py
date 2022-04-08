@@ -797,7 +797,7 @@ class Decomposition():
         factor = torch.tensor(factor, dtype=advance_error.dtype, device=advance_error.device)
         mask = threshold(advance_error, -factor, +factor).squeeze(0)
         mark = make_mark(len(mask), mask.logical_not()).cpu().numpy()
-        pair.update(set((i, i + 1) for i in mark))
+        pair.update(set((i, i + 1) for i in mark if i < len(advance_error) - 1))
 
         if len(pair) == 0:
             return result, select

@@ -115,7 +115,7 @@ class Twiss():
     ----------
     __init__(self, model:'Model', table:'Table', limit:int=8, use_model:bool=False) -> None
         Twiss instance initialization.
-    get_action(self, *, data_threshold:dict={'use': True, 'factor': 5.0}, data_dbscan:dict={'use': False, 'factor': 2.5}, data_local_outlier_factor:dict={'use': False, 'contamination': 0.01}, data_isolation_forest:dict={'use': False, 'contamination': 0.01}) -> None
+    get_action(self, *, data_threshold:dict={'use': True, 'factor': 5.0}, data_dbscan:dict={'use': False, 'factor': 2.5}, data_local_outlier_factor:dict={'use': False, 'contamination': 0.01}, data_isolation_forest:dict={'use': False, 'contamination': 0.01}, bx:torch.Tensor=None, by:torch.Tensor=None, sigma_bx:torch.Tensor=None, sigma_by:torch.Tensor=None)
         Estimate actions at each monitor location with optional data cleaning and estimate action center and spread.
     get_twiss_from_amplitude(self) -> None
         Estimate twiss from amplitude.
@@ -199,9 +199,6 @@ class Twiss():
 
         if self.model.monitor_count != self.table.size:
             raise Exception(f'TWISS: expected {self.model.monitor_count} monitors in Model, got {self.table.size} in Table')
-
-        if self.model.monitor_name != self.table.name:
-            raise Exception(f'TWISS: expected monitor names to match')
 
         if flag is None:
             self.flag = [flag if kind == self.model._monitor else 0 for flag, kind in zip(self.model.flag, self.model.kind)]
@@ -292,7 +289,9 @@ class Twiss():
                    data_threshold:dict={'use': True, 'factor': 5.0},
                    data_dbscan:dict={'use': False, 'factor': 2.5},
                    data_local_outlier_factor:dict={'use': False, 'contamination': 0.01},
-                   data_isolation_forest:dict={'use': False, 'contamination': 0.01}) -> None:
+                   data_isolation_forest:dict={'use': False, 'contamination': 0.01},
+                   bx:torch.Tensor=None, by:torch.Tensor=None,
+                   sigma_bx:torch.Tensor=None, sigma_by:torch.Tensor=None) -> None:
         """
         Estimate actions at each monitor location with optional data cleaning and estimate action center and spread.
 
@@ -306,6 +305,14 @@ class Twiss():
             parameters for local outlier factor detector
         data_isolation_forest: dict
             parameters for isolation forest detector
+        bx: torch.Tensor
+            bx values at monitor locations
+        by: torch.Tensor
+            by values at monitor locations
+        sigma_bx: torch.Tensor
+            bx errors at monitor locations
+        sigma_by: torch.Tensor
+            by errors at monitor locations
 
         Returns
         -------
@@ -316,11 +323,22 @@ class Twiss():
 
         index = self.model.monitor_index
 
-        jx = self.table.ax**2/(2.0*self.model.bx[index])
-        jy = self.table.ay**2/(2.0*self.model.by[index])
+        bx = bx if bx is not None else self.model.bx[index]
+        by = by if by is not None else self.model.by[index]
 
-        sigma_jx = self.table.ax/self.model.bx[index]*self.table.sigma_ax
-        sigma_jy = self.table.ay/self.model.by[index]*self.table.sigma_ay
+        sigma_bx = sigma_bx if sigma_bx is not None else self.model.sigma_bx[index]
+        sigma_by = sigma_by if sigma_by is not None else self.model.sigma_by[index]
+
+        jx = self.table.ax**2/(2.0*bx)
+        jy = self.table.ay**2/(2.0*by)
+
+        sigma_jx  = self.table.ax**2/bx**2*self.table.sigma_ax**2
+        sigma_jx += self.table.ax**4/bx**4/4*sigma_bx**2
+        sigma_jx.sqrt_()
+
+        sigma_jy  = self.table.ay**2/by**2*self.table.sigma_ay**2
+        sigma_jy += self.table.ay**4/by**4/4*sigma_by**2
+        sigma_jy.sqrt_()
 
         mask = torch.clone(self.flag[index])
         mask = torch.stack([mask, mask]).to(torch.bool)

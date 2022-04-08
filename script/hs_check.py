@@ -155,11 +155,6 @@ phase, _, _ = dec.harmonic_phase(q, length=args.length, order=args.window, facto
 # Check
 check, table= Decomposition.phase_check(q, Q, phase, PHASE, factor=args.factor)
 
-# Legend
-print('-1: increase rise by one turn')
-print('+1: decrease rise by one turn')
-print()
-
 # Print result
 for marked in check:
   index, value = check[marked]

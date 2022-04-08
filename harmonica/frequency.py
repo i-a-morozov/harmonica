@@ -429,6 +429,7 @@ class Frequency():
         """
         index = [*range(self.size)]
         x = self.ffrft_bin.to(torch.long)
+        x = x - (x == (self.length - 1)).to(torch.long) + (x == 0).to(torch.long)
         y1 = self.ffrft_spectrum[index, x - 1]
         y2 = self.ffrft_spectrum[index, x]
         y3 = self.ffrft_spectrum[index, x + 1]
