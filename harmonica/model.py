@@ -4,6 +4,7 @@ Model module.
 """
 
 import torch
+import functorch
 import numpy
 import pandas
 import yaml
@@ -687,6 +688,442 @@ class Model():
 
         """
         return self.count(probe, other) - self.count_monitor(probe, other)
+
+
+    @staticmethod
+    @functorch.vmap
+    def matrix_uncoupled(ax1:torch.Tensor, bx1:torch.Tensor, ax2:torch.Tensor, bx2:torch.Tensor, fx12:torch.Tensor,
+                         ay1:torch.Tensor, by1:torch.Tensor, ay2:torch.Tensor, by2:torch.Tensor, fy12:torch.Tensor) -> torch.Tensor:
+        """
+        Generate uncoupled transport matrices using twiss data between given locations.
+
+        Input twiss parameters should be 1D tensors with matching length
+
+        Parameters
+        ----------
+        ax1, bx1, ay1, by1: torch.Tensor
+            twiss parameters at the 1st location(s)
+        ax2, bx2, ay2, by2: torch.Tensor
+            twiss parameters at the 2nd location(s)
+        fx12, fy12: torch.Tensor
+            twiss phase advance between locations
+
+        Returns
+        -------
+        uncoupled transport matrices (torch.Tensor)
+
+        """
+        cx = torch.cos(fx12)
+        sx = torch.sin(fx12)
+
+        mx11 = torch.sqrt(bx2/bx1)*(cx + ax1*sx)
+        mx12 = torch.sqrt(bx1*bx2)*sx
+        mx21 = -(1 + ax1*ax2)/torch.sqrt(bx1*bx2)*sx + (ax1 - ax2)/torch.sqrt(bx1*bx2)*cx
+        mx22 = torch.sqrt(bx1/bx2)*(cx - ax2*sx)
+
+        rx1 = torch.stack([mx11, mx12])
+        rx2 = torch.stack([mx21, mx22])
+
+        mx = torch.stack([rx1, rx2])
+
+        cy = torch.cos(fy12)
+        sy = torch.sin(fy12)
+
+        my11 = torch.sqrt(by2/by1)*(cy + ay1*sy)
+        my12 = torch.sqrt(by1*by2)*sy
+        my21 = -(1 + ay1*ay2)/torch.sqrt(by1*by2)*sy + (ay1 - ay2)/torch.sqrt(by1*by2)*cy
+        my22 = torch.sqrt(by1/by2)*(cy - ay2*sy)
+
+        ry1 = torch.stack([my11, my12])
+        ry2 = torch.stack([my21, my22])
+
+        my = torch.stack([ry1, ry2])
+
+        return torch.block_diag(mx, my)
+
+
+    @staticmethod
+    @functorch.vmap
+    def matrix_kick(kn:torch.Tensor, ks:torch.Tensor) -> torch.Tensor:
+        """
+        Generate thin quadrupole kick matrices.
+
+        Input parameters should be 1D tensors with matching length
+
+        Parameters
+        ----------
+        kn, ks: torch.Tensor
+            kn, ks
+
+        Returns
+        -------
+        thin quadrupole kick matrices (torch.Tensor)
+
+        """
+        i = torch.ones_like(kn)
+        o = torch.zeros_like(kn)
+
+        m = torch.stack([
+                torch.stack([i,   o,   o, o]),
+                torch.stack([-kn, i, +ks, o]),
+                torch.stack([  o, o,   i, o]),
+                torch.stack([+ks, o, +kn, i])
+            ])
+
+        return m
+
+
+    @staticmethod
+    @functorch.vmap
+    def matrix_roll(angle:torch.Tensor) -> torch.Tensor:
+        """
+        Generate roll rotation matrices.
+
+        Input parameter should be a 1D tensor
+
+        Parameters
+        ----------
+        angle: torch.Tensor
+            roll angle
+
+        Returns
+        -------
+        roll rotation matrices (torch.Tensor)
+
+        """
+        o = torch.zeros_like(angle)
+
+        c = torch.cos(angle)
+        s = torch.sin(angle)
+
+        m = torch.stack([
+                torch.stack([ c,  o, s, o]),
+                torch.stack([ o,  c, o, s]),
+                torch.stack([-s,  o, c, o]),
+                torch.stack([ o, -s, o, c])
+            ])
+
+        return m
+
+
+    def matrix(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor:
+        """
+        Generate uncoupled transport matrix (or matrices) for given locations.
+
+        Matrices are generated from probe to other
+        One-turn matrices are generated where probe == other
+        Input parameters should be 1D tensors with matching length
+        Additionaly probe and/or other input parameter can be an int or str in self.name (not checked)
+
+        Parameters
+        ----------
+        probe: torch.Tensor
+            probe locations
+        other: torch.Tensor
+            other locations
+
+        Returns
+        -------
+        uncoupled transport matrices (torch.Tensor)
+
+        """
+        if isinstance(probe, int):
+            probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
+
+        if isinstance(probe, str):
+            probe = torch.tensor([self.name.index(probe)], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, int):
+            other = torch.tensor([other], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, str):
+            other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
+
+        other[probe == other] += self.size
+
+        fx, _ = Decomposition.phase_advance(probe, other, self.nux, self.fx)
+        fy, _ = Decomposition.phase_advance(probe, other, self.nuy, self.fy)
+
+        probe = mod(probe, self.size).to(torch.int64)
+        other = mod(other, self.size).to(torch.int64)
+
+        return self.matrix_uncoupled(self.ax[probe], self.bx[probe], self.ax[other], self.bx[other], fx,
+                                self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy).squeeze()
+
+
+    @staticmethod
+    def twiss(matrix:torch.Tensor, *, epsilon:float=1.0E-12) -> tuple:
+        """
+        Compute Wolski twiss parameters for given one-turn input matrix.
+
+        Input matrix can have arbitrary even dimension
+        In-plane 'beta' is used for ordering
+        If input matrix is unstable, return None for each output
+
+        Symplectic block is [[0, 1], [-1, 0]]
+        Complex block is 1/sqrt(2)*[[1, 1j], [1, -1j]]
+        Rotation block is [[cos(t), sin(t)], [-sin(t), cos(t)]]
+
+        Parameters
+        ----------
+        matrix: torch.Tensor
+            one-turn matrix
+        epsilon: float
+            tolerance epsilon
+
+        Returns
+        -------
+        tunes [T_1, ..., T_k], normalization matrix N and Wolski twiss matrices W = [W_1, ..., W_k] (tuple)
+        M = N R N^-1 = ... + W_i S sin(T_i) - (W_i S)^2 cos(T_i) + ..., i = 1, ..., k
+
+        """
+        dtype = matrix.dtype
+        device = matrix.device
+
+        rdtype = torch.tensor(1, dtype=dtype).abs().dtype
+        cdtype = (1j*torch.tensor(1, dtype=dtype)).dtype
+
+        dimension = len(matrix) // 2
+
+        b_p = torch.tensor([[1, 0], [0, 1]], dtype=rdtype, device=device)
+        b_s = torch.tensor([[0, 1], [-1, 0]], dtype=rdtype, device=device)
+        b_c = 0.5**0.5*torch.tensor([[1, +1j], [1, -1j]], dtype=cdtype, device=device)
+
+        m_p = torch.stack([torch.block_diag(*[b_p*(i == j) for i in range(dimension)]) for j in range(dimension)])
+        m_s = torch.block_diag(*[b_s for _ in range(dimension)])
+        m_c = torch.block_diag(*[b_c for i in range(dimension)])
+
+        l, v = torch.linalg.eig(matrix)
+
+        if (l.abs() - epsilon > 1).sum():
+            return None, None, None
+
+        l, v = l.reshape(dimension, -1), v.T.reshape(dimension, -1, 2*dimension)
+        for i, (v1, v2) in enumerate(v):
+            v[i] /= (-1j*(v1 @ m_s.to(cdtype) @ v2)).abs().sqrt()
+
+        for i in range(dimension):
+            order = torch.imag(l[i].log()).argsort()
+            l[i], v[i] = l[i, order], v[i, order]
+
+        t = 1.0 - l.log().abs().mean(-1)/(2.0*numpy.pi)
+
+        n = torch.cat([*v]).T.conj()
+        n = (n @ m_c).real
+        w = torch.zeros_like(m_p)
+        for i in range(dimension):
+            w[i] = n @ m_p[i] @ n.T
+
+        order = torch.tensor([w[i].diag().argmax() for i in range(dimension)]).argsort()
+        t, v = t[order], v[order]
+        n = torch.cat([*v]).T.conj()
+        n = (n @ m_c).real
+
+        flag = torch.stack(torch.hsplit(n.T @ m_s @ n - m_s, dimension)).abs().sum((1, -1)) > epsilon
+        for i in range(dimension):
+            if flag[i]:
+                t[i] = (1 - t[i]).abs()
+                v[i] = v[i].conj()
+
+        n = torch.cat([*v]).T.conj()
+        n = (n @ m_c).real
+
+        rotation = []
+        for i in range(dimension):
+            angle = (n[2*i, 2*i + 1] + 1j*n[2*i, 2*i]).angle() - 0.5*numpy.pi
+            block = torch.tensor([[angle.cos(), angle.sin()], [-angle.sin(), angle.cos()]])
+            rotation.append(block)
+
+        n = n @ torch.block_diag(*rotation)
+        for i in range(dimension):
+            w[i] = n @ m_p[i] @ n.T
+
+        return t, n, w
+
+
+    @staticmethod
+    def propagate_twiss(twiss:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor:
+        """
+        Propagate Wolski twiss parameters.
+
+        Parameters
+        ----------
+        wolski: torch.Tensor
+            initial wolski twiss parameters
+        matrix: torch.Tensor
+            batch of transport matrices
+
+        Returns
+        -------
+        final wolski twiss parameters for each matrix (torch.Tensor)
+
+        """
+        data = torch.zeros((len(matrix), *twiss.shape), dtype=twiss.dtype, device=twiss.device).swapaxes(0, 1)
+
+        for i in torch.arange(len(data), device=twiss.device):
+            data[i] = torch.matmul(matrix, torch.matmul(twiss[i], matrix.swapaxes(1, -1)))
+
+        return data
+
+
+    @staticmethod
+    def advance_twiss(normal:torch.Tensor, matrix:torch.Tensor) -> tuple:
+        """
+        Compute phase advance and final normalization matrix.
+
+        Phase advance is mod 2*pi
+
+        Parameters
+        ----------
+        normal: torch.Tensor
+            initial normalization matrix
+        matrix: torch.Tensor
+            transport matrix
+
+        Returns
+        -------
+        phase advance and final normalization matrix (tuple)
+
+        """
+        dimension = len(normal) // 2
+
+        local = torch.matmul(matrix, normal)
+        table = torch.tensor([torch.arctan2(local[2*i, 2*i + 1], local[2*i, 2*i]) for i in range(dimension)])
+
+        rotation = []
+        for angle in table:
+            block = torch.tensor([[angle.cos(), -angle.sin()], [angle.sin(), angle.cos()]])
+            rotation.append(block)
+
+        return table, local @ torch.block_diag(*rotation)
+
+
+    @staticmethod
+    def lb_normal(a1x:torch.Tensor, b1x:torch.Tensor, a2x:torch.Tensor, b2x:torch.Tensor,
+                  a1y:torch.Tensor, b1y:torch.Tensor, a2y:torch.Tensor, b2y:torch.Tensor,
+                  u:torch.Tensor, v1:torch.Tensor, v2:torch.Tensor, *,
+                  epsilon:float=1.0E-12) -> torch.Tensor:
+        """
+        Generate Lebedev-Bogacz normalization matrix.
+
+        a1x, b1x, a2y, b2y are 'in-plane' twiss parameters
+
+        Parameters
+        ----------
+        a1x, b1x, a2x, b2x, a1y, b1y, a2y, b2y, u, v1, v2: torch.Tensor
+            Lebedev-Bogacz twiss parameters
+        epsilon: float
+            tolerance epsilon
+
+        Returns
+        -------
+        normalization matrix (torch.Tensor)
+        M = N R N^-1
+
+        """
+        cv1, sv1 = v1.cos(), v1.sin()
+        cv2, sv2 = v2.cos(), v2.sin()
+        if b1x < epsilon: b1x *= 0.0
+        if b2x < epsilon: b2x *= 0.0
+        if b1y < epsilon: b1y *= 0.0
+        if b2y < epsilon: b2y *= 0.0
+        return torch.tensor(
+            [
+                [b1x.sqrt(), 0, b2x.sqrt()*cv2, -b2x.sqrt()*sv2],
+                [-a1x/b1x.sqrt(), (1-u)/b1x.sqrt(), (-a2x*cv2 + u*sv2)/b2x.sqrt(), (a2x*sv2 + u*cv2)/b2x.sqrt()],
+                [b1y.sqrt()*cv1, -b1y.sqrt()*sv1, b2y.sqrt(), 0],
+                [(-a1y*cv1 + u*sv1)/b1y.sqrt(), (a1y*sv1 + u*cv1)/b1y.sqrt(), -a2y/b2y.sqrt(), (1-u)/b2y.sqrt()]
+            ]
+        ).nan_to_num(posinf=0.0, neginf=0.0)
+
+
+    @classmethod
+    def cs_normal(cls, ax:torch.Tensor, bx:torch.Tensor, ay:torch.Tensor, by:torch.Tensor) -> torch.Tensor:
+        """
+        Generate Courant-Snyder normalization matrix.
+
+        Parameters
+        ----------
+        ax, bx, ay, by: torch.Tensor
+            Courant-Snyder twiss parameters
+        epsilon: float
+            tolerance epsilon
+
+        Returns
+        -------
+        normalization matrix (torch.Tensor)
+        M = N R N^-1
+
+        """
+        return cls.lb_normal(*torch.tensor([ax, bx, 0, 0, 0, 0, ay, by, 0, 0, 0]))
+
+
+    @classmethod
+    def convert_wolski_lb(cls, twiss:torch.Tensor) -> torch.Tensor:
+        """
+        Convert Wolski twiss to Lebedev-Bogacz twiss.
+
+        """
+        a1x = -twiss[0, 0, 1]
+        b1x = +twiss[0, 0, 0]
+        a2x = -twiss[1, 0, 1]
+        b2x = +twiss[1, 0, 0]
+
+        a1y = -twiss[0, 2, 3]
+        b1y = +twiss[0, 2, 2]
+        a2y = -twiss[1, 2, 3]
+        b2y = +twiss[1, 2, 2]
+
+        u = 1/2*(1 + a1x**2 - a1y**2 - b1x*twiss[0, 1, 1] + b1y*twiss[0, 3, 3])
+
+        cv1 = (1/torch.sqrt(b1x*b1y)*twiss[0, 0, 2]).nan_to_num(nan=-1.0)
+        sv1 = (1/u*(a1y*cv1 + 1/torch.sqrt(b1x)*(torch.sqrt(b1y)*twiss[0, 0, 3]))).nan_to_num(nan=0.0)
+
+        cv2 = (1/torch.sqrt(b2x*b2y)*twiss[1, 0, 2]).nan_to_num(nan=+1.0)
+        sv2 = (1/u*(a2x*cv2 + 1/torch.sqrt(b2y)*(torch.sqrt(b2x)*twiss[1, 1, 2]))).nan_to_num(nan=0.0)
+
+        v1 = torch.arctan2(sv1, cv1)
+        v2 = torch.arctan2(sv2, cv2)
+
+        return torch.tensor([a1x, b1x, a2x, b2x, a1y, b1y, a2y, b2y, u, v1, v2])
+
+
+    @classmethod
+    def convert_lb_wolski(cls,
+                          a1x:torch.Tensor, b1x:torch.Tensor, a2x:torch.Tensor, b2x:torch.Tensor,
+                          a1y:torch.Tensor, b1y:torch.Tensor, a2y:torch.Tensor, b2y:torch.Tensor,
+                          u:torch.Tensor, v1:torch.Tensor, v2:torch.Tensor) -> torch.Tensor:
+        """
+        Convert Lebedev-Bogacz twiss to Wolski twiss.
+
+        """
+        n = cls.lb_normal(a1x, b1x, a2x, b2x, a1y, b1y, a2y, b2y, u, v1, v2)
+
+        p1 = torch.tensor([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], dtype=n.dtype, device=n.device)
+        p2 = torch.tensor([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=n.dtype, device=n.device)
+
+        w1 = torch.matmul(n, torch.matmul(p1, n.T))
+        w2 = torch.matmul(n, torch.matmul(p2, n.T))
+
+        return torch.stack([w1, w2])
+
+
+    @classmethod
+    def convert_wolski_cs(cls, twiss):
+        """
+        Convert Wolski twiss to Courant-Snyder twiss.
+
+        """
+        return cls.convert_wolski_lb(twiss)[[0, 1, 6, 7]]
+
+
+    @classmethod
+    def convert_cs_wolski(cls, ax:torch.Tensor, bx:torch.Tensor, ay:torch.Tensor, by:torch.Tensor) -> torch.Tensor:
+        """
+        Convert Courant-Snyder twiss to Wolski twiss.
+
+        """
+        return cls.convert_lb_wolski(*torch.tensor([ax, bx, 0, 0, 0, 0, ay, by, 0, 0, 0]))
 
 
 def main():

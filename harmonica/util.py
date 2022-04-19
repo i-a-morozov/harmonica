@@ -133,27 +133,27 @@ def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
     None
 
     """
-    epics.caput(f'H:{name}:TYPE',     data.get('TYPE'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:FLAG',     data.get('FLAG'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:JOIN',     data.get('JOIN'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:RISE',     data.get('RISE'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:TIME',     data.get('TIME'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:TYPE', data.get('TYPE'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:FLAG', data.get('FLAG'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:JOIN', data.get('JOIN'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:RISE', data.get('RISE'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:TIME', data.get('TIME'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:BX', data.get('BX'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:AX', data.get('AX'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:FX', data.get('FX'),   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:BX', data.get('BX'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:AX', data.get('AX'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:FX', data.get('FX'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:BY', data.get('BY'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:AY', data.get('AY'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:FY', data.get('FY'),   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:BY', data.get('BY'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:AY', data.get('AY'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:FY', data.get('FY'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:SIGMA_BX', data.get('SIGMA_BX'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_AX', data.get('SIGMA_AX'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_FX', data.get('SIGMA_FX'),   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_BX', data.get('SIGMA_BX'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_AX', data.get('SIGMA_AX'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_FX', data.get('SIGMA_FX'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:SIGMA_BY', data.get('SIGMA_BY'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_AY', data.get('SIGMA_AY'),   connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_FY', data.get('SIGMA_FY'),   connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_BY', data.get('SIGMA_BY'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_AY', data.get('SIGMA_AY'), connection_timeout=connection_timeout)
+    epics.caput(f'H:{name}:MODEL:SIGMA_FY', data.get('SIGMA_FY'), connection_timeout=connection_timeout)
 
 
 # Load TbT data from file
@@ -333,6 +333,96 @@ def make_mask(size:int, mark:torch.Tensor, *,
     mask = torch.zeros(size, dtype=dtype, device=device)
     mask[mark] = True
     return mask
+
+
+def symplectic(dimension:int, *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor:
+    """
+    Generate symplectic 'identity' matrix for given input dimension.
+
+    Symplectic block is [[0, 1], [-1, 0]]
+
+    Parameters
+    ----------
+    dimension: int
+        configuration space dimension
+    dtype: torch.dtype
+        data type
+    device: torch.device
+        data device
+
+    Returns
+    -------
+    symplectic 'identity' matrix (torch.Tensor)
+
+    """
+    block = torch.tensor([[0, 1], [-1, 0]], dtype=dtype, device=device)
+    return torch.block_diag(*[block for _ in range(dimension)])
+
+
+def is_symplectic(matrix:torch.Tensor, *, epsilon:float=1.0E-12) -> bool:
+    """
+    Test symplectic condition for given input matrix.
+
+    M.T @ S @ M == S
+
+    Parameters
+    ----------
+    matrix: torch.Tensor
+        input matrix
+    epsilon: float
+        tolerance epsilon
+
+    Returns
+    -------
+    test result (bool)
+
+    """
+    dimension = len(matrix) // 2
+    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
+    return all(epsilon > (matrix.T @ s @ matrix - s).abs().flatten())
+
+
+def to_symplectic(matrix:torch.Tensor) -> torch.Tensor:
+    """
+    Perform symplectification of given input matrix.
+
+    WEPCH152, EPAC06
+
+    Parameters
+    ----------
+    matrix: torch.Tensor
+        input matrix
+
+    Returns
+    -------
+    symplectified matrix (torch.Tensor)
+
+    """
+    dimension = len(matrix) // 2
+    i = torch.eye(2*dimension, dtype=matrix.dtype, device=matrix.device)
+    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
+    v = s @ (i - matrix) @ (i + matrix).inverse()
+    w = 0.5*(v + v.T)
+    return (s + w).inverse() @ (s - w)
+
+
+def inverse(matrix:torch.Tensor) -> torch.Tensor:
+    """
+    Compute symplectic inverse of given input matrix.
+
+    Parameters
+    ----------
+    matrix: torch.Tensor
+        input matrix
+
+    Returns
+    -------
+    inverse matrix (torch.Tensor)
+
+    """
+    dimension = len(matrix) // 2
+    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
+    return -s @ matrix.T @ s
 
 
 def fst(array):
