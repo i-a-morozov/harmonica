@@ -487,209 +487,6 @@ class Model():
         return model
 
 
-    def get_name(self, index:int) -> str:
-        """
-        Return name of given location index.
-
-        """
-        index = int(mod(index, self.size))
-
-        return self.name[index]
-
-
-    def get_index(self, name:str) -> int:
-        """
-        Return index of given location name.
-
-        """
-        return self.name.index(name)
-
-
-    def is_monitor(self, index:int) -> bool:
-        """
-        Return True, if location is a monitor.
-
-        """
-        index = int(mod(index, self.size))
-        return self[index].get('TYPE') == self._monitor
-
-
-    def is_virtual(self, index:int) -> bool:
-        """
-        Return True, if location is a virtual.
-
-        """
-        index = int(mod(index, self.size))
-        return self[index].get('TYPE') == self._virtual
-
-
-    def is_same(self, probe:int, other:int) -> bool:
-        """
-        Return True, if locations are at the same place.
-
-        """
-        probe = int(mod(probe, self.size))
-        other = int(mod(other, self.size))
-        delta = abs(self[probe].get('TIME') - self[other].get('TIME'))
-        if delta < self._epsilon:
-            return True
-        if abs(delta - self.length) < self._epsilon:
-            return True
-        return False
-
-
-    def __len__(self) -> int:
-        """
-        Return total number of locations (monitor & virtual).
-
-        """
-        return self.size
-
-
-    def __getitem__(self, index:int) -> dict:
-        """
-        Return corresponding self.dict value for given location index.
-
-        """
-        if self.dict is None:
-            return None
-        return self.dict[self.name[index]]
-
-
-    def __call__(self, index:int) -> dict:
-        """
-        Return corresponding self.dict value for given location index or name.
-
-        """
-        if self.dict is None:
-            return None
-        index = int(mod(index, self.size))
-        if isinstance(index, int):
-            return self[index]
-        return self.dict[index] if index in self.name else None
-
-
-    def __repr__(self) -> str:
-        """
-        String representation.
-
-        """
-        return f'Model(path={self.path}, model={self.model})'
-
-
-    def get_next(self, probe:int) -> list:
-        """
-        Return next location index and name.
-
-        """
-        if isinstance(probe, int):
-            index = int(mod(probe + 1, self.size))
-            return [probe + 1, index, self.name[index]]
-        return self.get_next(self.name.index(probe))
-
-
-    def get_next_monitor(self, probe:int) -> list:
-        """
-        Return next monitor location index and name.
-
-        Note, probe itself must be a monitor location.
-
-        """
-        if isinstance(probe, int):
-            if probe not in self.monitor_index:
-                return []
-            other = self.monitor_index.index(probe) + 1
-            count = 1 if other >= self.monitor_count else 0
-            other = self.monitor_index[int(mod(other, self.monitor_count))]
-            return [other + count*self.size, other, self.name[other]]
-        return self.get_next_monitor(self.name.index(probe))
-
-
-    def get_next_virtual(self, probe:int) -> list:
-        """
-        Return next virtual location index and name.
-
-        Note, probe itself must be a virtual location.
-
-        """
-        if isinstance(probe, int):
-            if probe not in self.virtual_index:
-                return []
-            other = self.virtual_index.index(probe) + 1
-            count = 1 if other >= self.virtual_count else 0
-            other = self.virtual_index[int(mod(other, self.virtual_count))]
-            return [other + count*self.size, other, self.name[other]]
-        return self.get_next_virtual(self.name.index(probe))
-
-
-    def count(self, probe:int, other:int) -> int:
-        """
-        Count number of locations between probed and other including endpoints.
-
-        Note, both can be negative
-
-        Parameters
-        ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of locations (int)
-
-        """
-        return len(range(probe, other + 1) if probe < other else range(other, probe + 1))
-
-
-    def count_monitor(self, probe:int, other:int) -> int:
-        """
-        Count number of monitor locations between probed and other including endpoints.
-
-        Note, both can be negative
-
-        Parameters
-        ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of monitor locations (int)
-
-        """
-        index = torch.tensor(range(probe, other + 1) if probe < other else range(other, probe + 1), dtype=self.dtype, device=self.device)
-        index = mod(index, self.size).to(torch.int64)
-        flag = [flag if kind == self._monitor else 0 for flag, kind in zip(self.flag, self.kind)]
-        flag = torch.tensor(flag, dtype=torch.int64, device=self.device)
-        count = flag[index]
-        return count.sum().item()
-
-
-    def count_virtual(self, probe:int, other:int) -> int:
-        """
-        Count number of virtual locations between probed and other including endpoints.
-
-        Note, both can be negative
-
-        Parameters
-        ----------
-        probe: int
-            first location
-        other: int
-            second location
-
-        Returns
-        -------
-        number of virual locations (int)
-
-        """
-        return self.count(probe, other) - self.count_monitor(probe, other)
-
-
     @staticmethod
     @functorch.vmap
     def matrix_uncoupled(ax1:torch.Tensor, bx1:torch.Tensor, ax2:torch.Tensor, bx2:torch.Tensor, fx12:torch.Tensor,
@@ -849,6 +646,137 @@ class Model():
 
         return self.matrix_uncoupled(self.ax[probe], self.bx[probe], self.ax[other], self.bx[other], fx,
                                 self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy).squeeze()
+
+    def make_transport(self) -> None:
+        """
+        Set transport matrices between adjacent locations.
+
+        self.transport[i] is a transport matrix from i to i + 1
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        """
+        probe = torch.arange(self.size, dtype=torch.int64, device=self.device)
+        other = 1 + probe
+        self.transport = self.matrix(probe, other)
+
+
+    def make_kick(self, kn:torch.Tensor=None, ks:torch.Tensor=None) -> None:
+        """
+        Generate thin quadrupole kick matrices for each segment.
+
+        self.kick[i] is a kick matrix at the end of segment i
+
+        Parameters
+        ----------
+        kn, ks: torch.Tensor
+            kn, ks
+
+        Returns
+        -------
+        None
+
+        """
+        if isinstance(kn, float):
+            kn = kn*torch.randn(self.size, dtype=self.dtype, device=self.device)
+
+        if isinstance(ks, float):
+            ks = ks*torch.randn(self.size, dtype=self.dtype, device=self.device)
+
+        if len(kn) == self.size and len(ks) == self.size:
+            self.kick = self.matrix_kick(kn, ks)
+            self.error_kn = kn
+            self.error_ks = ks
+
+
+    def make_roll(self, angle:torch.Tensor=None) -> None:
+        """
+        Generate roll matrices for each segment.
+
+        self.roll[i] is a roll matrix at the end of segment i
+
+        Parameters
+        ----------
+        angle: torch.Tensor
+            roll angle
+
+        Returns
+        -------
+        None
+
+        """
+        if isinstance(angle, float):
+            angle = angle*torch.randn(self.size, dtype=self.dtype, device=self.device)
+
+        if len(angle) == self.size:
+            self.roll = self.matrix_roll(angle)
+            self.error_angle = angle
+
+
+    def apply_error(self) -> None:
+        """
+        Apply errors to each transport segment.
+
+        self.transport[i] = self.roll[i] @ self.kick[i] @ self.transport[i]
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        """
+        if hasattr(self, 'kick'):
+            self.transport = torch.matmul(self.kick, self.transport)
+
+        if hasattr(self, 'roll'):
+            self.transport = torch.matmul(self.roll, self.transport)
+
+
+    def make_turn(self) -> None:
+        """
+        Generate one-turn matrix at 'HEAD' location.
+
+        Set self.turn attribute
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        """
+        self.turn, *_ = self.transport
+        for i in range(1, self.size):
+            self.turn = self.transport[i] @ self.turn
+
+
+    @staticmethod
+    def matrix_rotation(angle:torch.Tensor) -> torch.Tensor:
+        """
+        Generate rotation matrix for given angles.
+
+        Parameters
+        ----------
+        angle: torch.Tensor
+            rotation angles
+
+        Returns
+        -------
+        rotation matrix (torch.Tensor)
+
+        """
+        return torch.block_diag(*[torch.tensor([[value.cos(), +value.sin()], [-value.sin(), value.cos()]]) for value in angle])
 
 
     @staticmethod
@@ -1124,6 +1052,301 @@ class Model():
 
         """
         return cls.convert_lb_wolski(*torch.tensor([ax, bx, 0, 0, 0, 0, ay, by, 0, 0, 0]))
+
+
+    def make_twiss(self) -> bool:
+        """
+        Compute Wolski twiss parameters.
+
+        Set self.is_stable attribute and if self.stable is True
+
+        Set Wolski twiss parameters self.wolski, self.woski[i] are parameters at location i
+        Note, Wolski twiss parameters can be converted to LB/CS using self.convert_wolski_lb/cs(self.wolski[i])
+
+        Set normalization matrices self.normal, self.normal[i] is a normalization matrix at location i
+
+        Set phase advance between adjacent locations self.advance, self.advance[i] is a phase advance from i to i + 1
+        And self.tune is accumulated phase advance over 2*pi
+
+        self.transport[i] = self.normal[i + 1] @ self.make_roration(self.advance[i]) @ self.normal[i].inverse()
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        stable flag (bool)
+
+        """
+        if not hasattr(self, 'transport'):
+            self.make_transport()
+
+        if not hasattr(self, 'turn'):
+            self.make_turn()
+
+        tune, normal, wolski = self.twiss(self.turn)
+
+        self.is_stable = tune is not None
+
+        if not self.is_stable:
+            return self.is_stable
+
+        self.tune = tune
+
+        self.normal = torch.zeros((self.size, *self.turn.shape), dtype=self.dtype, device=self.device)
+        self.wolski = torch.zeros((self.size, *wolski.shape), dtype=self.dtype, device=self.device)
+        self.advance = torch.zeros((self.size, *self.tune.shape), dtype=self.dtype, device=self.device)
+
+        for i in range(self.size):
+
+            self.wolski[i] = torch.clone(wolski)
+            wolski = self.propagate_twiss(wolski, self.transport[i].unsqueeze(0)).squeeze()
+
+            self.normal[i] = torch.clone(normal)
+            self.advance[i], normal = self.advance_twiss(normal, self.transport[i])
+
+        self.tune = self.advance.sum(0)/(2.0*numpy.pi)
+
+        return self.is_stable
+
+
+    def make_trajectory(self, length:int, initial:torch.Tensor) -> torch.Tensor:
+        """
+        Generate test trajectories for given initial condition.
+
+        Parameters
+        ----------
+        length: int
+            number of iterations
+        initial: torch.Tensor
+            initial condition at 'HEAD' location
+
+        Returns
+        -------
+        trajectories (torch.Tensor)
+
+        """
+        if not hasattr(self, 'transport'):
+            self.make_transport()
+
+        if not hasattr(self, 'turn'):
+            self.make_turn()
+
+        trajectory = torch.zeros((self.size, length, *initial.shape), dtype=self.dtype, device=self.device)
+
+        trajectory[0, 0] = initial
+
+        for i in range(1, length):
+            trajectory[0, i] = self.turn @ trajectory[0, i - 1]
+
+        for i in range(1, self.size):
+            trajectory[i] = (self.transport[i - 1] @ trajectory[i - 1].T).T
+
+        return trajectory
+
+
+    def get_name(self, index:int) -> str:
+        """
+        Return name of given location index.
+
+        """
+        index = int(mod(index, self.size))
+
+        return self.name[index]
+
+
+    def get_index(self, name:str) -> int:
+        """
+        Return index of given location name.
+
+        """
+        return self.name.index(name)
+
+
+    def is_monitor(self, index:int) -> bool:
+        """
+        Return True, if location is a monitor.
+
+        """
+        index = int(mod(index, self.size))
+        return self[index].get('TYPE') == self._monitor
+
+
+    def is_virtual(self, index:int) -> bool:
+        """
+        Return True, if location is a virtual.
+
+        """
+        index = int(mod(index, self.size))
+        return self[index].get('TYPE') == self._virtual
+
+
+    def is_same(self, probe:int, other:int) -> bool:
+        """
+        Return True, if locations are at the same place.
+
+        """
+        probe = int(mod(probe, self.size))
+        other = int(mod(other, self.size))
+        delta = abs(self[probe].get('TIME') - self[other].get('TIME'))
+        if delta < self._epsilon:
+            return True
+        if abs(delta - self.length) < self._epsilon:
+            return True
+        return False
+
+
+    def __len__(self) -> int:
+        """
+        Return total number of locations (monitor & virtual).
+
+        """
+        return self.size
+
+
+    def __getitem__(self, index:int) -> dict:
+        """
+        Return corresponding self.dict value for given location index.
+
+        """
+        if self.dict is None:
+            return None
+        return self.dict[self.name[index]]
+
+
+    def __call__(self, index:int) -> dict:
+        """
+        Return corresponding self.dict value for given location index or name.
+
+        """
+        if self.dict is None:
+            return None
+        index = int(mod(index, self.size))
+        if isinstance(index, int):
+            return self[index]
+        return self.dict[index] if index in self.name else None
+
+
+    def __repr__(self) -> str:
+        """
+        String representation.
+
+        """
+        return f'Model(path={self.path}, model={self.model})'
+
+
+    def get_next(self, probe:int) -> list:
+        """
+        Return next location index and name.
+
+        """
+        if isinstance(probe, int):
+            index = int(mod(probe + 1, self.size))
+            return [probe + 1, index, self.name[index]]
+        return self.get_next(self.name.index(probe))
+
+
+    def get_next_monitor(self, probe:int) -> list:
+        """
+        Return next monitor location index and name.
+
+        Note, probe itself must be a monitor location.
+
+        """
+        if isinstance(probe, int):
+            if probe not in self.monitor_index:
+                return []
+            other = self.monitor_index.index(probe) + 1
+            count = 1 if other >= self.monitor_count else 0
+            other = self.monitor_index[int(mod(other, self.monitor_count))]
+            return [other + count*self.size, other, self.name[other]]
+        return self.get_next_monitor(self.name.index(probe))
+
+
+    def get_next_virtual(self, probe:int) -> list:
+        """
+        Return next virtual location index and name.
+
+        Note, probe itself must be a virtual location.
+
+        """
+        if isinstance(probe, int):
+            if probe not in self.virtual_index:
+                return []
+            other = self.virtual_index.index(probe) + 1
+            count = 1 if other >= self.virtual_count else 0
+            other = self.virtual_index[int(mod(other, self.virtual_count))]
+            return [other + count*self.size, other, self.name[other]]
+        return self.get_next_virtual(self.name.index(probe))
+
+
+    def count(self, probe:int, other:int) -> int:
+        """
+        Count number of locations between probed and other including endpoints.
+
+        Note, both can be negative
+
+        Parameters
+        ----------
+        probe: int
+            first location
+        other: int
+            second location
+
+        Returns
+        -------
+        number of locations (int)
+
+        """
+        return len(range(probe, other + 1) if probe < other else range(other, probe + 1))
+
+
+    def count_monitor(self, probe:int, other:int) -> int:
+        """
+        Count number of monitor locations between probed and other including endpoints.
+
+        Note, both can be negative
+
+        Parameters
+        ----------
+        probe: int
+            first location
+        other: int
+            second location
+
+        Returns
+        -------
+        number of monitor locations (int)
+
+        """
+        index = torch.tensor(range(probe, other + 1) if probe < other else range(other, probe + 1), dtype=self.dtype, device=self.device)
+        index = mod(index, self.size).to(torch.int64)
+        flag = [flag if kind == self._monitor else 0 for flag, kind in zip(self.flag, self.kind)]
+        flag = torch.tensor(flag, dtype=torch.int64, device=self.device)
+        count = flag[index]
+        return count.sum().item()
+
+
+    def count_virtual(self, probe:int, other:int) -> int:
+        """
+        Count number of virtual locations between probed and other including endpoints.
+
+        Note, both can be negative
+
+        Parameters
+        ----------
+        probe: int
+            first location
+        other: int
+            second location
+
+        Returns
+        -------
+        number of virual locations (int)
+
+        """
+        return self.count(probe, other) - self.count_monitor(probe, other)
 
 
 def main():
