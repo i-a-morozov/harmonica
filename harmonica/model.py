@@ -179,6 +179,54 @@ class Model():
         Load uncoupled model.
     from_uncoupled(cls, file:str='model.json', *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> 'Model'
         Initialize uncoupled model from file.
+    matrix_uncoupled(ax1:torch.Tensor, bx1:torch.Tensor, ax2:torch.Tensor, bx2:torch.Tensor, fx12:torch.Tensor, ay1:torch.Tensor, by1:torch.Tensor, ay2:torch.Tensor, by2:torch.Tensor, fy12:torch.Tensor) -> torch.Tensor
+        Generate uncoupled transport matrices using twiss data between given locations.
+    matrix_drif(l:torch.Tensor) -> torch.Tensor
+        Generate drift matrices.
+    matrix_kick(kn:torch.Tensor, ks:torch.Tensor) -> torch.Tensor
+        Generate thin quadrupole kick matrices.
+    matrix_roll(angle:torch.Tensor) -> torch.Tensor
+        Generate roll rotation matrices.
+    matrix(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor
+        Generate uncoupled transport matrix (or matrices) for given locations.
+    make_transport(self) -> None
+        Set transport matrices between adjacent locations.
+    matrix_transport(self, probe:int, other:int) -> torch.Tensor
+        Generate transport matrix from probe to other using self.transport.
+    make_kick(self, kn:torch.Tensor=None, ks:torch.Tensor=None) -> None
+        Generate thin quadrupole kick matrices for each segment.
+    make_roll(self, angle:torch.Tensor=None) -> None
+        Generate roll matrices for each segment.
+    make_angle(self, angle:torch.Tensor=None) -> None
+        Generate orbit kick angles.
+    apply_error(self) -> None
+        Apply errors to each transport segment.
+    make_turn(self) -> None
+        Generate one-turn matrix at 'HEAD' location.
+    matrix_rotation(angle:torch.Tensor) -> torch.Tensor
+        Generate rotation matrix for given angles.
+    twiss(matrix:torch.Tensor, *, epsilon:float=1.0E-12) -> tuple
+        Compute Wolski twiss parameters for given one-turn input matrix.
+    propagate_twiss(twiss:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
+        Propagate Wolski twiss parameters.
+    advance_twiss(normal:torch.Tensor, matrix:torch.Tensor) -> tuple
+        Compute phase advance and final normalization matrix.
+    lb_normal(a1x:torch.Tensor, b1x:torch.Tensor, a2x:torch.Tensor, b2x:torch.Tensor, a1y:torch.Tensor, b1y:torch.Tensor, a2y:torch.Tensor, b2y:torch.Tensor, u:torch.Tensor, v1:torch.Tensor, v2:torch.Tensor, *, epsilon:float=1.0E-12) -> torch.Tensor
+        Generate Lebedev-Bogacz normalization matrix.
+    cs_normal(cls, ax:torch.Tensor, bx:torch.Tensor, ay:torch.Tensor, by:torch.Tensor) -> torch.Tensor
+        Generate Courant-Snyder normalization matrix.
+    convert_wolski_lb(cls, twiss:torch.Tensor) -> torch.Tensor
+        Convert Wolski twiss to Lebedev-Bogacz twiss.
+    convert_lb_wolski(cls, a1x:torch.Tensor, b1x:torch.Tensor, a2x:torch.Tensor, b2x:torch.Tensor, a1y:torch.Tensor, b1y:torch.Tensor, a2y:torch.Tensor, b2y:torch.Tensor, u:torch.Tensor, v1:torch.Tensor, v2:torch.Tensor) -> torch.Tensor
+        Convert Lebedev-Bogacz twiss to Wolski twiss.
+    convert_wolski_cs(cls, twiss)
+        Convert Wolski twiss to Courant-Snyder twiss.
+    convert_cs_wolski(cls, ax:torch.Tensor, bx:torch.Tensor, ay:torch.Tensor, by:torch.Tensor) -> torch.Tensor
+        Convert Courant-Snyder twiss to Wolski twiss.
+    make_twiss(self) -> bool
+        Compute Wolski twiss parameters.
+    make_trajectory(self, length:int, initial:torch.Tensor, *, full:bool=True) -> torch.Tensor
+        Generate test trajectories for given initial condition.
     get_name(self, index:int) -> str:
         Return name of given location index.
     get_index(self, name:str) -> int
@@ -541,6 +589,37 @@ class Model():
 
     @staticmethod
     @functorch.vmap
+    def matrix_drif(l:torch.Tensor) -> torch.Tensor:
+        """
+        Generate drift matrices.
+
+        Input parameter should be a 1D tensor
+
+        Parameters
+        ----------
+        l: torch.Tensor
+            drift length
+
+        Returns
+        -------
+        drift matrices (torch.Tensor)
+
+        """
+        i = torch.ones_like(l)
+        o = torch.zeros_like(l)
+
+        m = torch.stack([
+                torch.stack([i, l, o, o]),
+                torch.stack([o, i, o, o]),
+                torch.stack([o, o, i, l]),
+                torch.stack([o, o, o, i])
+            ])
+
+        return m
+
+
+    @staticmethod
+    @functorch.vmap
     def matrix_kick(kn:torch.Tensor, ks:torch.Tensor) -> torch.Tensor:
         """
         Generate thin quadrupole kick matrices.
@@ -667,6 +746,41 @@ class Model():
         self.transport = self.matrix(probe, other)
 
 
+    def matrix_transport(self, probe:int, other:int) -> torch.Tensor:
+        """
+        Generate transport matrix from probe to other using self.transport.
+
+        Parameters
+        ----------
+        probe: int
+            probe location
+        other: int
+            other location
+
+        Returns
+        -------
+        transport matrix (torch.Tensor)
+
+        """
+        if isinstance(probe, str):
+            probe = self.name.index(probe)
+
+        if isinstance(other, str):
+            other = self.name.index(other)
+
+        if probe < other:
+            matrix = self.transport[probe]
+            for i in range(probe + 1, other):
+                matrix = self.transport[int(mod(i, self.size))] @ matrix
+            return matrix
+
+        if probe > other:
+            matrix = self.transport[other]
+            for i in range(other + 1, probe):
+                matrix = self.transport[int(mod(i, self.size))] @ matrix
+            return torch.inverse(matrix)
+
+
     def make_kick(self, kn:torch.Tensor=None, ks:torch.Tensor=None) -> None:
         """
         Generate thin quadrupole kick matrices for each segment.
@@ -719,11 +833,32 @@ class Model():
             self.error_angle = angle
 
 
+    def make_angle(self, angle:torch.Tensor=None) -> None:
+        """
+        Generate orbit kick angles.
+
+        Parameters
+        ----------
+        angle: torch.Tensor
+            roll angle
+
+        Returns
+        -------
+        None
+
+        """
+        if isinstance(angle, float):
+            angle = angle*torch.randn(self.size, dtype=self.dtype, device=self.device)
+
+        if len(angle) == self.size:
+            self.error_orbit = angle
+
+
     def apply_error(self) -> None:
         """
         Apply errors to each transport segment.
 
-        self.transport[i] = self.roll[i] @ self.kick[i] @ self.transport[i]
+        self.transport[i] = self.roll[i] @ self.kick[i] @self.transport[i]
 
         Parameters
         ----------
@@ -734,6 +869,7 @@ class Model():
         None
 
         """
+
         if hasattr(self, 'kick'):
             self.transport = torch.matmul(self.kick, self.transport)
 
@@ -1111,7 +1247,7 @@ class Model():
         return self.is_stable
 
 
-    def make_trajectory(self, length:int, initial:torch.Tensor) -> torch.Tensor:
+    def make_trajectory(self, length:int, initial:torch.Tensor, *, full:bool=True) -> torch.Tensor:
         """
         Generate test trajectories for given initial condition.
 
@@ -1121,6 +1257,8 @@ class Model():
             number of iterations
         initial: torch.Tensor
             initial condition at 'HEAD' location
+        full: bool
+            flag to generate trajectories at all locations (else only at monitor locations)
 
         Returns
         -------
@@ -1143,7 +1281,7 @@ class Model():
         for i in range(1, self.size):
             trajectory[i] = (self.transport[i - 1] @ trajectory[i - 1].T).T
 
-        return trajectory
+        return trajectory if full else trajectory[self.monitor_index]
 
 
     def get_name(self, index:int) -> str:
@@ -1222,8 +1360,8 @@ class Model():
         """
         if self.dict is None:
             return None
-        index = int(mod(index, self.size))
         if isinstance(index, int):
+            index = int(mod(index, self.size))
             return self[index]
         return self.dict[index] if index in self.name else None
 

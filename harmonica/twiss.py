@@ -9,6 +9,8 @@ import numpy
 import torch
 import pandas
 
+from scipy import odr
+
 from .util import mod, generate_pairs, generate_other
 from .statistics import weighted_mean, weighted_variance
 from .statistics import median, biweight_midvariance, standardize
@@ -139,6 +141,8 @@ class Twiss():
         Generate weight mask based on given range limit.
     process_twiss(self, plane:str='x', *, weight:bool=True, mask:torch.Tensor=None) -> dict
         Process twiss data.
+    get_twiss_from_data(self, n:int, x:torch.Tensor, y:torch.Tensor, *, level:float=1.0E-6, sigma_x:torch.Tensor=None, sigma_y:torch.Tensor=None, ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None, transport:torch.Tensor=None, **kwargs) -> dict
+        Estimate twiss from tbt data using ODR fit.
     get_ax(self, index:int) -> torch.Tensor
         Get ax value and error at given index.
     get_bx(self, index:int) -> torch.Tensor
@@ -161,6 +165,14 @@ class Twiss():
         Number of locations.
     __call__(self, limit:int=None) -> pandas.DataFrame
         Perform twiss loop with default parameters.
+    matrix(self, probe:torch.Tensor, other:torch.Tensor) -> tuple
+        Generate uncoupled transport matrix (or matrices) for given locations.
+    make_transport(self) -> None
+        Set transport matrices between adjacent locations.
+    matrix_transport(self, probe:int, other:int) -> torch.Tensor
+        Generate transport matrix from probe to other using self.transport.
+    normal(self, probe:torch.Tensor) -> tuple
+        Generate uncoupled normal matrix (or matrices) for given locations.
 
     """
     def __init__(self, model:'Model', table:'Table', flag:torch.Tensor=None, limit:int=8, use_model:bool=False) -> None:
@@ -964,14 +976,14 @@ class Twiss():
 
             return result
 
-        weight = (mask.to(self.dtype)/sigma_a**2).nan_to_num()
+        weight = (mask.to(self.dtype)/sigma_a**2).nan_to_num(posinf=0.0, neginf=0.0)
         center = weighted_mean(a, weight=weight)
         spread = weighted_variance(a, weight=weight, center=center).sqrt()
         result['value_a'] = center
         result['sigma_a'] = spread
         result['error_a'] = (center - a_m)/a_m
 
-        weight = (mask.to(self.dtype)/sigma_b**2).nan_to_num()
+        weight = (mask.to(self.dtype)/sigma_b**2).nan_to_num(posinf=0.0, neginf=0.0)
         center = weighted_mean(b, weight=weight)
         spread = weighted_variance(b, weight=weight, center=center).sqrt()
         result['value_b'] = center
@@ -985,6 +997,166 @@ class Twiss():
         if plane == 'y':
             self.ay, self.sigma_ay = result['value_a'], result['sigma_a']
             self.by, self.sigma_by = result['value_b'], result['sigma_b']
+
+        return result
+
+
+    def get_twiss_from_data(self, n:int, x:torch.Tensor, y:torch.Tensor, *,
+                            level:float=1.0E-6, sigma_x:torch.Tensor=None, sigma_y:torch.Tensor=None,
+                            ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None,
+                            transport:torch.Tensor=None, **kwargs) -> dict:
+        """
+        Estimate twiss from tbt data using ODR fit.
+
+        Note, if no initial guesses for twiss and/or transport are given, model values will be used
+
+        Parameters
+        ----------
+        n: int
+            number of turns to use
+        x: torch.Tensor
+            x data
+        y: torch.Tensor
+            y data
+        level: float
+            default noise level
+        sigma_x: torch.Tensor
+            x noise sigma for each signal
+        sigma_y: torch.Tensor
+            y noise sigma for each signal
+        ax, bx, ay, by: torch.Tensor
+            initial guess for twiss parameters at monitor locations
+        transport: torch.Tensor
+            transport matrices between monitor locations
+
+        Returns
+        -------
+        fit result (dict)
+        dict_keys(['jx', 'ax', 'bx', 'sigma_jx', 'sigma_ax', 'sigma_bx', 'jy', 'ay', 'by', 'sigma_jy', 'sigma_ay', 'sigma_by', 'mux', 'muy'])
+
+        """
+        if ax is None:
+            ax = self.model.ax[self.model.monitor_index].cpu().numpy()
+        else:
+            ax = ax.cpu().numpy()
+
+        if bx is None:
+            bx = self.model.bx[self.model.monitor_index].cpu().numpy()
+        else:
+            bx = bx.cpu().numpy()
+
+        if ay is None:
+            ay = self.model.ay[self.model.monitor_index].cpu().numpy()
+        else:
+            ay = ay.cpu().numpy()
+
+        if by is None:
+            by = self.model.by[self.model.monitor_index].cpu().numpy()
+        else:
+            by = by.cpu().numpy()
+
+        if transport is None:
+            probe = torch.tensor(self.model.monitor_index, dtype=torch.int64, device=self.device)
+            other = torch.roll(probe, -1)
+            other[-1] += self.model.size
+            transport = self.model.matrix(probe, other)
+            copy = torch.clone(transport)
+
+        def ellipse(w, x):
+            alpha, beta, action = w
+            q1, q2, m11, m12 = x
+            return 1/beta*(q1**2 + (alpha*q1 + beta*(q2 - q1*m11)/m12)**2) - action
+
+        value_jx, error_jx = [], []
+        value_jy, error_jy = [], []
+
+        value_ax, error_ax = [], []
+        value_ay, error_ay = [], []
+
+        value_bx, error_bx = [], []
+        value_by, error_by = [], []
+
+        for i in range(self.model.monitor_count):
+
+            q1 = x[i, :n].cpu().numpy()
+            q2 = x[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
+            if i + 1 == self.model.monitor_count:
+                q2 = x[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
+            if sigma_x != None:
+                s1, s2 = sigma_x[i].cpu().numpy(), sigma_x[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
+            else:
+                s1, s2 = level, level
+            m11 = transport[i, 0, 0].cpu().numpy()
+            m12 = transport[i, 0, 1].cpu().numpy()
+            alpha, beta = ax[i], bx[i]
+            action = numpy.median(1/beta*(q1**2 + (alpha*q1 + beta*(q2 - q1*m11)/m12)**2))
+            m11 = m11*numpy.ones(n)
+            m12 = m12*numpy.ones(n)
+            X = numpy.array([q1, q2, m11, m12])
+            data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
+            model = odr.Model(ellipse, implicit=True)
+            result = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
+            alpha, beta, action = result.beta
+            sigma_alpha, sigma_beta, sigma_action = result.sd_beta
+            value_jx.append(action)
+            value_ax.append(alpha)
+            value_bx.append(beta)
+            error_jx.append(sigma_action)
+            error_ax.append(sigma_alpha)
+            error_bx.append(sigma_beta)
+
+            q1 = y[i, :n].cpu().numpy()
+            q2 = y[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
+            if i + 1 == self.model.monitor_count:
+                q2 = y[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
+            if sigma_y != None:
+                s1, s2 = sigma_y[i].cpu().numpy(), sigma_y[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
+            else:
+                s1, s2 = level, level
+            m11 = transport[i, 2, 2].cpu().numpy()
+            m12 = transport[i, 2, 3].cpu().numpy()
+            alpha, beta = ay[i], by[i]
+            action = numpy.median(1/beta*(q1**2 + (alpha*q1 + beta*(q2 - q1*m11)/m12)**2))
+            m11 = m11*numpy.ones(n)
+            m12 = m12*numpy.ones(n)
+            X = numpy.array([q1, q2, m11, m12])
+            data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
+            model = odr.Model(ellipse, implicit=True)
+            result = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
+            alpha, beta, action = result.beta
+            sigma_alpha, sigma_beta, sigma_action = result.sd_beta
+            value_jy.append(action)
+            value_ay.append(alpha)
+            value_by.append(beta)
+            error_jy.append(sigma_action)
+            error_ay.append(sigma_alpha)
+            error_by.append(sigma_beta)
+
+        result = {}
+
+        result['jx'] = 0.5*torch.tensor(value_jx, dtype=self.dtype, device=self.device)
+        result['ax'] = torch.tensor(value_ax, dtype=self.dtype, device=self.device)
+        result['bx'] = torch.tensor(value_bx, dtype=self.dtype, device=self.device)
+
+        result['sigma_jx'] = 0.5*torch.tensor(error_jx, dtype=self.dtype, device=self.device)
+        result['sigma_ax'] = torch.tensor(error_ax, dtype=self.dtype, device=self.device)
+        result['sigma_bx'] = torch.tensor(error_bx, dtype=self.dtype, device=self.device)
+
+        result['jy'] = 0.5*torch.tensor(value_jy, dtype=self.dtype, device=self.device)
+        result['ay'] = torch.tensor(value_ay, dtype=self.dtype, device=self.device)
+        result['by'] = torch.tensor(value_by, dtype=self.dtype, device=self.device)
+
+        result['sigma_jy'] = 0.5*torch.tensor(error_jy, dtype=self.dtype, device=self.device)
+        result['sigma_ay'] = torch.tensor(error_ay, dtype=self.dtype, device=self.device)
+        result['sigma_by'] = torch.tensor(error_by, dtype=self.dtype, device=self.device)
+
+        advance = []
+        for i in range(self.model.monitor_count):
+            normal = self.model.cs_normal(result['ax'][i], result['bx'][i], result['ay'][i], result['by'][i])
+            values, _ = self.model.advance_twiss(normal, transport[i])
+            advance.append(values)
+        advance = torch.stack(advance).T
+        result['mux'], result['muy'] = advance
 
         return result
 
@@ -1212,13 +1384,212 @@ class Twiss():
         self.phase_virtual(limit=limit)
         self.get_twiss_from_phase()
 
-        mask_x = self.filter_twiss(plane='x')
-        mask_y = self.filter_twiss(plane='y')
+        select = {
+            'phase': {'use': True, 'threshold': 10.00},
+            'model': {'use': False, 'threshold': 00.50},
+            'value': {'use': False, 'threshold': 00.50},
+            'sigma': {'use': False, 'threshold': 00.25},
+            'limit': {'use': True, 'threshold': 05.00}
+        }
+
+        mask_x = self.filter_twiss(plane='x', **select)
+        mask_y = self.filter_twiss(plane='y', **select)
 
         _ = self.process_twiss(plane='x', mask=mask_x, weight=True)
         _ = self.process_twiss(plane='y', mask=mask_y, weight=True)
 
         return self.get_table()
+
+    def matrix(self, probe:torch.Tensor, other:torch.Tensor) -> tuple:
+        """
+        Generate uncoupled transport matrix (or matrices) for given locations.
+
+        Matrices are generated from probe to other
+        One-turn matrices are generated where probe == other
+        Input parameters should be 1D tensors with matching length
+        Additionaly probe and/or other input parameter can be an int or str in self.model.name (not checked)
+
+        Note, twiss parameters are treated as independent variables in error propagation
+
+        Parameters
+        ----------
+        probe: torch.Tensor
+            probe locations
+        other: torch.Tensor
+            other locations
+
+        Returns
+        -------
+        uncoupled transport matrices and error matrices(tuple)
+
+        """
+        if isinstance(probe, int):
+            probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
+
+        if isinstance(probe, str):
+            probe = torch.tensor([self.model.name.index(probe)], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, int):
+            other = torch.tensor([other], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, str):
+            other = torch.tensor([self.model.name.index(other)], dtype=torch.int64, device=self.device)
+
+        other[probe == other] += self.size
+
+        fx, sigma_fx = Decomposition.phase_advance(probe, other, self.table.nux, self.fx, error=True, sigma_frequency=self.table.sigma_nux, sigma_phase=self.sigma_fx)
+        fy, sigma_fy = Decomposition.phase_advance(probe, other, self.table.nuy, self.fy, error=True, sigma_frequency=self.table.sigma_nuy, sigma_phase=self.sigma_fy)
+
+        probe = mod(probe, self.size).to(torch.int64)
+        other = mod(other, self.size).to(torch.int64)
+
+        transport = self.model.matrix_uncoupled(self.ax[probe], self.bx[probe], self.ax[other], self.bx[other], fx, self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy)
+        sigma_transport = torch.zeros_like(transport)
+
+        sigma_transport[:, 0, 0] += self.sigma_ax[probe]**2*self.bx[other]*torch.sin(fx)**2/self.bx[probe]
+        sigma_transport[:, 0, 0] += self.sigma_bx[probe]**2*self.bx[other]*(torch.cos(fx) + self.ax[probe]*torch.sin(fx))**2/(4.0*self.bx[probe]**3)
+        sigma_transport[:, 0, 0] += self.sigma_bx[other]**2*(torch.cos(fx) + self.ax[probe]*torch.sin(fx))**2/(4.0*self.bx[probe]*self.bx[other])
+        sigma_transport[:, 0, 0] += sigma_fx**2*self.bx[other]*(-self.ax[probe]*torch.cos(fx) + torch.sin(fx))**2/self.bx[probe]
+
+        sigma_transport[:, 0, 1] += self.sigma_bx[probe]**2*self.bx[other]*torch.sin(fx)**2/(4.0*self.bx[probe])
+        sigma_transport[:, 0, 1] += self.sigma_bx[other]**2*self.bx[probe]*torch.sin(fx)**2/(4.0*self.bx[other])
+        sigma_transport[:, 0, 1] += sigma_fx**2*self.bx[probe]*self.bx[other]*torch.cos(fx)**2
+
+        sigma_transport[:, 1, 0] += self.sigma_ax[probe]**2*(torch.cos(fx) - self.ax[other]*torch.sin(fx))**2/(self.bx[probe]*self.bx[other])
+        sigma_transport[:, 1, 0] += self.sigma_ax[other]**2*(torch.cos(fx) + self.ax[probe]*torch.sin(fx))**2/(self.bx[probe]*self.bx[other])
+        sigma_transport[:, 1, 0] += self.sigma_bx[probe]**2*((-self.ax[probe] + self.ax[other])*torch.cos(fx) + (1.0 + self.ax[probe]*self.ax[other])*torch.sin(fx))**2/(4.0*self.bx[probe]**3*self.bx[other])
+        sigma_transport[:, 1, 0] += self.sigma_bx[other]**2*((-self.ax[probe] + self.ax[other])*torch.cos(fx) + (1.0 + self.ax[probe]*self.ax[other])*torch.sin(fx))**2/(4.0*self.bx[probe]*self.bx[other]**3)
+        sigma_transport[:, 1, 0] += sigma_fx**2*((1.0 + self.ax[probe]*self.ax[other])*torch.cos(fx) + (self.ax[probe] - self.ax[other])*torch.sin(fx))**2/(self.bx[probe]*self.bx[other])
+
+        sigma_transport[:, 1, 1] += self.sigma_bx[probe]**2*(torch.cos(fx) - self.ax[other]*torch.sin(fx))**2/(4.0*self.bx[probe]*self.bx[other])
+        sigma_transport[:, 1, 1] += self.sigma_ax[other]**2*self.bx[probe]*torch.sin(fx)**2/self.bx[other]
+        sigma_transport[:, 1, 1] += self.sigma_bx[other]**2*self.bx[probe]*(torch.cos(fx) - self.ax[other]*torch.sin(fx))**2/(4.0*self.bx[other]**3)
+        sigma_transport[:, 1, 1] += sigma_fx**2*self.bx[probe]*(self.ax[other]*torch.cos(fx) + torch.sin(fx))**2/self.bx[other]
+
+        sigma_transport[:, 2, 2] += self.sigma_ay[probe]**2*self.by[other]*torch.sin(fy)**2/self.by[probe]
+        sigma_transport[:, 2, 2] += self.sigma_by[probe]**2*self.by[other]*(torch.cos(fy) + self.ay[probe]*torch.sin(fy))**2/(4.0*self.by[probe]**3)
+        sigma_transport[:, 2, 2] += self.sigma_by[other]**2*(torch.cos(fy) + self.ay[probe]*torch.sin(fy))**2/(4.0*self.by[probe]*self.by[other])
+        sigma_transport[:, 2, 2] += sigma_fy**2*self.by[other]*(-self.ay[probe]*torch.cos(fy) + torch.sin(fy))**2/self.by[probe]
+
+        sigma_transport[:, 2, 3] += self.sigma_by[probe]**2*self.by[other]*torch.sin(fy)**2/(4.0*self.by[probe])
+        sigma_transport[:, 2, 3] += self.sigma_by[other]**2*self.by[probe]*torch.sin(fy)**2/(4.0*self.by[other])
+        sigma_transport[:, 2, 3] += sigma_fy**2*self.by[probe]*self.by[other]*torch.cos(fy)**2
+
+        sigma_transport[:, 3, 2] += self.sigma_ay[probe]**2*(torch.cos(fy) - self.ay[other]*torch.sin(fy))**2/(self.by[probe]*self.by[other])
+        sigma_transport[:, 3, 2] += self.sigma_ay[other]**2*(torch.cos(fy) + self.ay[probe]*torch.sin(fy))**2/(self.by[probe]*self.by[other])
+        sigma_transport[:, 3, 2] += self.sigma_by[probe]**2*((-self.ay[probe] + self.ay[other])*torch.cos(fy) + (1.0 + self.ay[probe]*self.ay[other])*torch.sin(fy))**2/(4.0*self.by[probe]**3*self.by[other])
+        sigma_transport[:, 3, 2] += self.sigma_by[other]**2*((-self.ay[probe] + self.ay[other])*torch.cos(fy) + (1.0 + self.ay[probe]*self.ay[other])*torch.sin(fy))**2/(4.0*self.by[probe]*self.by[other]**3)
+        sigma_transport[:, 3, 2] += sigma_fy**2*((1.0 + self.ay[probe]*self.ay[other])*torch.cos(fy) + (self.ay[probe] - self.ay[other])*torch.sin(fy))**2/(self.by[probe]*self.by[other])
+
+        sigma_transport[:, 3, 3] += self.sigma_by[probe]**2*(torch.cos(fy) - self.ay[other]*torch.sin(fy))**2/(4.0*self.by[probe]*self.by[other])
+        sigma_transport[:, 3, 3] += self.sigma_ay[other]**2*self.by[probe]*torch.sin(fy)**2/self.by[other]
+        sigma_transport[:, 3, 3] += self.sigma_by[other]**2*self.by[probe]*(torch.cos(fy) - self.ay[other]*torch.sin(fy))**2/(4.0*self.by[other]**3)
+        sigma_transport[:, 3, 3] += sigma_fy**2*self.by[probe]*(self.ay[other]*torch.cos(fy) + torch.sin(fy))**2/self.by[other]
+
+        sigma_transport.sqrt_()
+
+        return (transport.squeeze(), sigma_transport.squeeze())
+
+
+    def make_transport(self) -> None:
+        """
+        Set transport matrices between adjacent locations.
+
+        self.transport[i] is a transport matrix from i to i + 1
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        """
+        probe = torch.arange(self.size, dtype=torch.int64, device=self.device)
+        other = 1 + probe
+        self.transport, _ = self.matrix(probe, other)
+
+
+    def matrix_transport(self, probe:int, other:int) -> torch.Tensor:
+        """
+        Generate transport matrix from probe to other using self.transport.
+
+        Parameters
+        ----------
+        probe: int
+            probe location
+        other: int
+            other location
+
+        Returns
+        -------
+        transport matrix (torch.Tensor)
+
+        """
+        if isinstance(probe, str):
+            probe = self.name.index(probe)
+
+        if isinstance(other, str):
+            other = self.name.index(other)
+
+        if probe < other:
+            matrix = self.transport[probe]
+            for i in range(probe + 1, other):
+                matrix = self.transport[int(mod(i, self.size))] @ matrix
+            return matrix
+
+        if probe > other:
+            matrix = self.transport[other]
+            for i in range(other + 1, probe):
+                matrix = self.transport[int(mod(i, self.size))] @ matrix
+            return torch.inverse(matrix)
+
+
+    def normal(self, probe:torch.Tensor) -> tuple:
+        """
+        Generate uncoupled normal matrix (or matrices) for given locations.
+
+        Note, twiss parameters are treated as independent variables in error propagation
+
+        Parameters
+        ----------
+        probe: torch.Tensor
+            probe locations
+
+        Returns
+        -------
+        uncoupled normal matrices and error matrices(tuple)
+
+        """
+        if isinstance(probe, int):
+            probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
+
+        if isinstance(probe, str):
+            probe = torch.tensor([self.model.name.index(probe)], dtype=torch.int64, device=self.device)
+
+        probe = mod(probe, self.size).to(torch.int64)
+
+        matrix = torch.zeros((len(probe), 4, 4), dtype=self.dtype, device=self.device)
+        sigma_matrix = torch.zeros_like(matrix)
+
+        matrix[:, 0, 0] = self.bx[probe].sqrt()
+        matrix[:, 1, 0] = -self.ax[probe]/self.bx[probe].sqrt()
+        matrix[:, 1, 1] = 1.0/self.bx[probe].sqrt()
+
+        matrix[:, 2, 2] = self.by[probe].sqrt()
+        matrix[:, 3, 2] = -self.ay[probe]/self.by[probe].sqrt()
+        matrix[:, 3, 3] = 1.0/self.by[probe].sqrt()
+
+        sigma_matrix[:, 0, 0] += self.sigma_bx[probe]**2/(4.0*self.bx[probe])
+        sigma_matrix[:, 1, 0] += self.sigma_ax[probe]**2/self.bx[probe] + self.sigma_bx[probe]**2*self.ax[probe]/(4.0*self.bx[probe]**3)
+        sigma_matrix[:, 1, 1] += self.sigma_bx[probe]**2/(4.0*self.bx[probe]**3)
+
+        sigma_matrix[:, 2, 2] += self.sigma_by[probe]**2/(4.0*self.by[probe])
+        sigma_matrix[:, 3, 2] += self.sigma_ay[probe]**2/self.by[probe] + self.sigma_by[probe]**2*self.ay[probe]/(4.0*self.by[probe]**3)
+        sigma_matrix[:, 3, 3] += self.sigma_by[probe]**2/(4.0*self.by[probe]**3)
+
+        return (matrix.squeeze(), sigma_matrix.sqrt().squeeze())
 
 
 def main():
