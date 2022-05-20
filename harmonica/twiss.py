@@ -141,7 +141,7 @@ class Twiss():
         Generate weight mask based on given range limit.
     process_twiss(self, plane:str='x', *, weight:bool=True, mask:torch.Tensor=None) -> dict
         Process twiss data.
-    get_twiss_from_data(self, n:int, x:torch.Tensor, y:torch.Tensor, *, level:float=1.0E-6, sigma_x:torch.Tensor=None, sigma_y:torch.Tensor=None, ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None, transport:torch.Tensor=None, **kwargs) -> dict
+    get_twiss_from_data(self, n:int, x:torch.Tensor, y:torch.Tensor, *, refit:bool=False, factor:float=5.0, level:float=1.0E-6, sigma_x:torch.Tensor=None, sigma_y:torch.Tensor=None, ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None, transport:torch.Tensor=None, **kwargs) -> dict
         Estimate twiss from tbt data using ODR fit.
     get_ax(self, index:int) -> torch.Tensor
         Get ax value and error at given index.
@@ -1002,6 +1002,7 @@ class Twiss():
 
 
     def get_twiss_from_data(self, n:int, x:torch.Tensor, y:torch.Tensor, *,
+                            refit:bool=False, factor:float=5.0,
                             level:float=1.0E-6, sigma_x:torch.Tensor=None, sigma_y:torch.Tensor=None,
                             ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None,
                             transport:torch.Tensor=None, **kwargs) -> dict:
@@ -1009,6 +1010,7 @@ class Twiss():
         Estimate twiss from tbt data using ODR fit.
 
         Note, if no initial guesses for twiss and/or transport are given, model values will be used
+        This method is sensitive to noise and calibration errors
 
         Parameters
         ----------
@@ -1018,6 +1020,10 @@ class Twiss():
             x data
         y: torch.Tensor
             y data
+        refit: bool
+            flag to refit twiss using estimated invariants
+        factor: float
+            threshold factor for invariants spread
         level: float
             default noise level
         sigma_x: torch.Tensor
@@ -1082,7 +1088,7 @@ class Twiss():
             q2 = x[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
             if i + 1 == self.model.monitor_count:
                 q2 = x[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
-            if sigma_x != None:
+            if sigma_x is not None:
                 s1, s2 = sigma_x[i].cpu().numpy(), sigma_x[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
             else:
                 s1, s2 = level, level
@@ -1095,9 +1101,9 @@ class Twiss():
             X = numpy.array([q1, q2, m11, m12])
             data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
             model = odr.Model(ellipse, implicit=True)
-            result = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
-            alpha, beta, action = result.beta
-            sigma_alpha, sigma_beta, sigma_action = result.sd_beta
+            fit = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
+            alpha, beta, action = fit.beta
+            sigma_alpha, sigma_beta, sigma_action = fit.sd_beta
             value_jx.append(action)
             value_ax.append(alpha)
             value_bx.append(beta)
@@ -1109,7 +1115,7 @@ class Twiss():
             q2 = y[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
             if i + 1 == self.model.monitor_count:
                 q2 = y[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
-            if sigma_y != None:
+            if sigma_y is not None:
                 s1, s2 = sigma_y[i].cpu().numpy(), sigma_y[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
             else:
                 s1, s2 = level, level
@@ -1122,9 +1128,9 @@ class Twiss():
             X = numpy.array([q1, q2, m11, m12])
             data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
             model = odr.Model(ellipse, implicit=True)
-            result = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
-            alpha, beta, action = result.beta
-            sigma_alpha, sigma_beta, sigma_action = result.sd_beta
+            fit = odr.ODR(data, model, beta0=[alpha, beta, action], **kwargs).run()
+            alpha, beta, action = fit.beta
+            sigma_alpha, sigma_beta, sigma_action = fit.sd_beta
             value_jy.append(action)
             value_ay.append(alpha)
             value_by.append(beta)
@@ -1133,6 +1139,12 @@ class Twiss():
             error_by.append(sigma_beta)
 
         result = {}
+
+        result['center_jx'] = None
+        result['spread_jx'] = None
+
+        result['center_jy'] = None
+        result['spread_jy'] = None
 
         result['jx'] = 0.5*torch.tensor(value_jx, dtype=self.dtype, device=self.device)
         result['ax'] = torch.tensor(value_ax, dtype=self.dtype, device=self.device)
@@ -1147,6 +1159,110 @@ class Twiss():
         result['by'] = torch.tensor(value_by, dtype=self.dtype, device=self.device)
 
         result['sigma_jy'] = 0.5*torch.tensor(error_jy, dtype=self.dtype, device=self.device)
+        result['sigma_ay'] = torch.tensor(error_ay, dtype=self.dtype, device=self.device)
+        result['sigma_by'] = torch.tensor(error_by, dtype=self.dtype, device=self.device)
+
+        factor = torch.tensor(factor, dtype=self.dtype, device=self.device)
+
+        mask_jx = threshold(standardize(result['jx'], center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
+        mask_jx = mask_jx.squeeze()/(result['sigma_jx']/result['sigma_jx'].sum())**2
+        center_jx = weighted_mean(result['jx'], weight=mask_jx)
+        spread_jx = weighted_variance(result['jx'], weight=mask_jx, center=center_jx).sqrt()
+
+        mask_jy = threshold(standardize(result['jy'], center_estimator=median, spread_estimator=biweight_midvariance), -factor, +factor)
+        mask_jy = mask_jy.squeeze()/(result['sigma_jy']/result['sigma_jy'].sum())**2
+        center_jy = weighted_mean(result['jy'], weight=mask_jy)
+        spread_jy = weighted_variance(result['jy'], weight=mask_jy, center=center_jy).sqrt()
+
+        result['center_jx'] = center_jx
+        result['spread_jx'] = spread_jx
+
+        result['center_jy'] = center_jy
+        result['spread_jy'] = spread_jy
+
+        advance = []
+        for i in range(self.model.monitor_count):
+            normal = self.model.cs_normal(result['ax'][i], result['bx'][i], result['ay'][i], result['by'][i])
+            values, _ = self.model.advance_twiss(normal, transport[i])
+            advance.append(values)
+        advance = torch.stack(advance).T
+        result['mux'], result['muy'] = advance
+
+        if not refit:
+            return result
+
+        def ellipse(w, x):
+            alpha, beta = w
+            q1, q2, m11, m12 = x
+            return 1/beta*(q1**2 + (alpha*q1 + beta*(q2 - q1*m11)/m12)**2) - action
+
+        value_ax, error_ax = [], []
+        value_ay, error_ay = [], []
+
+        value_bx, error_bx = [], []
+        value_by, error_by = [], []
+
+        for i in range(self.model.monitor_count):
+
+            action = 2.0*center_jx.cpu().numpy()
+            q1 = x[i, :n].cpu().numpy()
+            q2 = x[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
+            if i + 1 == self.model.monitor_count:
+                q2 = x[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
+            if sigma_x is not None:
+                s1, s2 = sigma_x[i].cpu().numpy(), sigma_x[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
+            else:
+                s1, s2 = level, level
+            m11 = transport[i, 0, 0].cpu().numpy()
+            m12 = transport[i, 0, 1].cpu().numpy()
+            alpha, beta = result['ax'][i].cpu().numpy(), result['bx'][i].cpu().numpy()
+            m11 = m11*numpy.ones(n)
+            m12 = m12*numpy.ones(n)
+            X = numpy.array([q1, q2, m11, m12])
+            data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
+            model = odr.Model(ellipse, implicit=True)
+            fit = odr.ODR(data, model, beta0=[alpha, beta], **kwargs).run()
+            alpha, beta = fit.beta
+            sigma_alpha, sigma_beta = fit.sd_beta
+            value_ax.append(alpha)
+            value_bx.append(beta)
+            error_ax.append(sigma_alpha)
+            error_bx.append(sigma_beta)
+
+            action = 2.0*center_jy.cpu().numpy()
+            q1 = y[i, :n].cpu().numpy()
+            q2 = y[int(mod(i + 1, self.model.monitor_count)), :n].cpu().numpy()
+            if i + 1 == self.model.monitor_count:
+                q2 = y[int(mod(i + 1, self.model.monitor_count)), 1:n+1].cpu().numpy()
+            if sigma_y is not None:
+                s1, s2 = sigma_y[i].cpu().numpy(), sigma_y[int(mod(i + 1, self.model.monitor_count))].cpu().numpy()
+            else:
+                s1, s2 = level, level
+            m11 = transport[i, 2, 2].cpu().numpy()
+            m12 = transport[i, 2, 3].cpu().numpy()
+            alpha, beta = result['ay'][i].cpu().numpy(), result['by'][i].cpu().numpy()
+            m11 = m11*numpy.ones(n)
+            m12 = m12*numpy.ones(n)
+            X = numpy.array([q1, q2, m11, m12])
+            data = odr.RealData(X, y=1, sx=[s1, s2, level, level], sy=1.0E-16)
+            model = odr.Model(ellipse, implicit=True)
+            fit = odr.ODR(data, model, beta0=[alpha, beta], **kwargs).run()
+            alpha, beta = fit.beta
+            sigma_alpha, sigma_beta = fit.sd_beta
+            value_ay.append(alpha)
+            value_by.append(beta)
+            error_ay.append(sigma_alpha)
+            error_by.append(sigma_beta)
+
+        result['ax'] = torch.tensor(value_ax, dtype=self.dtype, device=self.device)
+        result['bx'] = torch.tensor(value_bx, dtype=self.dtype, device=self.device)
+
+        result['sigma_ax'] = torch.tensor(error_ax, dtype=self.dtype, device=self.device)
+        result['sigma_bx'] = torch.tensor(error_bx, dtype=self.dtype, device=self.device)
+
+        result['ay'] = torch.tensor(value_ay, dtype=self.dtype, device=self.device)
+        result['by'] = torch.tensor(value_by, dtype=self.dtype, device=self.device)
+
         result['sigma_ay'] = torch.tensor(error_ay, dtype=self.dtype, device=self.device)
         result['sigma_by'] = torch.tensor(error_by, dtype=self.dtype, device=self.device)
 
