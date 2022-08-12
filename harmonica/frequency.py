@@ -4,6 +4,7 @@ Compute amplitude spectrum and frequency estimation (frequency of the maximum pe
 Compute amplitude spectrum and frequency estimation for joined data (frequency of the maximum peak in given range).
 
 """
+from __future__ import annotations
 
 import numpy
 import torch
@@ -23,11 +24,11 @@ class Frequency():
     ----------
     Frequency class instance.
 
-    Frequency(data:'Data', *, pad:int=0, f_range:tuple=(0.0, 0.5), fraction:float=2.0)
+    Frequency(data:Data, *, pad:int=0, f_range:tuple=(0.0, 0.5), fraction:float=2.0)
 
     Parameters
     ----------
-    data: 'Data'
+    data: Data
         Data instance
     pad: int
         padded length
@@ -41,7 +42,7 @@ class Frequency():
 
     Attributes
     ----------
-    data: 'Data'
+    data: Data
         data instance
     size: int
         number of signals
@@ -57,9 +58,9 @@ class Frequency():
         device
     pad: int
         padded length
-    fft: callable
+    fft: Callable[[torch.Tensor], torch.Tensor]
         FFT function, torch.fft.rfft/torch.fft.fft for real/complex input data
-    fft_freq: callable
+    fft_freq: Callable[[torch.Tensor], torch.Tensor]
         FFT grid function, torch.fft.rfftfreq/torch.fft.fftfreq for real/complex input data
     fft_grid: torch.Tensor
         FFT grid frequencies
@@ -111,7 +112,7 @@ class Frequency():
 
     Methods
     ----------
-    __init__(self, data:'Data', *, pad:int=None, f_range:tuple=(0.0, 0.5), fraction:float=2.0) -> None
+    __init__(self, data:Data, *, pad:int=None, f_range:tuple=(0.0, 0.5), fraction:float=2.0) -> None
         Frequency instance initialization.
     fft_get_spectrum(self) -> None
         Compute FFT amplitude spectrum.
@@ -131,6 +132,8 @@ class Frequency():
         Compute FFRFT frequency estimation.
     parabola_get_frequency(self) -> None
         Compute parabola frequency estimation.
+    candan_get_frequency(self) -> torch.Tensor
+        Estimate frequencies using Candan approximation.
     compute_fft(self, *, f_range:tuple=(None, None)) -> None
         Compute amplitude spectrum (FFT) and frequency estimation (FFT) using FFT max bin.
     compute_ffrft(self, *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None
@@ -138,12 +141,12 @@ class Frequency():
     compute_parabola(self, *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None
         Compute amplitude spectrum (FFT & FFRFT) and frequency estimation (FFT & FFRFT & parabola) using parabola interpolation.
     __call__(self, task:str='parabola', *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None
-        Compute amplitude spectrum and frequency using selected method.
+        Compute amplitude spectrum and frequency estimation using selected method and parameters.
     compute_mean_spectrum(self, *, log:bool=False) -> tuple
         Compure normalized mean spectrum.
-    compute_joined_spectrum(self, *, length:int=1024, f_range:tuple=(None, None), name:str='cosine_window', order:float=1.0, normalize:bool=True, position:list=None, log:bool=False, **kwargs) -> tuple
-        Compute normalized joined spectrum and given parameters.
-    compute_joined_frequency(self, *, length:int=1024, f_range:tuple=(None, None), name:str='cosine_window', order:float=1.0, normalize:bool=True, position:list=None, **kwargs) -> torch.Tensor
+    compute_joined_spectrum(self, *, length:int=128, f_range:tuple=(None, None), name:str='cosine_window', order:float=1.0, normalize:bool=True, position:list=None, log:bool=False, **kwargs) -> tuple
+        Compute normalized joined spectrum for given parameters.
+    compute_joined_frequency(self, *, length:int=128, f_range:tuple=(None, None), name:str='cosine_window', order:float=1.0, normalize:bool=True, position:list=None, **kwargs) -> torch.Tensor
         Estimate frequency using joined data and given parameters.
     compute_fitted_frequency(self, *, size:int=32, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor
         Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
@@ -161,13 +164,18 @@ class Frequency():
         Compute discrete Hilbert transform for a given batch of signals.
 
     """
-    def __init__(self, data:'Data', *, pad:int=None, f_range:tuple=(0.0, 0.5), fraction:float=2.0) -> None:
+    def __init__(self,
+                 data:Data,
+                 *,
+                 pad:int=None,
+                 f_range:tuple=(0.0, 0.5),
+                 fraction:float=2.0) -> None:
         """
         Frequency instance initialization.
 
         Parameters
         ----------
-        data: 'Data'
+        data: Data
             Data instance
         pad: int
             padded length
@@ -192,7 +200,14 @@ class Frequency():
         self.rdtype = torch.tensor(1, dtype=self.dtype).abs().dtype
         self.device = self.data.device
 
-        self.pad = pad if pad else self.length
+        if pad != None:
+            if not isinstance(pad, int):
+                raise TypeError(f'FREQUENCY: expected int for pad parameter')
+            if pad < self.length:
+                raise ValueError(f'FREQUENCY: expected pad >= length')
+            self.pad = pad
+        else:
+            self.pad = self.length
 
         self.fft = torch.fft.rfft if self.dtype != self.cdtype else torch.fft.fft
         self.fft_freq = torch.fft.rfftfreq if self.dtype != self.cdtype else torch.fft.fftfreq
@@ -232,11 +247,21 @@ class Frequency():
 
         Note, self.data.work container is used to compute FFT amplitude spectrum
 
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
         """
         torch.abs(self.fft(self.data.work, self.pad), out=self.fft_spectrum)
 
 
-    def fft_get_frequency(self, *, f_range:tuple=(None, None)) -> None:
+    def fft_get_frequency(self,
+                          *,
+                          f_range:tuple=(None, None)) -> None:
         """
         Compute FFT frequency estimation with optional frequency range.
 
@@ -266,7 +291,10 @@ class Frequency():
 
 
     @staticmethod
-    def ffrft_set(length:int, span:float, trig:torch.Tensor, work:torch.Tensor) -> None:
+    def ffrft_set(length:int,
+                  span:float,
+                  trig:torch.Tensor,
+                  work:torch.Tensor) -> None:
         """
         FFRFT auxiliary data initialization (staticmethod).
 
@@ -297,8 +325,11 @@ class Frequency():
 
 
     @staticmethod
-    def ffrft_get(length:int, data:torch.Tensor, trig:torch.Tensor,
-                  work:torch.Tensor, table:torch.Tensor) -> None:
+    def ffrft_get(length:int,
+                  data:torch.Tensor,
+                  trig:torch.Tensor,
+                  work:torch.Tensor,
+                  table:torch.Tensor) -> None:
         """
         FFRFT computation (staticmethod).
 
@@ -330,7 +361,9 @@ class Frequency():
         table[:, :length].mul_(trig)
 
 
-    def ffrft_set_spectrum(self, *, span:float=None) -> None:
+    def ffrft_set_spectrum(self,
+                           *,
+                           span:float=None) -> None:
         """
         FFRFT auxiliary data initialization.
 
@@ -352,7 +385,10 @@ class Frequency():
         self.__class__.ffrft_set(self.length, self.ffrft_span, self.ffrft_trig, self.ffrft_work)
 
 
-    def ffrft_get_spectrum(self, *, center:float=None, span:float=None) -> None:
+    def ffrft_get_spectrum(self,
+                           *,
+                           center:float=None,
+                           span:float=None) -> None:
         """
         Compute FFRFT amplitude spectrum for given central frequency and frequency span.
 
@@ -387,7 +423,8 @@ class Frequency():
         self.ffrft_spectrum.copy_(torch.abs(self.ffrft_table[:, :self.length]))
 
 
-    def ffrft_get_grid(self, idx:int=0) -> torch.Tensor:
+    def ffrft_get_grid(self,
+                       idx:int=0) -> torch.Tensor:
         """
         Compute FFRFT frequency grid for given signal index.
 
@@ -415,6 +452,14 @@ class Frequency():
 
         Note, self.ffrft_spectrum is assumed to be precomputed
 
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
         """
         self.ffrft_bin.copy_(torch.argmax(self.ffrft_spectrum, 1))
         self.ffrft_frequency.copy_(self.ffrft_start + self.ffrft_bin*self.ffrft_span/self.length)
@@ -425,6 +470,14 @@ class Frequency():
         Compute parabola frequency estimation.
 
         Note, self.ffrft_spectrum is assumed to be precomputed
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
 
         """
         index = [*range(self.size)]
@@ -437,11 +490,38 @@ class Frequency():
         self.parabola_frequency.copy_(self.ffrft_start + self.parabola_bin*self.ffrft_span/self.length)
 
 
-    def compute_fft(self, *, f_range:tuple=(None, None)) -> None:
+    def candan_get_frequency(self) -> torch.Tensor:
+        """
+        Estimate frequencies using Candan approximation.
+
+        Note, self.data.work container is used
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        Candan frequency estimation (torch.Tensor)
+
+        """
+        fourier = self.fft(self.data.work)
+        max_pos = fourier.abs().max(-1).indices
+        ind_pos = range(self.size)
+        jacobs = (fourier[ind_pos, max_pos - 1] - fourier[ind_pos, max_pos + 1])/(2.0*fourier[ind_pos, max_pos] - fourier[ind_pos, max_pos - 1] - fourier[ind_pos, max_pos + 1])
+        candan = self.length/numpy.pi*numpy.tan(numpy.pi/self.length)*jacobs.real
+        candan = self.length/numpy.pi*torch.atan(numpy.pi/self.length*candan)
+        candan = 1.0/self.length*(max_pos + candan)
+        return candan
+
+
+    def compute_fft(self,
+                    *,
+                    f_range:tuple=(None, None)) -> None:
         """
         Compute amplitude spectrum (FFT) and frequency estimation (FFT) using FFT max bin.
 
-        Optionaly pass initial guess frequency range
+        Optionaly pass initial frequency range
         Note, self.data.work container is used, not altered
 
         Parameters
@@ -458,11 +538,15 @@ class Frequency():
         self.fft_get_frequency(f_range=f_range)
 
 
-    def compute_ffrft(self, *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None:
+    def compute_ffrft(self,
+                      *,
+                      f_range:tuple=(None, None),
+                      center:float=None,
+                      span:float=None) -> None:
         """
         Compute amplitude spectrum (FFT & FFRFT) and frequency estimation (FFT & FFRFT) using FFRFT max bin.
 
-        Optionaly pass initial guess frequency range and other parameters
+        Optionaly pass initial frequency range and other parameters
         Note, self.data.work container is used, not altered
         Invoke compute_fft()
 
@@ -471,9 +555,9 @@ class Frequency():
         f_range: tuple
             frequency range in (0.0, 0.5) for real or in (0.0, 1.0) for complex data
         center: float
-            center frequency
+            FFRFT center frequency
         span: float
-            frequency span
+            FFRFT frequency span
 
         Returns
         -------
@@ -485,11 +569,15 @@ class Frequency():
         self.ffrft_get_frequency()
 
 
-    def compute_parabola(self, *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None:
+    def compute_parabola(self,
+                         *,
+                         f_range:tuple=(None, None),
+                         center:float=None,
+                         span:float=None) -> None:
         """
-        Compute amplitude spectrum (FFT & FFRFT) and frequency estimation (FFT & FFRFT & parabola) using parabola interpolation.
+        Compute amplitude spectrum (FFT & FFRFT) and frequency estimation (FFT & FFRFT & PARABOLA) using parabola interpolation.
 
-        Optionaly pass initial guess frequency range and other parameters
+        Optionaly pass initial frequency range and other parameters
         Note, self.data.work container is used, not altered
         Invoke compute_ffrft()
 
@@ -498,9 +586,9 @@ class Frequency():
         f_range: tuple
             frequency range in (0.0, 0.5) for real or in (0.0, 1.0) for complex data
         center: float
-            center frequency
+            FFRFT center frequency
         span: float
-            frequency span
+            FFRFT frequency span
 
         Returns
         -------
@@ -511,11 +599,16 @@ class Frequency():
         self.parabola_get_frequency()
 
 
-    def __call__(self, method:str='parabola', *, f_range:tuple=(None, None), center:float=None, span:float=None) -> None:
+    def __call__(self,
+                 method:str='parabola',
+                 *,
+                 f_range:tuple=(None, None),
+                 center:float=None,
+                 span:float=None) -> None:
         """
-        Compute amplitude spectrum and frequency using selected method.
+        Compute amplitude spectrum and frequency estimation using selected method and parameters.
 
-        Optionaly pass initial guess frequency range and other parameters
+        Optionaly pass initial frequency range and other parameters
         Note, self.data.work container is used, not altered
         Invoke compute_fft(), compute_ffrft() or compute_parabola()
         Set self.frequency container
@@ -527,9 +620,9 @@ class Frequency():
         f_range: tuple
             frequency range in (0.0, 0.5) for real or in (0.0, 1.0) for complex data
         center: float
-            center frequency
+            FFRFT center frequency
         span: float
-            frequency span
+            FFRFT frequency span
 
         Returns
         -------
@@ -551,10 +644,12 @@ class Frequency():
             self.frequency.copy_(self.parabola_frequency)
             return
 
-        raise Exception(f'FREQUENCY: unknown method {method}')
+        raise ValueError(f'FREQUENCY: unknown method {method}')
 
 
-    def compute_mean_spectrum(self, *, log:bool=False) -> tuple:
+    def compute_mean_spectrum(self,
+                              *,
+                              log:bool=False) -> tuple:
         """
         Compure normalized mean spectrum.
 
@@ -574,14 +669,21 @@ class Frequency():
         time = self.ffrft_range
         norm = torch.abs(torch.sum(self.data.work*torch.exp(2.0j*numpy.pi*time*self.frequency.reshape(-1, 1)), 1))
         mean = torch.mean(self.fft_spectrum/norm.reshape(-1, 1), 0)
-        return (self.fft_grid, torch.log10(mean) if log else mean)
+        return (self.fft_grid, mean.log10() if log else mean)
 
 
-    def compute_joined_spectrum(self, *, length:int=1024, f_range:tuple=(None, None),
-                                name:str='cosine_window', order:float=1.0, normalize:bool=True,
-                                position:list=None, log:bool=False, **kwargs) -> tuple:
+    def compute_joined_spectrum(self,
+                                *,
+                                length:int=128,
+                                f_range:tuple=(None, None),
+                                name:str='cosine_window',
+                                order:float=1.0,
+                                normalize:bool=True,
+                                position:list=None,
+                                log:bool=False,
+                                **kwargs) -> tuple:
         """
-        Compute normalized joined spectrum and given parameters.
+        Compute normalized joined spectrum for given parameters.
 
         Without positions, spectrum is computed from joined signal using FFRFT for given frequency range
         Full frequency range is equal to the total number of signals divided by two for real data (total number of signals for complex data)
@@ -609,7 +711,7 @@ class Frequency():
 
         Returns
         -------
-        frequency grid and normalized joined amplitude spectrum (numpy.ndarray, numpy.ndarray)
+        frequency grid and normalized joined amplitude spectrum (torch.Tensor, torch.Tensor)
 
         """
         rate = self.size*(2.0 if self.dtype == self.cdtype else 1.0)
@@ -644,18 +746,27 @@ class Frequency():
             grid /= 2.0*numpy.pi
             spectrum /= numpy.max(spectrum)
 
-        return (grid, numpy.log10(spectrum) if log else spectrum)
+        grid = torch.tensor(grid, dtype=self.dtype, device=self.device)
+        spectrum = torch.tensor(numpy.log10(spectrum) if log else spectrum, dtype=self.dtype, device=self.device)
+
+        return grid, spectrum
 
 
-    def compute_joined_frequency(self, *, length:int=1024, f_range:tuple=(None, None),
-                                 name:str='cosine_window', order:float=1.0, normalize:bool=True,
-                                 position:list=None, **kwargs) -> torch.Tensor:
+    def compute_joined_frequency(self,
+                                 *,
+                                 length:int=128,
+                                 f_range:tuple=(None, None),
+                                 name:str='cosine_window',
+                                 order:float=1.0,
+                                 normalize:bool=True,
+                                 position:list=None,
+                                 **kwargs) -> torch.Tensor:
         """
         Estimate frequency using joined data and given parameters.
 
         Without positions, spectrum is computed from joined signal using FFRFT for given frequency range
         Full frequency range is equal to the total number of signals divided by two for real data (total number of signals for complex data)
-        Frequency is estimated using TYPE-III NUFFT if BPM positions are given
+        Frequency is estimated using TYPE-III NUFFT if positions are given
         Positions are assumed to be in [0, 1)
         Normalized location along the ring or normalized accumulateed phase advance can be used as position
         Note, self.data.work container is used in computation, not altered
@@ -673,7 +784,7 @@ class Frequency():
         normalize: bool
             flag to normalize data before mixing
         position: list
-            positions list
+            position list
 
         Returns
         -------
@@ -719,7 +830,11 @@ class Frequency():
         return result
 
 
-    def compute_fitted_frequency(self, *, fraction:float=0.995, mode:str='ols', std:torch.Tensor=None) -> torch.Tensor:
+    def compute_fitted_frequency(self,
+                                 *,
+                                 fraction:float=0.995,
+                                 mode:str='ols',
+                                 std:torch.Tensor=None) -> torch.Tensor:
         """
         Estimate frequency and its uncertainty with OLS (or WLS) parabola fit.
 
@@ -795,9 +910,16 @@ class Frequency():
         return torch.stack([value, error]).T
 
 
-    def compute_shifted_frequency(self, length:int, shift:int, *, method:str='parabola',
-                                  name:str='cosine_window', order:float=1.0,
-                                  f_range:tuple=(None, None), center:float=None, span:float=None) -> torch.Tensor:
+    def compute_shifted_frequency(self,
+                                  length:int,
+                                  shift:int,
+                                  *,
+                                  method:str='parabola',
+                                  name:str='cosine_window',
+                                  order:float=1.0,
+                                  f_range:tuple=(None, None),
+                                  center:float=None,
+                                  span:float=None) -> torch.Tensor:
         """
         Estimate frequency using shifted signals.
 
@@ -838,6 +960,49 @@ class Frequency():
         return frequency.frequency.reshape(self.size, -1)
 
 
+    def compute_bootstrapped_frequency(self,
+                                       length:int,
+                                       count:int) -> torch.Tensor:
+        """
+        Estimate frequencies and errors using random sampling.
+
+        Note, self.data.work container is used in computation, not altered
+
+        Parameters
+        ----------
+        length: int
+            sample length
+        count: int
+            number of samples to use
+
+        Returns
+        -------
+        frequencies and errors for each signal (torch.Tensor)
+
+        """
+        matrix = self.data.work.cpu().numpy()
+        output = []
+        for signal in matrix:
+            result = []
+            for _ in range(count):
+                time = torch.randint(length, (1, count), dtype=torch.int64, device=self.device).squeeze().cpu().numpy()
+                data = signal[time]
+                grid = 2.0*numpy.pi*numpy.linspace(0.0, 0.5, len(time))
+                spectrum = numpy.abs(nufft.nufft1d3(time, data, grid))
+                index = numpy.argmax(spectrum)
+                frequency = grid[index]/(2*numpy.pi)
+                omega_min = grid[index - 1]
+                omega_max = grid[index + 1]
+                grid = numpy.linspace(omega_min, omega_max, len(grid))
+                spectrum = numpy.abs(nufft.nufft1d3(time, data, grid))
+                index = numpy.argmax(spectrum)
+                frequency = grid[index]/(2*numpy.pi)
+                result.append(frequency)
+            result = torch.tensor(result, dtype=self.dtype, device=self.device)
+            output.append(torch.stack([result.mean(), result.std()]))
+        return torch.stack(output)
+
+
     def __repr__(self) -> str:
         """
         String representation.
@@ -847,7 +1012,12 @@ class Frequency():
 
 
     @classmethod
-    def harmonics(cls, order:int, basis:list, *, limit:float=1.0, offset:float=-0.5) -> dict:
+    def harmonics(cls,
+                  order:int,
+                  basis:list,
+                  *,
+                  limit:float=1.0,
+                  offset:float=-0.5) -> dict:
         """
         Generate list of harmonics up to given order for list of given basis frequencies.
 
@@ -884,7 +1054,13 @@ class Frequency():
 
 
     @classmethod
-    def identify(cls, order:int, basis:list, frequencies:list, *, limit:float=1.0, offset:float=-0.5) -> dict:
+    def identify(cls,
+                 order:int,
+                 basis:list,
+                 frequencies:list,
+                 *,
+                 limit:float=1.0,
+                 offset:float=-0.5) -> dict:
         """
         Identify list of frequencies up to maximum order for given frequency basis.
 

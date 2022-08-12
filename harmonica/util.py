@@ -17,11 +17,13 @@ LIMIT:int = 8192
 
 
 # Circumference
-LENGTH:float = 366.075015600006
+LENGTH:float = 366.075
 
 
 # Generate TbT PV name
-def pv_make(name:str, plane:str, flag:bool=False) -> str:
+def pv_make(name:str,
+            plane:str,
+            flag:bool=False) -> str:
     """
     Generate PV name for given BPM name and data plane.
 
@@ -116,7 +118,9 @@ def record_make(name:str) -> str:
 
 
 # Load data to location record
-def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
+def record_load(name:str,
+                data:dict,
+                connection_timeout:float=1.0) -> None:
     """
     Load data into epics process variables for given location.
 
@@ -157,9 +161,10 @@ def record_load(name:str, data:dict, connection_timeout:float=1.0) -> None:
 
 
 # Load TbT data from file
-def data_load(case:str, file:str) -> numpy.ndarray:
+def data_load(plane:str,
+              file:str) -> numpy.ndarray:
     """
-    Load TbT data for selected case from file (pickled dataframe).
+    Load TbT data for selected plane from file (pickled dataframe).
 
     Parameters
     ----------
@@ -177,7 +182,9 @@ def data_load(case:str, file:str) -> numpy.ndarray:
 
 
 # Remainder with offset
-def mod(x:float, y:float, z:float=0.0) -> float:
+def mod(x:float,
+        y:float,
+        z:float=0.0) -> float:
     """
     Return the remainder on division of x by y with offset z.
 
@@ -191,6 +198,8 @@ def mod(x:float, y:float, z:float=0.0) -> float:
 def chain(pairs):
     """
     Generate chain from location pairs.
+
+    [[1, 2], [2, 3], [10, 11], [11, 12]] -> [[1, 2, 3], [10, 11, 12]]
 
     """
     table, chain = [], []
@@ -215,7 +224,12 @@ def chain(pairs):
 
 
 # Generate indices of other locations
-def generate_other(probe:int, limit:int, flags:list, *, inverse:bool=True, forward:bool=True) -> list:
+def generate_other(probe:int,
+                   limit:int,
+                   flags:list,
+                   *,
+                   inverse:bool=True,
+                   forward:bool=True) -> list:
     """
     Generate indices of other locations for given probe location, limit range and flags.
 
@@ -265,7 +279,13 @@ def generate_other(probe:int, limit:int, flags:list, *, inverse:bool=True, forwa
 
 
 # Generate pairs
-def generate_pairs(limit:int, count:int, *, probe:int=0, table:list=None, dtype=torch.int64, device='cpu') -> torch.Tensor:
+def generate_pairs(limit:int,
+                   count:int,
+                   *,
+                   probe:int=0,
+                   table:list=None,
+                   dtype:torch.dtype=torch.int64,
+                   device:torch.device=torch.device('cpu')) -> torch.Tensor:
     """
     Generate combinations of unique pairs of the probed location with other locations.
 
@@ -292,8 +312,11 @@ def generate_pairs(limit:int, count:int, *, probe:int=0, table:list=None, dtype=
 
 
 # Make mark from mask
-def make_mark(size:int, mask:torch.Tensor, *,
-              dtype:torch.dtype=torch.int64, device:torch.device='cpu') -> torch.Tensor:
+def make_mark(size:int,
+              mask:torch.Tensor,
+              *,
+              dtype:torch.dtype=torch.int64,
+              device:torch.device=torch.device('cpu')) -> torch.Tensor:
     """
     Compute mark for given mask.
 
@@ -313,8 +336,10 @@ def make_mark(size:int, mask:torch.Tensor, *,
 
 
 # Make mask from mark
-def make_mask(size:int, mark:torch.Tensor, *,
-              dtype:torch.dtype=torch.bool, device:torch.device='cpu') -> torch.Tensor:
+def make_mask(size:int,
+              mark:torch.Tensor, *,
+              dtype:torch.dtype=torch.bool,
+              device:torch.device=torch.device('cpu')) -> torch.Tensor:
     """
     Compute mask for given mark.
 
@@ -333,96 +358,6 @@ def make_mask(size:int, mark:torch.Tensor, *,
     mask = torch.zeros(size, dtype=dtype, device=device)
     mask[mark] = True
     return mask
-
-
-def symplectic(dimension:int, *, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> torch.Tensor:
-    """
-    Generate symplectic 'identity' matrix for given input dimension.
-
-    Symplectic block is [[0, 1], [-1, 0]]
-
-    Parameters
-    ----------
-    dimension: int
-        configuration space dimension
-    dtype: torch.dtype
-        data type
-    device: torch.device
-        data device
-
-    Returns
-    -------
-    symplectic 'identity' matrix (torch.Tensor)
-
-    """
-    block = torch.tensor([[0, 1], [-1, 0]], dtype=dtype, device=device)
-    return torch.block_diag(*[block for _ in range(dimension)])
-
-
-def is_symplectic(matrix:torch.Tensor, *, epsilon:float=1.0E-12) -> bool:
-    """
-    Test symplectic condition for given input matrix.
-
-    M.T @ S @ M == S
-
-    Parameters
-    ----------
-    matrix: torch.Tensor
-        input matrix
-    epsilon: float
-        tolerance epsilon
-
-    Returns
-    -------
-    test result (bool)
-
-    """
-    dimension = len(matrix) // 2
-    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
-    return all(epsilon > (matrix.T @ s @ matrix - s).abs().flatten())
-
-
-def to_symplectic(matrix:torch.Tensor) -> torch.Tensor:
-    """
-    Perform symplectification of given input matrix.
-
-    WEPCH152, EPAC06
-
-    Parameters
-    ----------
-    matrix: torch.Tensor
-        input matrix
-
-    Returns
-    -------
-    symplectified matrix (torch.Tensor)
-
-    """
-    dimension = len(matrix) // 2
-    i = torch.eye(2*dimension, dtype=matrix.dtype, device=matrix.device)
-    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
-    v = s @ (i - matrix) @ (i + matrix).inverse()
-    w = 0.5*(v + v.T)
-    return (s + w).inverse() @ (s - w)
-
-
-def inverse(matrix:torch.Tensor) -> torch.Tensor:
-    """
-    Compute symplectic inverse of given input matrix.
-
-    Parameters
-    ----------
-    matrix: torch.Tensor
-        input matrix
-
-    Returns
-    -------
-    inverse matrix (torch.Tensor)
-
-    """
-    dimension = len(matrix) // 2
-    s = symplectic(dimension, dtype=matrix.dtype, device=matrix.device)
-    return -s @ matrix.T @ s
 
 
 def fst(array):

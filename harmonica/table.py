@@ -1,5 +1,6 @@
 """
 Table module.
+Generate contaner with estimated parameters (frequencies, amplitudes and phases).
 
 """
 
@@ -50,6 +51,8 @@ class Table():
     ----------
     name: list
         location names
+    size: int
+        number of locations
     nux: torch.Tensor
         x frequency (fractional part)
     nuy: torch.Tensor
@@ -74,10 +77,6 @@ class Table():
         x phase error
     sigma_fy: torch.Tensor:
         y phase error
-    dtype: torch.dtype
-        data type
-    device: torch.device
-        data device
     phase_x: torch.Tensor
         x phase advance from each location to the next one
     sigma_x: torch.Tensor
@@ -86,6 +85,10 @@ class Table():
         y phase advance from each location to the next one
     sigma_y: torch.Tensor
         y phase advance error from each location to the next one
+    dtype: torch.dtype
+        data type
+    device: torch.device
+        data device
 
     Methods
     ----------
@@ -95,13 +98,22 @@ class Table():
         String representation.
 
     """
-    def __init__(self, name:list,
-                 nux:torch.Tensor, nuy:torch.Tensor,
-                 ax:torch.Tensor, ay:torch.Tensor, fx:torch.Tensor, fy:torch.Tensor,
-                 sigma_nux:torch.Tensor=None, sigma_nuy:torch.Tensor=None,
-                 sigma_ax:torch.Tensor=None, sigma_ay:torch.Tensor=None,
-                 sigma_fx:torch.Tensor=None, sigma_fy:torch.Tensor=None, *,
-                 dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> None:
+    def __init__(self,
+                 name:list,
+                 nux:torch.Tensor,
+                 nuy:torch.Tensor,
+                 ax:torch.Tensor,
+                 ay:torch.Tensor,
+                 fx:torch.Tensor,
+                 fy:torch.Tensor,
+                 sigma_nux:torch.Tensor=None,
+                 sigma_nuy:torch.Tensor=None,
+                 sigma_ax:torch.Tensor=None,
+                 sigma_ay:torch.Tensor=None,
+                 sigma_fx:torch.Tensor=None,
+                 sigma_fy:torch.Tensor=None, *,
+                 dtype:torch.dtype=torch.float64,
+                 device:torch.device='cpu') -> None:
         """
         Table instance initialization.
 
@@ -161,10 +173,10 @@ class Table():
 
         zero = torch.zeros(self.size, dtype=self.dtype, device=self.device)
 
-        self.sigma_ax = torch.clone(zero) if sigma_ax is None else sigma_ax.to(self.dtype).to(self.device)
-        self.sigma_ay = torch.clone(zero) if sigma_ay is None else sigma_ay.to(self.dtype).to(self.device)
-        self.sigma_fx = torch.clone(zero) if sigma_fx is None else sigma_fx.to(self.dtype).to(self.device)
-        self.sigma_fy = torch.clone(zero) if sigma_fy is None else sigma_fy.to(self.dtype).to(self.device)
+        self.sigma_ax = torch.zeros_like(zero) if sigma_ax is None else sigma_ax.to(self.dtype).to(self.device)
+        self.sigma_ay = torch.zeros_like(zero) if sigma_ay is None else sigma_ay.to(self.dtype).to(self.device)
+        self.sigma_fx = torch.zeros_like(zero) if sigma_fx is None else sigma_fx.to(self.dtype).to(self.device)
+        self.sigma_fy = torch.zeros_like(zero) if sigma_fy is None else sigma_fy.to(self.dtype).to(self.device)
 
         probe = torch.tensor(range(self.size), dtype=torch.int64, device=self.device)
         other = probe + 1

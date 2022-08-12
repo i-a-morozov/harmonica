@@ -159,10 +159,24 @@ class RCDS():
         Scipy minimization wrapper for bounded methods.
 
     """
-    def __init__(self, /, objective:Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]], *,
-                 ni:int=32, np:int=2, ns:int=4, sf:float=0.01, sf_min:float=0.001, sf_max:float=0.1,
-                 dr:float=1.0, fc:float=3.0, ft:float=5.0, fr:float=0.1,
-                 otol:float=1.0E-06, ktol:float=1.0E-6, epsilon:float=1.0E-16, file:str=None) -> None:
+    def __init__(self,
+                 /,
+                 objective:Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]],
+                 *,
+                 ni:int=32,
+                 np:int=2,
+                 ns:int=4,
+                 sf:float=0.01,
+                 sf_min:float=0.001,
+                 sf_max:float=0.1,
+                 dr:float=1.0,
+                 fc:float=3.0,
+                 ft:float=5.0,
+                 fr:float=0.1,
+                 otol:float=1.0E-06,
+                 ktol:float=1.0E-6,
+                 epsilon:float=1.0E-16,
+                 file:str=None) -> None:
         """
         RCDS initialization.
 
@@ -353,7 +367,10 @@ class RCDS():
         self.cache_error:list = []
 
 
-    def append(self, knobs:torch.Tensor, value:torch.Tensor, error:torch.Tensor) -> None:
+    def append(self,
+               knobs:torch.Tensor,
+               value:torch.Tensor,
+               error:torch.Tensor) -> None:
         """
         Append input knobs, value and error to cache.
 
@@ -379,7 +396,9 @@ class RCDS():
         self.cache_error.append(error.cpu().numpy().tolist())
 
 
-    def close_knobs(self, probe:torch.Tensor, other:torch.Tensor) -> bool:
+    def close_knobs(self,
+                    probe:torch.Tensor,
+                    other:torch.Tensor) -> bool:
         """
         Check whether knobs are close based on knobs significance defined by objective.
 
@@ -396,7 +415,9 @@ class RCDS():
         return all((probe - other).abs() <= self.epsilon + self.dk)
 
 
-    def alter_knobs(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor:
+    def alter_knobs(self,
+                    probe:torch.Tensor,
+                    other:torch.Tensor) -> torch.Tensor:
         """
         Alter knobs components based on knobs significance defined by objective.
 
@@ -419,7 +440,9 @@ class RCDS():
         return other
 
 
-    def termination_knobs(self, probe:torch.Tensor, other:torch.Tensor) -> bool:
+    def termination_knobs(self,
+                          probe:torch.Tensor,
+                          other:torch.Tensor) -> bool:
         """
         Check termination condition for knobs.
 
@@ -436,8 +459,11 @@ class RCDS():
         return self.close_knobs(probe, other) or ((probe - other).norm() <= self.epsilon + self.ktol).cpu().item()
 
 
-    def termination_value(self, value_probe:torch.Tensor, value_other:torch.Tensor,
-                          error_probe:torch.Tensor, error_other:torch.Tensor) -> bool:
+    def termination_value(self,
+                          value_probe:torch.Tensor,
+                          value_other:torch.Tensor,
+                          error_probe:torch.Tensor,
+                          error_other:torch.Tensor) -> bool:
         """
         Check termination condition for objective value.
 
@@ -457,7 +483,8 @@ class RCDS():
 
 
     @staticmethod
-    def interval(knobs:torch.Tensor, vector:torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def interval(knobs:torch.Tensor,
+                 vector:torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Return interval of parameter values (neg, pos) for which all knobs remain in the unit cube.
 
@@ -500,7 +527,8 @@ class RCDS():
         return knobs
 
 
-    def on_cube(self, knobs:torch.Tensor) -> bool:
+    def on_cube(self,
+                knobs:torch.Tensor) -> bool:
         """
         Check whether knobs are on the unit cube.
 
@@ -517,7 +545,11 @@ class RCDS():
         return any((knobs - 0.0).abs() < self.epsilon) or any((knobs - 1.0).abs() < self.epsilon)
 
 
-    def bracket(self, sf:torch.Tensor, knobs:torch.Tensor, value:torch.Tensor, error:torch.Tensor,
+    def bracket(self,
+                sf:torch.Tensor,
+                knobs:torch.Tensor,
+                value:torch.Tensor,
+                error:torch.Tensor,
                 vector:torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Bracket objective minimum for given initial knobs along a given search direction.
@@ -706,8 +738,13 @@ class RCDS():
         return table_alpha[index], table_knobs[index], table_value[index], table_error[index]
 
 
-    def parabola(self, vector:torch.Tensor,
-                 table_alpha:torch.Tensor, table_knobs:torch.Tensor, table_value:torch.Tensor, table_error:torch.Tensor, *,
+    def parabola(self,
+                 vector:torch.Tensor,
+                 table_alpha:torch.Tensor,
+                 table_knobs:torch.Tensor,
+                 table_value:torch.Tensor,
+                 table_error:torch.Tensor,
+                 *,
                  sample:bool=True,
                  detector:Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]=None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -811,7 +848,13 @@ class RCDS():
         return knobs, value, error
 
 
-    def minimize_parabola(self, sf:torch.Tensor, knobs:torch.Tensor, value:torch.Tensor, error:torch.Tensor, vector:torch.Tensor, *,
+    def minimize_parabola(self,
+                          sf:torch.Tensor,
+                          knobs:torch.Tensor,
+                          value:torch.Tensor,
+                          error:torch.Tensor,
+                          vector:torch.Tensor,
+                          *,
                           detector:Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]=None,
                           **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -841,8 +884,20 @@ class RCDS():
         return self.parabola(vector, alpha, knobs, value, error, detector=detector)
 
 
-    def minimize_gp(self, sf:torch.Tensor, knobs:torch.Tensor, value:torch.Tensor, error:torch.Tensor, vector:torch.Tensor, *,
-                    no_ei:int=8, no_ucb:int=2, nr:int=64, rs:int=256, beta:float=1.0, use_parabola:bool=True, np:int=1,
+    def minimize_gp(self,
+                    sf:torch.Tensor,
+                    knobs:torch.Tensor,
+                    value:torch.Tensor,
+                    error:torch.Tensor,
+                    vector:torch.Tensor,
+                    *,
+                    no_ei:int=8,
+                    no_ucb:int=2,
+                    nr:int=64,
+                    rs:int=256,
+                    beta:float=1.0,
+                    use_parabola:bool=True,
+                    np:int=1,
                     **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         GP line minimization (GP and 1d minimization using 3 point parabola fit).
@@ -949,9 +1004,15 @@ class RCDS():
         return knobs[index], value[index], error[index]
 
 
-    def fit_rcds(self, knobs:torch, matrix:torch.Tensor, *,
+    def fit_rcds(self,
+                 knobs:torch,
+                 matrix:torch.Tensor,
+                 *,
                  minimize:Callable[[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]=None,
-                 termination:bool=True, verbose:bool=False, pause:float=0.0, **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                 termination:bool=True,
+                 verbose:bool=False,
+                 pause:float=0.0,
+                 **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         RCDS minimization.
 
@@ -1112,12 +1173,13 @@ class RCDS():
         return sf, xk[:k+1], fk[:k+1], sk[:k+1], mk[:k+1]
 
 
-    def adjust_cube(self, *,
-               data:torch.Tensor=None,
-               extend:bool=False,
-               factor:float=5.0,
-               center_estimator:Callable[[torch.Tensor], torch.Tensor]=median,
-               spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> Tuple[torch.Tensor, torch.Tensor]:
+    def adjust_cube(self,
+                    *,
+                    data:torch.Tensor=None,
+                    extend:bool=False,
+                    factor:float=5.0,
+                    center_estimator:Callable[[torch.Tensor], torch.Tensor]=median,
+                    spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Adjust search box using cached knobs dispersion.
 
@@ -1165,7 +1227,10 @@ class RCDS():
         return lb, ub
 
 
-    def fit_scipy(self, knobs:torch.Tensor, method:str='powell', **kwargs):
+    def fit_scipy(self,
+                  knobs:torch.Tensor,
+                  method:str='powell',
+                  **kwargs):
         """
         Scipy minimization wrapper for bounded methods.
 

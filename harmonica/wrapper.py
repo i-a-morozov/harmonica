@@ -103,8 +103,20 @@ class Wrapper():
         Return wrapped objective.
 
     """
-    def __init__(self, *, cache:bool=False, sf:bool=False, nr:int=0, nk:int=1, lb:torch.Tensor=None, ub:torch.Tensor=None, dk:torch.Tensor=None,
-                 error:float=None, alpha_l1:float=0.0, alpha_l2:float=0.0, dtype:torch.dtype=torch.float64, device:torch.device='cpu') -> None:
+    def __init__(self,
+                 *,
+                 cache:bool=False,
+                 sf:bool=False,
+                 nr:int=0,
+                 nk:int=1,
+                 lb:torch.Tensor=None,
+                 ub:torch.Tensor=None,
+                 dk:torch.Tensor=None,
+                 error:float=None,
+                 alpha_l1:float=0.0,
+                 alpha_l2:float=0.0,
+                 dtype:torch.dtype=torch.float64,
+                 device:torch.device=torch.device('cpu')) -> None:
         """
         Objective function wrapper initialization.
 
@@ -233,7 +245,8 @@ class Wrapper():
             self.alpha_l2 = torch.tensor(self.alpha_l2, dtype=self.dtype, device=self.device)
 
 
-    def forward(self, knobs:torch.Tensor) -> torch.Tensor:
+    def forward(self,
+                knobs:torch.Tensor) -> torch.Tensor:
         """
         Rescale original input knobs into unit ouput knobs.
 
@@ -250,7 +263,8 @@ class Wrapper():
         return (knobs - self.lb)/(self.ub - self.lb)
 
 
-    def inverse(self, knobs:torch.Tensor) -> torch.Tensor:
+    def inverse(self,
+                knobs:torch.Tensor) -> torch.Tensor:
         """
         Rescale unit input knobs into original output knobs.
 
@@ -287,7 +301,8 @@ class Wrapper():
             return knobs, value, error
 
 
-    def __call__(self, objective:Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]):
+    def __call__(self,
+                 objective:Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]):
         """
         Return wrapped objective.
 

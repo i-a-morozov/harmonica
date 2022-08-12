@@ -1,16 +1,23 @@
 """
 Decomposition module.
+Perform quasiperiodic decomposition (estimate parameters of components).
+Perform data driven decompositions.
 
 """
+from __future__ import annotations
 
 import numpy
 import torch
 
-from .util import mod, chain, generate_other, make_mark
+from sklearn.decomposition import FastICA
+from sklearn.linear_model import OrthogonalMatchingPursuit
+from statsmodels.api import OLS
+
+from .util import mod, chain, generate_other, make_mark, make_mask
 from .statistics import weighted_mean, weighted_variance
 from .statistics import median, biweight_midvariance
 from .statistics import standardize
-from .anomaly import threshold, dbscan
+from .anomaly import threshold
 from .window import Window
 from .data import Data
 from .frequency import Frequency
@@ -25,18 +32,22 @@ class Decomposition():
 
     Parameters
     ----------
-    data: 'Data'
+    data: Data
         Data instance
 
     Attributes
     ----------
-    data: 'Data'
+    data: Data
         data instance
 
     Methods
     ----------
-    __init__(self, data:'Data') -> None
+    __init__(self, data:Data) -> None
         Decomposition instance initialization.
+    amplitude(c:torch.Tensor, s:torch.Tensor, *, sigma_c:torch.Tensor=None, sigma_s:torch.Tensor=None) -> tuple
+        Estimate amplitude for given cos and sin values.
+    phase(c:torch.Tensor, s:torch.Tensor, *, sigma_c:torch.Tensor=None, sigma_s:torch.Tensor=None) -> tuple
+        Estimate phase for given cos and sin values.
     harmonic_sum(frequency:float, window:torch.Tensor, data:torch.Tensor, *, error:bool=False, sigma:torch.Tensor=None, sigma_frequency:float=None) -> tuple
         Estimate parameters (and corresponding errors) for given frequency and batch of signals using (weighted) Fourier sum and direct error propagation.
     harmonic_sum_batched(frequency:torch.Tensor, window:torch.Tensor, data:torch.Tensor, *, error:bool=False, sigma:torch.Tensor=None, sigma_frequency:torch.Tensor=None) -> tuple
@@ -57,17 +68,34 @@ class Decomposition():
         Perform synchronization check based on adjacent advance difference for measured and model values.
     phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
+    dht_amplitude(data:torch.Tensor, *, drop:int=32) -> tuple
+        Estimate amplitude using DHT.
+    dht_phase(frequency:float, data:torch.Tensor, *, drop:int=32) -> tuple
+        Estimate phase using DHT.
+    svd_advance(cls, frequency:float, data:torch.Tensor) -> torch.Tensor
+        Estimate phase advance using SVD.
+    ica_advance(cls, frequency:float, data:torch.Tensor, model:torch.Tensor, **kwargs) -> torch.Tensor
+        Estimate phase advance using ICA.
+    fit_ols(signal:torch.Tensor, table:torch.Tensor, *, length:int=None, **kwargs) -> tuple
+        Estimate signal parameters for known table of frequencies using OLS.
+    fit_omp(signal:torch.Tensor, table:torch.Tensor, *, length:int=None, **kwargs) -> tuple
+        Estimate signal parameters for known table of frequencies using OMP.
+    decomposition_prony(rank:int, signal:torch.Tensor) -> torch.Tensor
+        Estimate signal parameters (scaled complex exponents and complex amplitudes) using Prony's decomposition.
+    decomposition_hsvd(nc:int, signal:torch.Tensor, *, np:int=1, ni:int=4, rank:int=2, cpu:bool=True) -> torch.Tensor
+        Attempt to decompose input signal into (oscillating) components using multi-pass iterative truncated SVD.
     __repr__(self) -> str
         String representation.
 
     """
-    def __init__(self, data:'Data'=None) -> None:
+    def __init__(self,
+                 data:Data=None) -> None:
         """
         Decomposition instance initialization.
 
         Parameters
         ----------
-        data: 'Data'
+        data: Data
             Data instance
 
         Returns
@@ -79,8 +107,73 @@ class Decomposition():
 
 
     @staticmethod
-    def harmonic_sum(frequency:float, window:torch.Tensor, data:torch.Tensor, *,
-                     error:bool=False, sigma:torch.Tensor=None, sigma_frequency:float=None) -> tuple:
+    def amplitude(c:torch.Tensor,
+                  s:torch.Tensor,
+                  *,
+                  sigma_c:torch.Tensor=None,
+                  sigma_s:torch.Tensor=None) -> tuple:
+        """
+        Estimate amplitude for given cos and sin values.
+
+        Parameters
+        ----------
+        c, s: torch.Tensor
+            cos & sin values
+        sigma_c, sigma_s: torch.Tensor
+            cos & sin errors
+
+        Returns
+        -------
+        estimated amplitude and error (tuple)
+
+        """
+        a = torch.sqrt(c*c + s*s)
+
+        sigma_c = torch.zeros_like(a) if sigma_c is None else sigma_c
+        sigma_s = torch.zeros_like(a) if sigma_s is None else sigma_s
+        sigma_a = torch.zeros_like(a)
+
+        return a, 1.0/a*(c**2*sigma_c**2 + s**2*sigma_s**2).sqrt()
+
+
+    @staticmethod
+    def phase(c:torch.Tensor,
+              s:torch.Tensor, *,
+              sigma_c:torch.Tensor=None,
+              sigma_s:torch.Tensor=None) -> tuple:
+        """
+        Estimate phase for given cos and sin values.
+
+        Parameters
+        ----------
+        c, s: torch.Tensor
+            cos & sin values
+        sigma_c, sigma_s: torch.Tensor
+            cos & sin errors
+
+        Returns
+        -------
+        estimated phase and error (tuple)
+
+        """
+        a = torch.sqrt(c*c + s*s)
+        b = torch.atan2(-s, +c)
+
+        sigma_c = torch.zeros_like(b) if sigma_c is None else sigma_c
+        sigma_s = torch.zeros_like(b) if sigma_s is None else sigma_s
+        sigma_b = torch.zeros_like(b)
+
+        return b, 1.0/a**2*(c**2*sigma_s**2 + s**2*sigma_c**2).sqrt()
+
+
+    @staticmethod
+    def harmonic_sum(frequency:float,
+                     window:torch.Tensor,
+                     data:torch.Tensor,
+                     *,
+                     error:bool=False,
+                     sigma:torch.Tensor=None,
+                     sigma_frequency:float=None) -> tuple:
         """
         Estimate parameters (and corresponding errors) for given frequency and batch of signals using (weighted) Fourier sum and direct error propagation.
 
@@ -91,7 +184,7 @@ class Decomposition():
         frequency: float
             frequency
         window: torch.Tensor
-            window
+            window data
         data: torch.Tensor
             batch of input signals
         error: bool
@@ -170,8 +263,13 @@ class Decomposition():
 
 
     @staticmethod
-    def harmonic_sum_batched(frequency:torch.Tensor, window:torch.Tensor, data:torch.Tensor, *,
-                             error:bool=False, sigma:torch.Tensor=None, sigma_frequency:torch.Tensor=None) -> tuple:
+    def harmonic_sum_batched(frequency:torch.Tensor,
+                             window:torch.Tensor,
+                             data:torch.Tensor,
+                             *,
+                             error:bool=False,
+                             sigma:torch.Tensor=None,
+                             sigma_frequency:torch.Tensor=None) -> tuple:
         """
         Estimate parameters (and corresponding errors) for given batch of frequencies and batch of signals using (weighted) Fourier sum and direct error propagation.
 
@@ -261,8 +359,13 @@ class Decomposition():
 
 
     @staticmethod
-    def harmonic_sum_automatic(frequency:float, window:torch.Tensor, data:torch.Tensor, *,
-                               error:bool=False, sigma:torch.Tensor=None, sigma_frequency:float=None) -> tuple:
+    def harmonic_sum_automatic(frequency:float,
+                               window:torch.Tensor,
+                               data:torch.Tensor,
+                               *,
+                               error:bool=False,
+                               sigma:torch.Tensor=None,
+                               sigma_frequency:float=None) -> tuple:
         """
         Estimate parameters (and corresponding errors) for given frequency and batch of signals using (weighted) Fourier sum and automatic error propagation.
 
@@ -361,11 +464,20 @@ class Decomposition():
         return (param, error)
 
 
-    def harmonic_amplitude(self, frequency:float, length:int=128, *,
-                           order:float=1.0, window:str='cosine_window',
-                           error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True,
-                           shift:bool=False, count:int=64, step:int=8,
-                           clean:bool=False, factor:float=5.0,
+    def harmonic_amplitude(self,
+                           frequency:float,
+                           length:int=128, *,
+                           order:float=1.0,
+                           window:str='cosine_window',
+                           error:bool=False,
+                           sigma_frequency:float=None,
+                           limit:int=16,
+                           cpu:bool=True,
+                           shift:bool=False,
+                           count:int=64,
+                           step:int=8,
+                           clean:bool=False,
+                           factor:float=5.0,
                            method:str='none') -> tuple:
         """
         Estimate amplitude (and corresponding errors) for given frequency.
@@ -478,12 +590,22 @@ class Decomposition():
         return (center, spread, res)
 
 
-    def harmonic_phase(self, frequency:float, length:int=256, *,
-                           order:float=0.0, window:str='cosine_window',
-                           error:bool=False, sigma_frequency:float=None, limit:int=16, cpu:bool=True,
-                           shift:bool=False, count:int=64, step:int=8, tolerance:float=1.0,
-                           clean:bool=False, factor:float=5.0,
-                           method:str='none') -> tuple:
+    def harmonic_phase(self,
+                       frequency:float,
+                       length:int=256, *,
+                       order:float=0.0,
+                       window:str='cosine_window',
+                       error:bool=False,
+                       sigma_frequency:float=None,
+                       limit:int=16,
+                       cpu:bool=True,
+                       shift:bool=False,
+                       count:int=64,
+                       step:int=8,
+                       tolerance:float=1.0,
+                       clean:bool=False,
+                       factor:float=5.0,
+                       method:str='none') -> tuple:
         """
         Estimate phase (and corresponding errors) for given frequency.
 
@@ -607,8 +729,13 @@ class Decomposition():
 
 
     @staticmethod
-    def phase_adjust(probe:torch.Tensor, frequency:float, phase:torch.Tensor, *,
-                    error:bool=True, sigma_frequency:float=None, sigma_phase:torch.Tensor=None) -> tuple:
+    def phase_adjust(probe:torch.Tensor,
+                     frequency:float,
+                     phase:torch.Tensor,
+                     *,
+                     error:bool=True,
+                     sigma_frequency:float=None,
+                     sigma_phase:torch.Tensor=None) -> tuple:
         """
         Adjust phase of given probe indices.
 
@@ -657,8 +784,16 @@ class Decomposition():
 
 
     @classmethod
-    def phase_advance(cls, probe:torch.Tensor, other:torch.Tensor, frequency:float, phase:torch.Tensor, *,
-                      error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple:
+    def phase_advance(cls,
+                      probe:torch.Tensor,
+                      other:torch.Tensor,
+                      frequency:float,
+                      phase:torch.Tensor,
+                      *,
+                      error:bool=True,
+                      sigma_frequency:torch.Tensor=None,
+                      sigma_phase:torch.Tensor=None,
+                      model:bool=False) -> tuple:
         """
         Compute phase advance mod 2*pi from probe to other indices for given measured or model phases.
 
@@ -717,8 +852,14 @@ class Decomposition():
 
 
     @classmethod
-    def phase_adjacent(cls, frequency:float, phase:torch.Tensor, *,
-                       error:bool=True, sigma_frequency:torch.Tensor=None, sigma_phase:torch.Tensor=None, model:bool=False) -> tuple:
+    def phase_adjacent(cls,
+                       frequency:float,
+                       phase:torch.Tensor,
+                       *,
+                       error:bool=True,
+                       sigma_frequency:torch.Tensor=None,
+                       sigma_phase:torch.Tensor=None,
+                       model:bool=False) -> tuple:
         """
         Compute phase advance mod 2*pi between adjacent locations.
 
@@ -749,8 +890,15 @@ class Decomposition():
 
 
     @classmethod
-    def phase_check(cls, frequency:float, frequency_model:float, phase:torch.Tensor, phase_model:torch.Tensor, *,
-                    drop_endpoints:bool=True, trust_sequence_length:int=5, factor:float=5.0) -> tuple:
+    def phase_check(cls,
+                    frequency:float,
+                    frequency_model:float,
+                    phase:torch.Tensor,
+                    phase_model:torch.Tensor,
+                    *,
+                    drop_endpoints:bool=True,
+                    trust_sequence_length:int=5,
+                    factor:float=5.0) -> tuple:
         """
         Perform synchronization check based on adjacent advance difference for measured and model values.
 
@@ -855,11 +1003,24 @@ class Decomposition():
 
 
     @classmethod
-    def phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor,
-                    frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *,
-                    use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True,
-                    sigma_frequency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None,
-                    sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict:
+    def phase_virtual(cls,
+                      probe:int,
+                      limit:int,
+                      flags:torch.Tensor,
+                      frequency:torch.Tensor,
+                      frequency_model:torch.Tensor,
+                      phase:torch.Tensor,
+                      phase_model:torch.Tensor,
+                      *,
+                      use_probe:bool=False,
+                      full:bool=True,
+                      clean:bool=False,
+                      factor:float=5.0,
+                      error:bool=True,
+                      sigma_frequency:torch.Tensor=None,
+                      sigma_frequency_model:torch.Tensor=None,
+                      sigma_phase:torch.Tensor=None,
+                      sigma_phase_model:torch.Tensor=None) -> dict:
         """
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
 
@@ -956,6 +1117,303 @@ class Decomposition():
         result['model'] = torch.stack([center, spread])
 
         return result
+
+
+    @staticmethod
+    def dht_amplitude(data:torch.Tensor,
+                      *,
+                      drop:int=32) -> tuple:
+        """
+        Estimate amplitude using DHT.
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            data
+        drop: int
+            number of start and end points to drop
+
+        Returns
+        -------
+        amplitude and error (tuple)
+
+        """
+        envelope = Frequency.dht(d.work).abs()[:, +drop:-drop]
+        return envelope.mean(1), envelope.std(1)
+
+
+    @staticmethod
+    def dht_phase(frequency:float,
+                  data:torch.Tensor,
+                  *,
+                  drop:int=32) -> tuple:
+        """
+        Estimate phase using DHT.
+
+        Parameters
+        ----------
+        frequency: float
+            frequency
+        data: torch.Tensor
+            data
+        drop: int
+            number of start and end points to drop
+
+        Returns
+        -------
+        phase and error (tuple)
+
+        """
+        angle = Frequency.dht(d.work).angle()
+        angle -= 2.0*numpy.pi*frequency*torch.linspace(0, length - 1, length, dtype=data.dtype, device=data.device)
+        angle = mod(angle, 2.0*numpy.pi, -numpy.pi)[:, +drop:-drop]
+        return angle.mean(1), angle.std(1)
+
+
+    @classmethod
+    def svd_advance(cls,
+                    frequency:float,
+                    data:torch.Tensor) -> torch.Tensor:
+        """
+        Estimate phase advance using SVD.
+
+        Parameters
+        ----------
+        frequency: float
+            frequency
+        data: torch.Tensor
+            data
+
+        Returns
+        -------
+        phase (torch.Tensor)
+
+        """
+        u, s, _ = torch.linalg.svd(data, full_matrices=False)
+        phase = torch.atan2(s[1]*u[:, 1], s[0]*u[:, 0])
+        advance, _ = cls.phase_adjacent(frequency, phase, error=False)
+        return advance
+
+
+    @classmethod
+    def ica_advance(cls,
+                    frequency:float,
+                    data:torch.Tensor,
+                    model:torch.Tensor,
+                    **kwargs) -> torch.Tensor:
+        """
+        Estimate phase advance using ICA.
+
+        Parameters
+        ----------
+        frequency: float
+            frequency
+        data: torch.Tensor
+            data
+        model: torch.Tensor
+            model advance
+        **kwargs:
+            passed to FastICA
+
+        Returns
+        -------
+        phase (torch.Tensor)
+
+        """
+        ica = FastICA(n_components=2, **kwargs)
+        _ = ica.fit_transform(data.T.cpu().numpy())
+        table = torch.tensor(ica.mixing_, dtype=data.dtype, device=data.device).T
+
+        advance1, _ = Decomposition.phase_adjacent(frequency, torch.atan2(table[0], table[1]), error=False)
+        error1 = (advance1 - model).abs().sum()
+
+        advance2, _ = Decomposition.phase_adjacent(frequency, torch.atan2(table[1], table[0]), error=False)
+        error2 = (advance2 - model).abs().sum()
+
+        return advance1 if error1 < error2 else advance2
+
+
+    @staticmethod
+    def fit_ols(signal:torch.Tensor,
+                table:torch.Tensor,
+                *,
+                length:int=None,
+                **kwargs) -> tuple:
+        """
+        Estimate signal parameters for known table of frequencies using OLS.
+
+        Parameters
+        ----------
+        signal: torch.Tensor
+            input signal
+        table: torch.Tensor
+            table of frequency values
+        length: int
+            length to use in fit
+        **kwargs:
+            passed to OLS
+
+        Returns
+        -------
+        ([..., [c_i, s_i], ...], [..., [sigma_c_i, sigma_s_i], ...])
+        a_i = torch.sqrt(c_i**2 + s_i**2)
+        b_i = torch.atan2(-s_i, +c_i)
+
+        """
+        size = len(signal) if length == None else length
+        time = 2.0*numpy.pi*torch.linspace(0, size - 1, size, dtype=signal.dtype, device=signal.device)
+        data = torch.cat([torch.cos(time*table.reshape(-1, 1)), torch.sin(time*table.reshape(-1, 1))]).T
+        X = data.cpu().numpy()
+        y = signal[:size].cpu().numpy()
+        fit = OLS(y, X, **kwargs).fit()
+        value = torch.tensor(fit.params, dtype=signal.dtype, device=signal.device).reshape(-1, len(table)).T
+        error = torch.tensor(fit.bse, dtype=signal.dtype, device=signal.device).reshape(-1, len(table)).T
+        return value, error
+
+
+    @staticmethod
+    def fit_omp(signal:torch.Tensor,
+                table:torch.Tensor,
+                *,
+                length:int=None,
+                **kwargs) -> tuple:
+        """
+        Estimate signal parameters for known table of frequencies using OMP.
+
+        Parameters
+        ----------
+        signal: torch.Tensor
+            input signal
+        table: torch.Tensor
+            table of frequency values
+        length: int
+            length to use in fit
+        **kwargs:
+            passed to OrthogonalMatchingPursuit
+
+        Returns
+        -------
+        ([..., [c_i, s_i], ...], None)
+        a_i = torch.sqrt(c_i**2 + s_i**2)
+        b_i = torch.atan2(-s_i, +c_i)
+
+        """
+        size = len(signal) if length == None else length
+        time = 2.0*numpy.pi*torch.linspace(0, size - 1, size, dtype=signal.dtype, device=signal.device)
+        data = torch.cat([torch.cos(time*table.reshape(-1, 1)), torch.sin(time*table.reshape(-1, 1))]).T
+        X = data.cpu().numpy()
+        y = signal[:size].cpu().numpy()
+        value = torch.tensor(OrthogonalMatchingPursuit(**kwargs).fit(X, y).coef_, dtype=signal.dtype, device=signal.device)
+        return (value.reshape(-1, len(table)).T, None)
+
+
+    @staticmethod
+    def decomposition_prony(rank:int,
+                            signal:torch.Tensor) -> torch.Tensor:
+        """
+        Estimate signal parameters (scaled complex exponents and complex amplitudes) using Prony's decomposition.
+
+        Note, rank selection can be motivated by optimal SVD truncation
+        In general, for a signal with zero mean, each oscillating component generates two singular values
+
+        s(t) = ... + a_i*exp(2*pi*b_i*t) + ... with complex parameters a_i & b_i
+
+        Parameters
+        ----------
+        rank: int
+            number of singular values to use
+        signal: torch.Tensor
+            input signal
+
+        Returns
+        -------
+        [.... [a_i, b_i], ...] (torch.Tensor)
+
+        rank, length = 4, 128
+        table = decomposition_prony(rank, signal[:length])
+
+        time = torch.linspace(0, len(signal) - 1, len(signal), dtype=torch.float64)
+        data = 1j*torch.zeros_like(signal)
+        for exponent, amplitude in table:
+            data += amplitude*torch.exp(2.0*numpy.pi*exponent*time)
+        data = data.real
+
+        """
+        matrix = []
+        for i in range(rank):
+            matrix.append(signal[i:i - rank])
+        matrix = torch.stack(matrix).T
+        vector = signal[rank:]
+        factor = -(torch.linalg.pinv(matrix) @ vector)
+        factor = numpy.array([1.0, *factor.flip(-1).cpu().numpy()])
+        root = torch.tensor(numpy.roots(factor), dtype=torch.complex128, device=signal.device)
+        exponent = torch.log(root)/(2.0*numpy.pi)
+        time = torch.arange(len(signal), device=signal.device)
+        matrix = root**time.reshape(-1, 1)
+        amplitude = torch.linalg.pinv(matrix) @ signal.to(matrix.dtype)
+        return torch.stack([exponent, amplitude]).T
+
+
+    @staticmethod
+    def decomposition_hsvd(nc:int,
+                           signal:torch.Tensor,
+                           *,
+                           np:int=1,
+                           ni:int=4,
+                           rank:int=2,
+                           cpu:bool=True) -> torch.Tensor:
+        """
+        Attempt to decompose input signal into (oscillating) components using multi-pass iterative truncated SVD.
+
+        Number of components can be estimated using optimal SVD truncation
+        Input signal is assumed to have zero mean
+        Default component rank is two, which correcponts to a component with one dominated frequency
+        Using several passes can significantly impove separation if the number of compoments is known and noise can be neglected
+
+        Parameters
+        ----------
+        nc: int
+            number of components
+        signal: torch.Tensor
+            input signal
+        np: int
+            number of passes
+        ni: int
+            number of iterations
+        rank: int
+            component rank
+        cpu: bool
+            flag to perform SVD on cpu
+
+        Returns
+        -------
+        [..., component_i, ...] (torch.Tensor)
+
+        """
+        size = len(signal)
+        data = torch.zeros((nc, size), dtype=signal.dtype, device=signal.device)
+
+        for _ in range(np):
+
+            copy = torch.clone(signal)
+
+            for component in data:
+                copy -= component
+
+            for i in range(nc):
+
+                copy += data[i]
+                component = torch.clone(copy).reshape(1, -1)
+
+                for _ in range(ni):
+                    component = Filter.make_matrix(component)
+                    _, component = Filter.svd_truncation(rank, component, cpu=cpu)
+                    component = Filter.make_signal(component)
+
+                data[i] = component.squeeze()
+                copy -= data[i]
+
+        return data
 
 
     def __repr__(self) -> str:

@@ -1,5 +1,6 @@
 """
 Anomaly detection module.
+Basic threshold detector and sklean wrappers for dbscan, lof and isolation forest.
 
 """
 
@@ -7,11 +8,13 @@ import torch
 
 from collections import Counter
 from sklearn.cluster import DBSCAN
-from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.ensemble import IsolationForest
 
 
-def threshold(data:torch.Tensor, min_value:torch.Tensor, max_value:torch.Tensor) -> torch.Tensor:
+def threshold(data:torch.Tensor,
+              min_value:torch.Tensor,
+              max_value:torch.Tensor) -> torch.Tensor:
     """
     Generate mask using min & max values.
 
@@ -34,7 +37,9 @@ def threshold(data:torch.Tensor, min_value:torch.Tensor, max_value:torch.Tensor)
     return (data > min_value.reshape(-1, 1))*(data < max_value.reshape(-1, 1))
 
 
-def dbscan(data:torch.Tensor, epsilon:float, **kwargs) -> torch.Tensor:
+def dbscan(data:torch.Tensor,
+           epsilon:float,
+           **kwargs) -> torch.Tensor:
     """
     Generate mask using DBSCAN.
 
@@ -60,8 +65,10 @@ def dbscan(data:torch.Tensor, epsilon:float, **kwargs) -> torch.Tensor:
     return torch.tensor(group.labels_ == label).to(data.device)
 
 
-def local_outlier_factor(data:torch.Tensor, *,
-                         contamination:float=0.01, **kwargs) -> torch.Tensor:
+def local_outlier_factor(data:torch.Tensor,
+                         *,
+                         contamination:float=0.01,
+                         **kwargs) -> torch.Tensor:
     """
     Generate mask using LocalOutlierFactor.
 
@@ -86,8 +93,10 @@ def local_outlier_factor(data:torch.Tensor, *,
     return torch.tensor(1 == label).to(data.device)
 
 
-def isolation_forest(data:torch.Tensor, *,
-                     contamination:float=0.01, **kwargs) -> torch.Tensor:
+def isolation_forest(data:torch.Tensor,
+                     *,
+                     contamination:float=0.01,
+                     **kwargs) -> torch.Tensor:
     """
     Generate mask using IsolationForest.
 
@@ -112,9 +121,10 @@ def isolation_forest(data:torch.Tensor, *,
     return torch.tensor(1 == label).to(data.device)
 
 
-def score(size:int, mask:torch.Tensor) -> torch.Tensor:
+def score(size:int,
+          mask:torch.Tensor) -> torch.Tensor:
     """
-    Count number of makred (with False) elements.
+    Count number of marked (with False) elements.
 
     Note, 1D mask is reshaped into (size, -1)
 

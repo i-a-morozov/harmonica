@@ -1,12 +1,11 @@
 """
-Filter TbT data.
-Noise estimation.
+Filter module.
+TbT data filtering and noise estimation.
 
 """
+from __future__ import annotations
 
 import torch
-
-from kneed import KneeLocator
 
 from .data import Data
 
@@ -19,19 +18,15 @@ class Filter():
 
     Parameters
     ----------
-    data: 'Data'
+    data: Data
         Data instance
         Noise estimation is perfomed using work container
         Filtering is performed using work container (modify work container inplace)
-    random_seed: int
-        Random seed (randomized range estimation)
 
     Attributes
     ----------
-    data: 'Data'
+    data: Data
         Data instance
-    random_seed: int
-        Random seed (randomized range estimation)
 
     Methods
     ----------
@@ -41,39 +36,39 @@ class Filter():
         Compute signal representation for a given batch of Hankel matrices (staticmethod).
     randomized_range(rank:int, count:int, matrix:torch.Tensor) -> torch.Tensor
         Randomized range estimation.
-    randomized_range(rank:int, count:int, matrix:torch.Tensor, random_seed:int=0) -> torch.Tensor
+    randomized_range(rank:int, count:int, matrix:torch.Tensor) -> torch.Tensor
         Randomized range estimation based on QR decomposition (staticmethod).
-    svd_list(rank:int, matrix:torch.Tensor, cpu:bool=True)
+    svd_list(rank:int, matrix:torch.Tensor, *, cpu:bool=True)
         Compute list of singular values for a given batch of matrices (staticmethod).
-    svd_list_randomized(cls, rank:int, matrix:torch.Tensor, buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> torch.Tensor
+    svd_list_randomized(cls, rank:int, matrix:torch.Tensor, *, buffer:int=8, count:int=16, cpu:bool=True) -> torch.Tensor
         Compute list of singular values for a given batch of matrices (classmethod).
-    locate(data:torch.Tensor, **kwargs) -> int
-        Find the point of maximum curvature.
-    svd_truncation(rank:int, matrix:torch.Tensor, cpu:bool=True) -> tuple
+    svd_truncation(rank:int, matrix:torch.Tensor, *, cpu:bool=True) -> tuple
         Compute SVD truncation for given rank and a batch of matrices (staticmethod).
-    svd_truncation_randomized(cls, rank:int, matrix:torch.Tensor, buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> tuple
+    svd_truncation_randomized(cls, rank:int, matrix:torch.Tensor, *, buffer:int=8, count:int=16, cpu:bool=True) -> tuple
         Compute randomized SVD truncation for given rank and a batch of matrices (classmethod).
-    svd_optimal(matrix:torch.Tensor, cpu:bool=True) -> tuple
+    svd_optimal(matrix:torch.Tensor, *, cpu:bool=True) -> tuple
         Estimate optimal truncation rank and noise value for a given batch of matrices.
     rpca_shrink(threshold:float, matrix:torch.Tensor) -> torch.Tensor
          Replace input matrix elements with zeros if the absolute value is less than a given threshold (staticmethod).
-    rpca_threshold(threshold:float, matrix:torch.Tensor, cpu:bool=True) -> torch.Tensor
+    rpca_threshold(threshold:float, matrix:torch.Tensor, *, cpu:bool=True) -> torch.Tensor
         SVD truncation based on singular values thresholding (staticmethod).
-    rpca(cls, matrix:torch.Tensor, limit:int=128, factor:float=1.E-7, cpu:bool=True) -> tuple
+    rpca(cls, matrix:torch.Tensor, *, limit:int=128, factor:float=1.0E-9, cpu:bool=True) -> tuple
         RPCA by principle component pursuit by alternating directions (classmethod).
     estimate_noise(self, *, limit:int=32, cpu:bool=True) -> tuple
         Estimate optimal truncation rank and noise value for each signal in TbT.
-    filter_svd(self, *, rank:int=0, limit:int=32, random:bool=False, buffer:int=8, count:int=4, cpu:bool=True) -> torch.Tensor
+    filter_svd(self, *, rank:int=0, limit:int=32, random:bool=False, buffer:int=8, count:int=16, cpu:bool=True) -> torch.Tensor
         Perform TbT filtering based on (randomized) SVD truncation of full TbT matrix.
-    filter_hankel(self, *, rank:int=0, size:int=32, random:bool=False, buffer:int=8, count:int=8, cpu:bool=True) -> torch.Tensor
+    filter_hankel(self, *, rank:int=0, limit:int=32, loop:int=1, random:bool=False, buffer:int=8, count:int=16, cpu:bool=True) -> torch.Tensor
         Perform TbT filtering based on (randomized) SVD truncation of individual TbT signals.
     filter_rpca(self, *, limit:int=512, factor:float=1.E-9, cpu:bool=True) -> tuple
         Perform TbT filtering based on RPCA of full TbT matrix.
+    __repr__(self) -> str
+        String representation.
 
     """
-    def __init__(self, data:'Data', *, random_seed:int=0) -> None:
+    def __init__(self,
+                 data:Data=None) -> None:
         self.data = data
-        self.random_seed = random_seed
 
 
     @staticmethod
@@ -81,7 +76,7 @@ class Filter():
         """
         Compute Hankel matrix representation for a given batch of signals.
 
-        If signal length is 2n, corresponding matrix shape is (n + 1, n).
+        If signal length is 2n, corresponding matrix shape is (n + 1, n)
 
         Parameters
         ----------
@@ -109,8 +104,8 @@ class Filter():
         """
         Compute signal representation for a given batch of Hankel matrices.
 
-        If matrix shape is (n + 1, n), corresponding output signal length is 2n.
-        Each signal is computed by averaging skew diagonals of corresponding matrix.
+        If matrix shape is (n + 1, n), corresponding output signal length is 2n
+        Each signal is computed by averaging skew diagonals of the corresponding matrix
 
         Parameters
         ----------
@@ -134,11 +129,13 @@ class Filter():
 
 
     @staticmethod
-    def randomized_range(rank:int, count:int, matrix:torch.Tensor, random_seed:int=0) -> torch.Tensor:
+    def randomized_range(rank:int,
+                         count:int,
+                         matrix:torch.Tensor) -> torch.Tensor:
         """
         Randomized range estimation based on QR decomposition.
 
-        Randomized SVD truncation auxiliary function.
+        Randomized SVD truncation auxiliary function
 
         Parameters
         ----------
@@ -148,8 +145,6 @@ class Filter():
             number of iterations to use in randomized range
         matrix: torch.Tensor
             input batch of matrices
-        random_seed: int
-            random seed
 
         Returns
         -------
@@ -159,11 +154,9 @@ class Filter():
         """
         dtype = matrix.dtype
         device = matrix.device
-        generator = torch.Generator(device=device)
-        generator.manual_seed(random_seed)
         size, m, n = matrix.shape
         transpose = torch.clone(torch.transpose(matrix, 1, 2))
-        projection1 = torch.randn((size, n, rank), dtype=dtype, device=device, generator=generator)
+        projection1 = torch.randn((size, n, rank), dtype=dtype, device=device)
         projection2 = torch.zeros((size, m, rank), dtype=dtype, device=device)
         for _ in range(count):
             projection2 = torch.linalg.qr(torch.matmul(matrix, projection1)).Q
@@ -172,11 +165,14 @@ class Filter():
 
 
     @staticmethod
-    def svd_list(rank:int, matrix:torch.Tensor, cpu:bool=True) -> torch.Tensor:
+    def svd_list(rank:int,
+                 matrix:torch.Tensor,
+                 *,
+                 cpu:bool=True) -> torch.Tensor:
         """
         Compute list of singular values for a given batch of matrices.
 
-        Note, all singular values are computed, but only requested number is returned.
+        Note, all singular values are computed, but only requested number is returned
 
         Parameters
         ----------
@@ -197,8 +193,13 @@ class Filter():
 
 
     @classmethod
-    def svd_list_randomized(cls, rank:int, matrix:torch.Tensor,
-                            buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> torch.Tensor:
+    def svd_list_randomized(cls,
+                            rank:int,
+                            matrix:torch.Tensor,
+                            *,
+                            buffer:int=8,
+                            count:int=16,
+                            cpu:bool=True) -> torch.Tensor:
         """
         Compute list of singular values for a given batch of matrices.
 
@@ -212,8 +213,6 @@ class Filter():
             number of extra dimensions (randomized range estimation)
         count: int
             number of iterations (randomized range estimation)
-        random_seed: int
-            random seed (randomized range estimation)
         cpu: bool
             flag to use CPU for SVD computation
 
@@ -223,26 +222,20 @@ class Filter():
             list of singular values
 
         """
-        projection = cls.randomized_range(rank + buffer, count, matrix, random_seed)
+        projection = cls.randomized_range(rank + buffer, count, matrix)
         matrix = torch.matmul(torch.transpose(projection, 1, 2), matrix)
         return torch.linalg.svdvals(matrix.cpu() if cpu else matrix)[:, :rank].to(matrix.device)
 
 
     @staticmethod
-    def locate(data:torch.Tensor, **kwargs) -> int:
-        """
-        Find the point of maximum curvature.
-
-        """
-        return KneeLocator(range(len(data)), data.cpu().numpy(), **kwargs).knee
-
-
-    @staticmethod
-    def svd_truncation(rank:int, matrix:torch.Tensor, cpu:bool=True) -> tuple:
+    def svd_truncation(rank:int,
+                       matrix:torch.Tensor,
+                       *,
+                       cpu:bool=True) -> tuple:
         """
         Compute SVD truncation for given rank and a batch of matrices.
 
-        Note, all matrices are truncated using the same rank.
+        Note, all matrices are truncated using the same rank
 
         Parameters
         ----------
@@ -260,20 +253,25 @@ class Filter():
 
         """
         device = matrix.device
-        u, s, v = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
+        u, s, vh = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
         u = u[:, :, :rank].to(device)
         s = s[:, :rank].to(device)
-        v = v[:, :rank, :].to(device)
-        return s, torch.matmul(u, torch.matmul(torch.diag_embed(s), v))
+        vh = vh[:, :rank, :].to(device)
+        return s, torch.matmul(u, torch.matmul(torch.diag_embed(s), vh))
 
 
     @classmethod
-    def svd_truncation_randomized(cls, rank:int, matrix:torch.Tensor,
-                                  buffer:int=8, count:int=8, random_seed:int=0, cpu:bool=True) -> tuple:
+    def svd_truncation_randomized(cls,
+                                  rank:int,
+                                  matrix:torch.Tensor,
+                                  *,
+                                  buffer:int=8,
+                                  count:int=16,
+                                  cpu:bool=True) -> tuple:
         """
         Compute randomized SVD truncation for given rank and a batch of matrices.
 
-        Note, all matrices are truncated using the same rank.
+        Note, all matrices are truncated using the same rank
 
         Parameters
         ----------
@@ -285,8 +283,6 @@ class Filter():
             number of extra dimensions (randomized range estimation)
         count: int
             number of iterations (randomized range estimation)
-        random_seed: int
-            random seed (randomized range estimation)
         cpu: bool
             flag to use CPU for SVD computation
 
@@ -297,23 +293,25 @@ class Filter():
 
         """
         device = matrix.device
-        projection = cls.randomized_range(rank + buffer, count, matrix, random_seed)
+        projection = cls.randomized_range(rank + buffer, count, matrix)
         matrix = torch.matmul(torch.transpose(projection, 1, 2), matrix)
-        u, s, v = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
+        u, s, vh = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
         u = u[:, :, :rank].to(device)
         s = s[:, :rank].to(device)
-        v = v[:, :rank, :].to(device)
+        vh = vh[:, :rank, :].to(device)
         u = torch.matmul(projection, u)
-        return s, torch.matmul(u, torch.matmul(torch.diag_embed(s), v))
+        return s, torch.matmul(u, torch.matmul(torch.diag_embed(s), vh))
 
 
     @staticmethod
-    def svd_optimal(matrix:torch.Tensor, cpu:bool=True) -> tuple:
+    def svd_optimal(matrix:torch.Tensor,
+                    *,
+                    cpu:bool=True) -> tuple:
         """
         Estimate optimal truncation rank and noise value for a given batch of matrices.
 
-        Note, all singular values are computed.
-        Approximate expression is used for estimation.
+        Note, all singular values are computed, only part of cols or rows can be passed
+        Approximate expression is used for estimation
 
         Parameters
         ----------
@@ -325,7 +323,7 @@ class Filter():
         Returns
         -------
         tuple:
-            optimal rank and noise value for each matrix
+            optimal rank and noise value for each matrix (torch.Tensor, torch.Tensor)
 
         """
         dtype = matrix.dtype
@@ -342,11 +340,12 @@ class Filter():
 
 
     @staticmethod
-    def rpca_shrink(threshold:float, matrix:torch.Tensor) -> torch.Tensor:
+    def rpca_shrink(threshold:float,
+                    matrix:torch.Tensor) -> torch.Tensor:
         """
         Replace input matrix elements with zeros if the absolute value is less than a given threshold.
 
-        RPCA auxiliary function.
+        RPCA auxiliary function
 
         Parameters
         ----------
@@ -361,18 +360,17 @@ class Filter():
             thresholded matrix
 
         """
-        dtype = matrix.dtype
-        device = matrix.device
-        return torch.sign(matrix)*torch.maximum(
-            (torch.abs(matrix) - threshold), torch.zeros(matrix.shape, dtype=dtype, device=device))
+        return torch.sign(matrix)*torch.maximum((torch.abs(matrix) - threshold), torch.zeros_like(matrix))
 
 
     @staticmethod
-    def rpca_threshold(threshold:float, matrix:torch.Tensor, cpu:bool=True) -> torch.Tensor:
+    def rpca_threshold(threshold:float,
+                       matrix:torch.Tensor,
+                       cpu:bool=True) -> torch.Tensor:
         """
         SVD truncation based on singular values thresholding.
 
-        RPCA auxiliary function.
+        RPCA auxiliary function
 
         Parameters
         ----------
@@ -391,22 +389,27 @@ class Filter():
         """
         dtype = matrix.dtype
         device = matrix.device
-        u, s, v = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
+        u, s, vh = torch.linalg.svd(matrix.cpu() if cpu else matrix, full_matrices=False)
         u = u.to(device)
         s = s.to(device)
-        v = v.to(device)
+        vh = vh.to(device)
         s = torch.diag(s)
-        s = torch.sign(s)*torch.maximum((torch.abs(s) - threshold), torch.zeros(s.shape, dtype=dtype, device=device))
-        return torch.matmul(torch.matmul(u, s), v)
+        s = torch.sign(s)*torch.maximum((torch.abs(s) - threshold), torch.zeros_like(s))
+        return torch.matmul(torch.matmul(u, s), vh)
 
 
     @classmethod
-    def rpca(cls, matrix:torch.Tensor, limit:int=512, factor:float=1.E-9, cpu:bool=True) -> tuple:
+    def rpca(cls,
+             matrix:torch.Tensor,
+             *,
+             limit:int=512,
+             factor:float=1.0E-9,
+             cpu:bool=True) -> tuple:
         """
         RPCA by principle component pursuit by alternating directions.
 
-        Note, acts on a single matrix.
-        For normal noise estimation, factor value should be small.
+        Note, acts on a single matrix
+        For noise estimation, factor value should be small
 
         Parameters
         ----------
@@ -450,12 +453,17 @@ class Filter():
         return count, value, low, sparse
 
 
-    def estimate_noise(self, *, limit:int=64, cpu:bool=True,
-                       randomized:bool=False, buffer:int=8, count:int=8, random_seed:int=0) -> tuple:
+    def estimate_noise(self,
+                       *,
+                       limit:int=32,
+                       cpu:bool=True,
+                       randomized:bool=False,
+                       buffer:int=8,
+                       count:int=16) -> tuple:
         """
         Estimate optimal truncation rank and noise value for each signal in TbT.
 
-        Note, data from work container is used for estimation.
+        Note, data from work container is used for estimation
 
         Parameters
         ----------
@@ -469,8 +477,6 @@ class Filter():
             number of extra dimensions (randomized range estimation)
         count: int
             number of iterations (randomized range estimation)
-        random_seed: int
-            random seed (randomized range estimation)
 
         Returns
         -------
@@ -479,21 +485,27 @@ class Filter():
 
         """
         if not randomized:
-            return self.svd_optimal(self.make_matrix(self.data.work)[:, :, :limit], cpu=cpu)
+            return self.svd_optimal(self.make_matrix(self.data.work)[..., :limit], cpu=cpu)
 
         matrix = self.make_matrix(self.data.work)
-        projection = self.randomized_range(limit + buffer, count, matrix, random_seed)
+        projection = self.randomized_range(limit + buffer, count, matrix)
         matrix = torch.matmul(torch.transpose(projection, 1, 2), matrix)
         return self.svd_optimal(matrix, cpu=cpu)
 
 
-    def filter_svd(self, *, rank:int=0, limit:int=32,
-                   random:bool=False, buffer:int=8, count:int=8, cpu:bool=True) -> torch.Tensor:
+    def filter_svd(self,
+                   *,
+                   rank:int=0,
+                   limit:int=32,
+                   random:bool=False,
+                   buffer:int=8,
+                   count:int=16,
+                   cpu:bool=True) -> torch.Tensor:
         """
         Perform TbT filtering based on (randomized) SVD truncation of full TbT matrix.
 
-        Input from work, result in work.
-        If rank is zero, estimate rank by optimal SVD truncation.
+        Input from work, result in work
+        If rank is zero, estimate rank by optimal SVD truncation
 
         Parameters
         ----------
@@ -520,26 +532,32 @@ class Filter():
 
         if rank == 0:
             rank, _ = self.__class__.svd_optimal(matrix[:, :, :limit], cpu=cpu)
-            rank = rank.item()
+            rank = rank.cpu().item()
 
         if not random:
             value, matrix = self.__class__.svd_truncation(rank, matrix, cpu=cpu)
         else:
-            value, matrix = self.__class__.svd_truncation_randomized(rank, matrix, buffer=buffer,
-                                                                     count=count, random_seed=self.random_seed, cpu=cpu)
+            value, matrix = self.__class__.svd_truncation_randomized(rank, matrix, buffer=buffer, count=count, cpu=cpu)
 
         self.data.work.copy_(matrix.squeeze())
         return value
 
 
-    def filter_hankel(self, *, rank:int=0, limit:int=32,
-                      random:bool=False, buffer:int=8, count:int=8, cpu:bool=True) -> torch.Tensor:
+    def filter_hankel(self,
+                      *,
+                      rank:int=0,
+                      limit:int=32,
+                      loop:int=1,
+                      random:bool=False,
+                      buffer:int=8,
+                      count:int=16,
+                      cpu:bool=True) -> torch.Tensor:
         """
         Perform TbT filtering based on (randomized) SVD truncation of individual TbT signals.
 
-        Input from work, result in work.
-        If rank is zero, estimate rank by optimal SVD truncation.
-        Maximum rank is used for truncation.
+        Input from work, result in work
+        If rank is zero, estimate rank by optimal SVD truncation
+        Maximum rank is used for truncation
 
         Parameters
         ----------
@@ -547,6 +565,8 @@ class Filter():
             truncation rank, if zero, rank is estimated with optimal SVD truncation
         limit: int
             number of columns to use for optimal SVD truncation, used if rank is zero
+        loop: int
+            number of iterations
         random: bool
             flag to used randomized SVD for truncation
         buffer: int
@@ -562,28 +582,38 @@ class Filter():
             singular values for each signal
 
         """
-        matrix = self.__class__.make_matrix(self.data.work)
+        matrix = torch.clone(self.data.work)
 
-        if rank == 0:
-            rank, _ = self.__class__.svd_optimal(matrix[:, :, :limit], cpu=cpu)
-            rank = rank.max().item()
+        for _ in range(loop):
 
-        if not random:
-            value, matrix = self.__class__.svd_truncation(rank, matrix, cpu=cpu)
-        else:
-            value, matrix = self.__class__.svd_truncation_randomized(rank, matrix, buffer=buffer,
-                                                                     count=count, random_seed=self.random_seed, cpu=cpu)
+            matrix = self.__class__.make_matrix(matrix)
 
-        self.data.work.copy_(self.__class__.make_signal(matrix))
+            if rank == 0:
+                rank, _ = self.__class__.svd_optimal(matrix[:, :, :limit], cpu=cpu)
+                rank = rank.max().item()
+
+            if not random:
+                value, matrix = self.__class__.svd_truncation(rank, matrix, cpu=cpu)
+            else:
+                value, matrix = self.__class__.svd_truncation_randomized(rank, matrix, buffer=buffer, count=count, cpu=cpu)
+
+            matrix = self.__class__.make_signal(matrix)
+
+        self.data.work.copy_(matrix)
+
         return value
 
 
-    def filter_rpca(self, *, limit:int=512, factor:float=1.E-9, cpu:bool=True) -> tuple:
+    def filter_rpca(self,
+                    *,
+                    limit:int=512,
+                    factor:float=1.E-9,
+                    cpu:bool=True) -> tuple:
         """
         Perform TbT filtering based on RPCA of full TbT matrix.
 
-        Input from work, result in work.
-        Note, if RPCA filtering is desired for an individual signal, create TbT data from it first.
+        Input from work, result in work
+        Note, if RPCA filtering is desired for an individual signal, create TbT data from it first
 
         Parameters
         ----------
@@ -603,6 +633,14 @@ class Filter():
         count, error, matrix, noise = self.__class__.rpca(self.data.work, limit=limit, factor=factor, cpu=cpu)
         self.data.work.copy_(matrix)
         return count, error, noise
+
+
+    def __repr__(self) -> str:
+        """
+        String representation.
+
+        """
+        return f'{self.__class__.__name__}({self.data})'
 
 
 def main():
