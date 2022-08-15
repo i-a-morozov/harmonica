@@ -25,6 +25,7 @@ from .decomposition import Decomposition
 from .model import Model
 from .table import Table
 from .parameterization import cs_normal, lb_normal, parametric_normal
+from .parameterization import wolski_to_cs, wolski_to_lb, normal_to_wolski
 from .parameterization import invariant, momenta
 from .parameterization import matrix_uncoupled, matrix_coupled
 
@@ -1676,7 +1677,7 @@ class Twiss():
             index_probe = self.model.monitor_index[probe]
             index_other = self.model.monitor_index[other]
             if index_other < index_probe:
-                index_other += model.size
+                index_other += self.model.size
 
             if twiss != None:
                 guess = twiss[probe]
@@ -1723,8 +1724,8 @@ class Twiss():
     def get_invariant(self,
                       ix:torch.Tensor,
                       iy:torch.Tensor,
-                      sx:torch.Tensor=None,
-                      sy:torch.Tensor=None,
+                      sx:torch.Tensor,
+                      sy:torch.Tensor,
                       *,
                       cut:float=5.0,
                       use_error:bool=True,
