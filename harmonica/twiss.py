@@ -13,7 +13,7 @@ import pandas
 
 from typing import Callable
 from scipy import odr
-from scipy.optimize import leastsq
+from scipy.optimize import leastsq, minimize
 from joblib import Parallel, delayed
 
 from .util import mod, generate_pairs, generate_other
@@ -153,6 +153,10 @@ class Twiss():
         Estimate twiss from signals (fit linear invariants).
     get_invariant(self, ix:torch.Tensor, iy:torch.Tensor, sx:torch.Tensor=None, sy:torch.Tensor=None, *, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> dict
         Compute invariants from get_twiss_from_data output.
+    ratio_objective(beta:torch.Tensor, X:torch.Tensor, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], transport:torch.Tensor) -> torch.Tensor
+        Evaluate ratio objective.
+    get_twiss_from_ratio(self, length:int, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, x:torch.Tensor, y:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, step:int=1, twiss:torch.Tensor=None, transport:torch.Tensor=None, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
+        Estimate twiss from ratio.
     process(self, value:torch.Tensor, error:torch.Tensor, *, mask:torch.Tensor=None, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> tuple
         Process data for single parameter for all locations with optional mask.
     save_model(self, file:str, **kwargs) -> None:
@@ -1824,6 +1828,179 @@ class Twiss():
         result['iy_error'] = iy_error.squeeze()
 
         return result
+
+
+    @staticmethod
+    def ratio_objective(beta:torch.Tensor,
+                        X:torch.Tensor,
+                        window:torch.Tensor,
+                        nux:torch.Tensor,
+                        nuy:torch.Tensor,
+                        normalization:Callable[[torch.Tensor], torch.Tensor],
+                        transport:torch.Tensor) -> torch.Tensor:
+        """
+        Evaluate ratio objective.
+
+        Parameters
+        ----------
+        beta: torch.Tensor
+            [n11, n33, n21, n43, n13, n31, n14, n41]
+            [ax, bx, ay, by]
+            [a1x, b1x, a2x, b2x, a1y, b1y, a2y, b2y, u, v1, v2]
+        X: torch.Tensor
+            [[..., qx1_i, ...], [..., qx2_i, ...], [..., qy1_i, ...], [..., qy2_i, ...]]
+        window: torch.Tensor
+            window to apply
+        nux & nuy: torch.Tensor
+            fractional x & y tune values
+        normalization: Callable[[torch.Tensor], torch.Tensor]
+            parametric_normal
+            cs_normal
+            lb_normal
+        transport: torch.Tensor
+            transport matrix between locations
+
+        Returns
+        -------
+        objective value (torch.Tensor)
+
+        """
+        normal = normalization(*beta, dtype=beta.dtype, device=beta.device)
+
+        qx1, qx2, qy1, qy2 = X
+        px1, py1 = momenta(transport, qx1, qx2, qy1, qy2)
+        qx1, px1, qy1, py1 = normal.inverse() @ torch.stack([qx1, px1, qy1, py1])
+
+        wx = window*(qx1 + 1j*px1)
+        wy = window*(qy1 + 1j*py1)
+
+        size = len(window)
+        time = 1j*2.0*numpy.pi*torch.linspace(0, size - 1, size, dtype=beta.dtype, device=beta.device)
+
+        NUX = 1.0 - nux
+        NUY = 1.0 - nuy
+
+        axx = (wx*torch.exp(nux*time)).sum().abs()
+        bxx = (wx*torch.exp(NUX*time)).sum().abs()
+        axy = (wx*torch.exp(nuy*time)).sum().abs()
+        bxy = (wx*torch.exp(NUY*time)).sum().abs()
+
+        ayx = (wy*torch.exp(nux*time)).sum().abs()
+        byx = (wy*torch.exp(NUX*time)).sum().abs()
+        ayy = (wy*torch.exp(nuy*time)).sum().abs()
+        byy = (wy*torch.exp(NUY*time)).sum().abs()
+
+        return (bxx + axy + bxy)/axx + (byy + ayx + byx)/ayy
+
+
+    def get_twiss_from_ratio(self,
+                            length:int,
+                            window:torch.Tensor,
+                            nux:torch.Tensor,
+                            nuy:torch.Tensor,
+                            x:torch.Tensor,
+                            y:torch.Tensor,
+                            normalization:Callable[[torch.Tensor], torch.Tensor],
+                            *,
+                            step:int=1,
+                            twiss:torch.Tensor=None,
+                            transport:torch.Tensor=None,
+                            n_jobs:int=6,
+                            verbose:bool=False,
+                            **kwargs) -> torch.Tensor:
+        """
+        Estimate twiss from ratio.
+
+        Note, minimize method is fixed to 'BFGS'
+
+        Parameters
+        ----------
+        length: int
+            max signal length to use
+        window: torch.Tensor
+            window to apply (sample size if defined by window length)
+        nux & nuy: torch.Tensor
+            fractional x & y tune values
+        x & y: torch.Tensor
+            (filtered) TbT data for x & y planes
+        normalization: Callable[[torch.Tensor], torch.Tensor]
+            parametric_normal
+            cs_normal
+            lb_normal
+        step: int
+            shift step
+        twiss: torch.Tensor
+            [..., [n11, n33, n21, n43, n13, n31, n14, n41], ...]
+            [..., [ax, bx, ay, by], ...]
+            [..., [a1x, b1x, a2x, b2x, a1y, b1y, a2y, b2y, u, v1, v2], ...]
+            initial guess for twiss parameters for each location
+            if None, model values are used
+        transport: torch.Tensor
+            transport matrices between adjacent locations (i -> i + 1)
+            if None, model transport matrices are used
+        n_jobs: int
+            number of jobs
+        verbose: bool
+            verbose flag
+        **kwargs:
+            passed to minimize
+
+        Returns
+        -------
+        estimated parameters and errors (torch.Tensor)
+
+        """
+        result = []
+
+        size = 1 + (length - len(window))//step
+
+        def objective(beta, X, window, nux, nuy, normalization, transport):
+            beta = torch.tensor(beta, dtype=window.dtype, device=window.device)
+            return self.ratio_objective(beta, X, window, nux, nuy, normalization, transport).cpu().numpy()
+
+        for location in range(self.model.monitor_count):
+
+            if verbose:
+                print(f'{location + 1}/{self.model.monitor_count}')
+
+            probe = location
+            other = int(mod(probe + 1, self.model.monitor_count))
+            shift = 1 if other != probe + 1 else 0
+
+            index_probe = self.model.monitor_index[probe]
+            index_other = self.model.monitor_index[other]
+            if index_other < index_probe:
+                index_other += self.model.size
+
+            if twiss != None:
+                guess = twiss[probe]
+            else:
+                guess = self.model.normal[index_probe]
+                if normalization == parametric_normal:
+                    guess = guess[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]]
+                elif normalization == cs_normal:
+                    guess = wolski_to_cs(normal_to_wolski(guess.unsqueeze(0)).squeeze())
+                elif normalization == lb_normal:
+                    guess = wolski_to_lb(normal_to_wolski(guess.unsqueeze(0)).squeeze())
+
+            matrix = self.model.matrix(index_probe, index_other) if transport == None else transport[probe]
+
+            qx1 = x[probe, :length]
+            qx2 = x[other, shift:shift + length]
+            qy1 = y[probe, :length]
+            qy2 = y[other, shift:shift + length]
+
+            X = torch.stack([qx1, qx2, qy1, qy2])
+
+            def task(index):
+                out = minimize(objective, guess, args=(X[:, index*step : index*step + len(window)], window, nux, nuy, normalization, matrix), method='BFGS', **kwargs)
+                value = torch.tensor(out.x, dtype=self.dtype, device=self.device)
+                error = torch.tensor(numpy.sqrt(numpy.diag(out.hess_inv)), dtype=self.dtype, device=self.device)
+                return torch.stack([value, error]).T
+
+            result.append(torch.stack(Parallel(n_jobs=n_jobs)(delayed(task)(i) for i in range(size))))
+
+        return torch.stack(result).swapaxes(1, -1)
 
 
     def process(self,
