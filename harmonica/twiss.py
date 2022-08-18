@@ -1,7 +1,35 @@
 """
 Twiss module.
-Compute twiss parameters from amplitude & phase data & invariant fit.
+Compute twiss parameters from amplitude & phase data.
 Twiss filtering & processing.
+
+Available twiss inference methods from TbT data:
+
+1. Twiss from amplitude data
+    Estimate beta function values from amplitude data
+    Requires estimation of actions, can be done using model or measured (e.g. from other method) beta function values
+    Or actions values can be passed directly
+
+2. Twiss from phase data (uncoupled)
+    Estimate twiss parameters from phase data
+    Parameters at the probed location are estimated using several triplets
+    Results from different triplets are filtered and combined (correlations are not considered)
+
+3. Twiss from invariants fit
+    Estimate twiss parameters (or 'free' elements normalization matrix) from invariants fit
+    Momenta at probed location are computed using coordinates at the next location and transport matrix between locations
+    Given phase space coordinates, twiss and invariants are fitted (or invariants can be fixed)
+
+4. Twiss from ratio
+    Estimate twiss parameters (or 'free' elements normalization matrix) from ratio minimization
+    Momenta at probed location are computed using coordinates at the next location and transport matrix between locations
+    Given phase space coordinates, transformation to Floquet variables is fitted to minimize ratio of amplitudes
+
+5. Twiss from matrix
+    Estimate twiss parameters (or 'free' elements normalization matrix) from n-turn matrix
+    Momenta at probed location are computed using coordinates at the next location and transport matrix between locations
+    Given phase space coordinates, n-turn matrix is fitted, symplectified and corresponding twiss is computed
+
 
 """
 from __future__ import annotations
@@ -26,7 +54,7 @@ from .model import Model
 from .table import Table
 from .parameterization import cs_normal, lb_normal, parametric_normal
 from .parameterization import wolski_to_cs, wolski_to_lb, normal_to_wolski
-from .parameterization import invariant, momenta
+from .parameterization import invariant, momenta, to_symplectic, twiss_compute
 from .parameterization import matrix_uncoupled, matrix_coupled
 
 class Twiss():
@@ -157,6 +185,8 @@ class Twiss():
         Evaluate ratio objective.
     get_twiss_from_ratio(self, length:int, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, x:torch.Tensor, y:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, step:int=1, twiss:torch.Tensor=None, transport:torch.Tensor=None, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from ratio.
+    get_twiss_from_matrix(self, length:int, x:torch.Tensor, y:torch.Tensor, *, power:int=1, count:int=256, fraction:float=0.75, transport:torch.Tensor=None, verbose:bool=False) -> torch.tensor
+            Estimate twiss from n-turn matrix.
     process(self, value:torch.Tensor, error:torch.Tensor, *, mask:torch.Tensor=None, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> tuple
         Process data for single parameter for all locations with optional mask.
     save_model(self, file:str, **kwargs) -> None:
@@ -2001,6 +2031,100 @@ class Twiss():
             result.append(torch.stack(Parallel(n_jobs=n_jobs)(delayed(task)(i) for i in range(size))))
 
         return torch.stack(result).swapaxes(1, -1)
+
+
+    def get_twiss_from_matrix(self,
+                              length:int,
+                              x:torch.Tensor,
+                              y:torch.Tensor,
+                              *,
+                              power:int=1,
+                              count:int=256,
+                              fraction:float=0.75,
+                              transport:torch.Tensor=None,
+                              verbose:bool=False) -> torch.tensor:
+            """
+            Estimate twiss from n-turn matrix.
+
+            Note, return estimated tunes and free elements of normalization matrix for each location and each sample
+
+            Parameters
+            ----------
+            length: int
+                max signal length to use
+            x & y: torch.Tensor
+                (filtered) TbT data for x & y planes
+            power: int
+                matrix power
+            count: int
+                number of samples
+            fraction: float
+                sample length fraction
+            transport: torch.Tensor
+                transport matrices between adjacent locations (i -> i + 1)
+                if None, model transport matrices are used
+            verbose: bool
+                verbose flag
+
+            Returns
+            -------
+            estimated parameters (torch.Tensor)
+
+            """
+            result = []
+
+            size = int(fraction*length)
+
+            empty = torch.zeros(10, dtype=self.dtype, device=self.device)
+
+            for location in range(self.model.monitor_count):
+
+                if verbose:
+                    print(f'{location + 1}/{self.model.monitor_count}')
+
+                probe = location
+                other = int(mod(probe + 1, self.model.monitor_count))
+                shift = 1 if other != probe + 1 else 0
+
+                index_probe = self.model.monitor_index[probe]
+                index_other = self.model.monitor_index[other]
+                if index_other < index_probe:
+                    index_other += self.model.size
+
+                matrix = self.model.matrix(index_probe, index_other) if transport == None else transport[probe]
+
+                qx1 = x[probe, :length]
+                qx2 = x[other, shift:shift + length]
+                qy1 = y[probe, :length]
+                qy2 = y[other, shift:shift + length]
+
+                px1, py1 = momenta(matrix, qx1, qx2, qy1, qy2)
+
+                table = torch.randint(size - power, (count, size), dtype=torch.int64, device=self.device)
+
+                box = []
+
+                for index in table:
+
+                    index_n = index
+                    index_m = index_n + power
+
+                    qx_n, px_n, qy_n, py_n = qx1[index_n], px1[index_n], qy1[index_n], py1[index_n]
+                    qx_m, px_m, qy_m, py_m = qx1[index_m], px1[index_m], qy1[index_m], py1[index_m]
+
+                    A = torch.stack([qx_n, px_n, qy_n, py_n]).T
+                    B = torch.stack([qx_m, px_m, qy_m, py_m]).T
+
+                    matrix = to_symplectic(torch.linalg.lstsq(A, B).solution.T)
+                    tune, normal, _ = twiss_compute(matrix)
+                    if tune is not None:
+                        box.append(torch.cat([tune, normal[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]]]))
+                    else:
+                        box.append(empty)
+
+                result.append(torch.stack(box).T)
+
+            return torch.stack(result)
 
 
     def process(self,
