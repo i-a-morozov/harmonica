@@ -66,7 +66,7 @@ class Decomposition():
         Compute phase advance mod 2*pi between adjacent locations.
     phase_check(cls, frequency:float, frequency_model:float, phase:torch.Tensor, phase_model:torch.Tensor, *, drop_endpoints:bool=True, trust_sequence_length:int=5, clean:bool=False, factor:float=5.0) -> tuple
         Perform synchronization check based on adjacent advance difference for measured and model values.
-    phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None) -> dict
+    phase_virtual(cls, probe:int, limit:int, flags:torch.Tensor, frequency:torch.Tensor, frequency_model:torch.Tensor, phase:torch.Tensor, phase_model:torch.Tensor, *, use_probe:bool=False, full:bool=True, clean:bool=False, factor:float=5.0, error:bool=True, sigma_freuency:torch.Tensor=None, sigma_frequency_model:torch.Tensor=None, sigma_phase:torch.Tensor=None, sigma_phase_model:torch.Tensor=None, nearest:bool=False, **kwargs) -> dict
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
     dht_amplitude(data:torch.Tensor, *, drop:int=32) -> tuple
         Estimate amplitude using DHT.
@@ -1020,7 +1020,9 @@ class Decomposition():
                       sigma_frequency:torch.Tensor=None,
                       sigma_frequency_model:torch.Tensor=None,
                       sigma_phase:torch.Tensor=None,
-                      sigma_phase_model:torch.Tensor=None) -> dict:
+                      sigma_phase_model:torch.Tensor=None,
+                      nearest:bool=False,
+                      **kwargs) -> dict:
         """
         Estimate phase at virtual or monitor location using other monitor locations and model phase data.
 
@@ -1061,6 +1063,10 @@ class Decomposition():
             measured phase error
         sigma_phase_model: torch.Tensor
             model phase error
+        nearest: bool
+            flag to use nearest other
+        kwargs:
+            passed to generate_other
 
         Returns
         -------
@@ -1073,7 +1079,7 @@ class Decomposition():
         limit = min(limit, count // 2 - 1)
 
         index = {}
-        other = generate_other(probe, limit, flags)
+        other = generate_other(probe, limit, flags, **kwargs)
         if use_probe:
             other.append(probe)
         for i in other:
@@ -1098,6 +1104,16 @@ class Decomposition():
                                                    error=error, sigma_frequency=sigma_frequency_model, sigma_phase=sigma_phase_model, model=True)
         virtual, virtual_error = mod(correct - advance, 2.0*numpy.pi, -numpy.pi), (correct_error**2 + advance_error**2).sqrt()
 
+        if nearest:
+            select = torch.argmin(advance.abs())
+            advance, advance_error = advance[select].unsqueeze(0), advance_error[select].unsqueeze(0)
+            virtual, virtual_error = virtual[select].unsqueeze(0), virtual_error[select].unsqueeze(0)
+
+        sign = +1 if (virtual > 0).sum() >= (virtual < 0).sum() else -1
+        for index in range(0, len(virtual)):
+            if torch.sign(virtual[index]) != sign:
+                virtual[index] *= -sign
+
         result['phase'] = virtual
         result['error'] = virtual_error
 
@@ -1111,10 +1127,15 @@ class Decomposition():
 
         result['clean'] = mask
 
-        weight = mask.to(virtual_error.dtype) if torch.allclose(virtual_error, torch.zeros_like(virtual_error)) else mask/virtual_error**2
-        center = weighted_mean(virtual, weight=weight)
-        spread = weighted_variance(virtual, weight=weight, center=center).sqrt()
-        result['model'] = torch.stack([center, spread])
+        if len(virtual) != 1:
+            weight = mask.to(virtual_error.dtype) if torch.allclose(virtual_error, torch.zeros_like(virtual_error)) else mask/virtual_error**2
+            center = weighted_mean(virtual, weight=weight)
+            spread = weighted_variance(virtual, weight=weight, center=center).sqrt()
+        else:
+            center, *_ = virtual
+            spread, *_ = virtual_error
+
+        result['model'] = torch.stack([center, spread]) if spread != 0.0 else torch.stack([center, virtual_error.squeeze()])
 
         return result
 
@@ -1138,7 +1159,7 @@ class Decomposition():
         amplitude and error (tuple)
 
         """
-        envelope = Frequency.dht(d.work).abs()[:, +drop:-drop]
+        envelope = Frequency.dht(data).abs()[:, +drop:-drop]
         return envelope.mean(1), envelope.std(1)
 
 
@@ -1164,7 +1185,8 @@ class Decomposition():
         phase and error (tuple)
 
         """
-        angle = Frequency.dht(d.work).angle()
+        _, length = data.shape
+        angle = Frequency.dht(data).angle()
         angle -= 2.0*numpy.pi*frequency*torch.linspace(0, length - 1, length, dtype=data.dtype, device=data.device)
         angle = mod(angle, 2.0*numpy.pi, -numpy.pi)[:, +drop:-drop]
         return angle.mean(1), angle.std(1)
