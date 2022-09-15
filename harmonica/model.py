@@ -12,11 +12,14 @@ import pandas
 import yaml
 import json
 
+from typing import Callable
+from scipy.optimize import minimize
+
 from .util import mod, make_mask, generate_other, generate_pairs
 from .decomposition import Decomposition
 from .parameterization import matrix_uncoupled, matrix_coupled, matrix_rotation
-from .parameterization import twiss_compute, twiss_propagate, twiss_phase_advance
-from .parameterization import cs_normal
+from .parameterization import to_symplectic, twiss_compute, twiss_propagate, twiss_phase_advance
+from .parameterization import cs_normal, normal_to_wolski, wolski_to_cs
 
 
 class Model():
@@ -28,13 +31,13 @@ class Model():
     Parameters
     ----------
     path: str
-        path to config file
-    limit: int
-        maximum range limit
+        path to config file (uncoupled or coupled linear model configuration)
     model: str
         model type ('uncoupled' or 'coupled')
     error: bool
-        flag to compute model advance errors
+        flag to use model errors
+    limit: int
+        maximum rangle limit
     dtype: torch.dtype
         data type
     device: torch.device
@@ -57,17 +60,17 @@ class Model():
     device: torch.device
         torch device
     path: str
-        path to yaml file
+        path to yaml config file
     limit: int
         maximum range limit
     error: bool
         flag to compute model advance errors
     model: str
-        model type ('uncoupled' or 'coupled')
+        model type ('uncoupled' or 'coumpled')
     dict: dict
         yaml file as dict
     data_frame: pandas.DataFrame
-        yaml file as data frame
+        yaml config file as data frame
     size: int
         number of locations
     name: list
@@ -86,124 +89,102 @@ class Model():
         total length
     monitor_index: list
         list of monitor location indices
-    virtual_index: list
-        list of virtual location indices
     monitor_count: int
         number of monitor locations
+    virtual_index: list
+        list of virtual location indices
     virtual_count: int
         number of virtual locations
     monitor_name: list
         list of monitor location names
     virtual_name: list
         list of virtual location names
-    ax: torch.Tensor
-        ax
-    bx: torch.Tensor
-        bx
-    fx: torch.Tensor
-        fx
-    ay: torch.Tensor
-        ay
-    by: torch.Tensor
-        by
-    fy: torch.Tensor
-        fy
-    sigma_ax: torch.Tensor
-        ax error
-    sigma_bx: torch.Tensor
-        bx error
-    sigma_fx: torch.Tensor
-        fx error
-    sigma_ay: torch.Tensor
-        ay error
-    sigma_by: torch.Tensor
-        by error
-    sigma_fy: torch.Tensor
-        fy error
-    mux: torch.Tensor
-        total x advance
-    muy: torch.Tensor
-        total y advance
-    sigma_mux: torch.Tensor
-        total x advance error
-    sigma_muy: torch.Tensor
-        total y advance error
-    nux: torch.Tensor
-        total x tune
-    nuy: torch.Tensor
-        total y tune
-    sigma_nux: torch.Tensor
-        total x tune error
-    sigma_nuy: torch.Tensor
-        total y tune error
-    phase_x: torch.Tensor
-        x phase advance from each location to the next one
-    sigma_x: torch.Tensor
-        x phase advance error from each location to the next one
-    phase_y: torch.Tensor
-        y phase advance from each location to the next one
-    sigma_y: torch.Tensor
-        y phase advance error from each monitor location to the next one
+    ax, bx, ay, by: torch.Tensor
+        CS twiss parameters
+    sigma_ax, sigma_bx, sigma_ay, sigma_by: torch.Tensor
+        CS twiss parameters errors
     normal: torch.Tensor
-        normalization matrix for each location
+        normalization matrices
     sigma_normal: torch.Tensor
-        error normalization matrix for each location
-    monitor_phase_x: torch.Tensor
-        x phase advance from each monitor location to the next one
-    monitor_sigma_x: torch.Tensor
-        x phase advance error from each monitor location to the next one
-    monitor_phase_y: torch.Tensor
-        y phase advance from each monitor location to the next one
-    monitor_sigma_y: torch.Tensor
-        y phase advance error from each monitor location to the next one
+        normalization matrices error
+    fx, fy: torch.Tensor
+        x & y phase advance from start to each location
+    sigma_fx, sigma_fy: torch.Tensor
+        x & y phase advance error from start to each location
+    mux, muy: torch.Tensor
+        x & y total phase advance
+    sigma_mux, sigma_muy:
+        x & y total phase advance errors
+    nux, nuy: torch.Tensor
+        x & y tune
+    sigma_nux, sigma_nuy: torch.Tensor
+        x & y tune error
+    phase_x, phase_y: torch.Tensor
+        x & y phase advance between adjacent locations
+    sigma_x, sigma_y: torch.Tensor
+        x & y phase advance errors between adjacent locations
+    monitor_phase_x, monitor_phase_y: torch.Tensor
+        x & y phase advance between adjacent monitor locations
+    monitor_sigma_x, monitor_sigma_y: torch.Tensor
+        x & y phase advance errors between adjacent monitor locations
     count: torch.Tensor
-        range limit endpoints [1, 6, 15, 28, 45, 66, 91, 120, ...]
+        (limit != None) ange limit endpoints [1, 6, 15, 28, 45, 66, 91, 120, ...]
     table: torch.Tensor
-        index combinations
+        (limit != None) index table
     combo: torch.Tensor
-        index combinations (triplets) [..., [..., [[i, j], [i, k]], ...], ...]
+        (limit != None) index combinations [..., [..., [[i, j], [i, k]], ...], ...]
     index: torch.Tensor
-        index combimations mod number of locations
+        (limit != None) index combimations mod number of locations
     fx_ij: torch.Tensor
-        x model advance i to j
+        (limit != None) x model advance i to j
     fx_ik: torch.Tensor
-        x model advance i to k
+        (limit != None) x model advance i to k
     sigma_fx_ij: torch.Tensor
-        x model advance error i to j
+        (limit != None) x model advance error i to j
     sigma_fx_ik: torch.Tensor
-        x model advance error i to k
+        (limit != None) x model advance error i to k
     fy_ij: torch.Tensor
-        y model advance i to j
+        (limit != None) y model advance i to j
     fy_ik: torch.Tensor
-        y model advance i to k
+        (limit != None) y model advance i to k
     sigma_fy_ij: torch.Tensor
-        y model advance error i to j
+        (limit != None) y model advance error i to j
     sigma_fy_ik: torch.Tensor
-        y model advance error i to k
+        (limit != None) y model advance error i to k
+    error_kn, error_ks: torch.Tensor
+        (make_error) kn & ks quadrupole amplitudes
+    error_length: torch.Tensor
+        (make_error) quadrupole length
+    error_x & error_y: torch.Tensor
+        (make_error) x & y corrector angles
+    error_matrix: torch.Tensor
+        (make_error) quadrupole matrices
+    error_vector: torch.Tensor
+        (make_error) corrector vectors
+    orbit: torch.Tensor
+        (make_transport) closed orbit
     transport: torch.Tensor
-        transport matrices between locations
-    kick: torch.Tensor
-        error kick matrices
-    error_kn: torch.Tensor
-        normal kick errors
-    error_ks: torch.Tensor
-        skew kick errors
+        (make_transport)trasport matrces from start to each location
     turn: torch.Tensor
-        one-turn matrix
-    is_stable: bool
-        one-turn matrix stability flag (make_twiss)
-    twiss: torch.Tensor
-        Wolski twiss matrices (make_twiss)
-    advance: torch.Tensor
-        phase advance between locations (make_twiss)
-    tune: torch.Tensor
-        accumulated tunes (make_twiss)
-    normalization: torch.Tensor
-         normalization matrices (make_twiss)
+        (make_transport)one-turn matrix at start
+    is_stable: torch.Tensor
+        (make_twiss) stable flag
+    out_wolski: torch.Tensor
+        (make_twiss) Wolski twiss
+    out_cs:
+        (make_twiss) CS twiss
+    out_normal:
+        (make_twiss) normalization matrices
+    out_advance:
+        (make_twiss) phase advance between adjacent locations
+    out_tune:
+        (make_twiss) total tunes
+    out_tune_fractional:
+        (make_twiss) fractiona tunes
 
     Methods
     ----------
-    __init__(self, path:str=None, limit:int=None, error:bool=False, model:str='uncoupled', *, dtype:torch.dtype=torch.float64, device:torch.device=torch.device('cpu')) -> None
+    __init__(self, path:str=None, model:str='uncoupled', error:bool=False, limit:int=None, *, dtype:torch.dtype=torch.float64, device:torch.device=torch.device('cpu')) -> None
         Model instance initialization.
     uncoupled(self) -> None
         Set attributes for uncoupled model.
@@ -214,29 +195,39 @@ class Model():
     config_coupled(self, file:str, *, name:list=None, kind:list=None, flag:list=None, join:list=None, rise:list=None, time:list=None, normal:torch.Tensor=None, fx:torch.Tensor=None, fy:torch.Tensor=None, sigma_normal:torch.Tensor=None, sigma_fx:torch.Tensor=None, sigma_fy:torch.Tensor=None, epsilon:float=1.0E-12) -> None
         Save coupled model configuration to file.
     save(self, file:str='model.json') -> None
-        Save model.
+        Save model to JSON.
     load(self, file:str='model.json') -> None
-        Load model.
+        Load model from JSON.
     from_file(cls, file:str='model.json', *, dtype:torch.dtype=torch.float64, device:torch.device=torch.device('cpu')) -> Model
-        Initialize model from file.
+        Initialize model from JSON file.
     matrix(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor
         Generate transport matrices between given probe and other locations.
-    make_transport(self) -> None
-        Set transport matrices between adjacent locations.
-    matrix_transport(self, probe:int, other:int) -> torch.Tensor
-        Generate transport matrix from probe to other using self.transport.
     matrix_kick(kn:torch.Tensor, ks:torch.Tensor) -> torch.Tensor
-        Generate thin quadrupole kick matrices.
-    make_kick(self, kn:torch.Tensor=None, ks:torch.Tensor=None) -> None
-        Generate thin quadrupole kick errors for each segment.
-    apply_error(self) -> None
-        Apply errors to each transport segment.
-    make_turn(self) -> None
-        Generate one-turn matrix at the 'HEAD' location using self.transport matrices.
-    make_twiss(self) -> bool
+        Generate thin quadrupole kick matrix.
+    matrix_drif(l:torch.Tensor) -> torch.Tensor
+        Generate drif matrix.
+    map_matrix(state:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
+        Linear state transformation.
+    map_vector(state:torch.Tensor, vector:torch.Tensor) -> torch.Tensor
+        Shift state transformation.
+    make_error(self, kn:torch.Tensor, ks:torch.Tensor, *, length:float=0.0, angle_x:torch.Tensor=0.0, angle_y:torch.Tensor=0.0) -> None
+        Generate errors for each segment.
+    map_transport(self, state:torch.Tensor, probe:int, other:int, *, error:bool=True) -> torch.Tensor
+        Transport state from probe to other.
+    map_transport_matrix(self, probe:int, other:int, *, state:torch.Tensor=None, error:bool=True) -> torch.Tensor
+        Compute transport matrix from probe to other.
+    make_trajectory(self, state:torch.Tensor, count:int, *, error:bool=True, transport:bool=False) -> torch.Tensor
+        Generate test trajectories at for given initial state.
+    make_transport(self, *, error:bool=True, exact:bool=True, **kwargs) -> None
+        Compute closed orbit and on-orbit transport matrices between locations.
+    make_twiss(self, *, symplectify:bool=False) -> bool
         Compute and set twiss using self.transport matrices.
-    make_trajectory(self, length:int, initial:torch.Tensor, *, full:bool=True) -> torch.Tensor
-        Generate test trajectories for given initial condition.
+    matrix_transport(self, probe:int, other:int) -> torch.Tensor
+        Generate transport matrix from probe to other using self.transport and self.turn.
+    make_orbit(self, select:int, vector:torch.Tensor, matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor
+        Compute closed orbit at all locations from shift given by vector at location select.
+    make_responce(self, corrector:list[int], monitor:list[int], matrix:Callable[[int, int], torch.Tensor], *, angle:float=1.0E-3) -> torch.Tensor
+        Compute x & y closed orbit responce matrix.
     make_momenta(matrix:torch.Tensor, qx1:torch.Tensor, qx2:torch.Tensor, qy1:torch.Tensor, qy2:torch.Tensor) -> torch.Tensor
         Compute momenta at position 1 for given transport matrix and coordinates at 1 & 2.
     make_momenta_error(matrix:torch.Tensor, sigma_qx1:torch.Tensor, sigma_qx2:torch.Tensor, sigma_qy1:torch.Tensor, sigma_qy2:torch.Tensor, *, sigma_matrix:torch.Tensor=None) -> torch.Tensor
@@ -263,7 +254,7 @@ class Model():
         Count number of monitor locations between probed and other including endpoints.
     count_virtual(self, probe:int, other:int) -> int
         Count number of virtual locations between probed and other including endpoints.
-     __len__(self) -> int
+    __len__(self) -> int
         Return total number of locations (monitor & virtual).
     __getitem__(self, index:int) -> dict
         Return corresponding self.dict value for given location index.
@@ -275,23 +266,27 @@ class Model():
     """
     def __init__(self,
                  path:str=None,
-                 limit:int=None,
-                 error:bool=False,
                  model:str='uncoupled',
+                 error:bool=False,
+                 limit:int=None,
                  *,
                  dtype:torch.dtype=torch.float64,
                  device:torch.device=torch.device('cpu')) -> None:
         """
         Model instance initialization.
 
+        Note, can pass configuration dictionary in 'path'
+
         Parameters
         ----------
         path: str
-            path to config file
-        limit: int
-            maximum rangle limit
+            path to config file (uncoupled or coupled linear model configuration)
         model: str
             model type ('uncoupled' or 'coupled')
+        error: bool
+            flag to use model errors
+        limit: int
+            maximum rangle limit
         dtype: torch.dtype
             data type
         device: torch.device
@@ -312,29 +307,32 @@ class Model():
 
         self.dtype, self.device = dtype, device
 
-        self.path = path
+        self.path = None
         self.limit = limit
         self.error = error
         self.model = model
-        self.dict = None
 
-        if self.path is not None:
+        if path is not None:
 
-            with open(self.path) as path:
-                self.dict = yaml.safe_load(path)
+            if isinstance(path, dict):
+                self.dict = path
+
+            if isinstance(path, str):
+                self.path = path
+                with open(self.path) as path:
+                    self.dict = yaml.safe_load(path)
 
             self.data_frame = pandas.DataFrame.from_dict(self.dict)
 
             if self._head not in self.dict:
-                raise Exception(f'MODEL: {self._head} record is not found in {self.path}')
+                raise ValueError(f'MODEL: {self._head} record is not found in {self.path}')
 
             if self._tail not in self.dict:
-                raise Exception(f'MODEL: {self._tail} record is not found in {self.path}')
+                raise ValueError(f'MODEL: {self._tail} record is not found in {self.path}')
 
             _, self.size = self.data_frame.shape
 
             self.name = [*self.data_frame.columns]
-
             self.kind = [*self.data_frame.loc['TYPE'].values]
             self.flag = [flag if kind == self._monitor else 0 for flag, kind in zip([*self.data_frame.loc['FLAG'].values], self.kind)]
             self.join = [*self.data_frame.loc['JOIN'].values]
@@ -343,13 +341,14 @@ class Model():
 
             self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
             self.time = torch.tensor(self.time, dtype=self.dtype, device=self.device)
-
             *_, self.length = self.time
 
             self.monitor_index = [index for index, kind in enumerate(self.kind) if kind == self._monitor]
-            self.virtual_index = [index for index, kind in enumerate(self.kind) if kind == self._virtual]
             self.monitor_count = len(self.monitor_index)
+
+            self.virtual_index = [index for index, kind in enumerate(self.kind) if kind == self._virtual]
             self.virtual_count = len(self.virtual_index)
+
             self.monitor_name = [name for name, kind in zip(self.name, self.kind) if kind == self._monitor]
             self.virtual_name = [name for name, kind in zip(self.name, self.kind) if kind == self._virtual]
 
@@ -379,11 +378,15 @@ class Model():
 
             probe = torch.arange(self.size, dtype=torch.int64, device=self.device)
             other = probe + 1
+
             self.phase_x, self.sigma_x = Decomposition.phase_advance(probe, other, self.nux, self.fx, error=True, sigma_frequency=self.sigma_nux, sigma_phase=self.sigma_fx, model=True)
             self.phase_y, self.sigma_y = Decomposition.phase_advance(probe, other, self.nuy, self.fy, error=True, sigma_frequency=self.sigma_nuy, sigma_phase=self.sigma_fy, model=True)
 
             self.phase_x = mod(self.phase_x + self._epsilon, 2.0*numpy.pi) - self._epsilon
             self.phase_y = mod(self.phase_y + self._epsilon, 2.0*numpy.pi) - self._epsilon
+
+            self.phase_x[self.phase_x < 0] = 0.0
+            self.phase_y[self.phase_y < 0] = 0.0
 
             probe = torch.tensor(self.monitor_index, dtype=torch.int64, device=self.device)
             flags = make_mask(self.size, self.monitor_index)
@@ -394,6 +397,9 @@ class Model():
 
             self.monitor_phase_x = mod(self.monitor_phase_x + self._epsilon, 2.0*numpy.pi) - self._epsilon
             self.monitor_phase_y = mod(self.monitor_phase_y + self._epsilon, 2.0*numpy.pi) - self._epsilon
+
+            self.monitor_phase_x[self.monitor_phase_x < 0] = 0.0
+            self.monitor_phase_y[self.monitor_phase_y < 0] = 0.0
 
             if self.limit is not None:
 
@@ -418,6 +424,9 @@ class Model():
         """
         Set attributes for uncoupled model.
 
+        Set CS twiss from input data and compute CS normalization matrices
+        Note, normalization matrices errors are set to zero
+
         Parameters
         ----------
         None
@@ -441,11 +450,15 @@ class Model():
 
         self.normal = torch.stack([self.ax, self.bx, self.ay, self.by]).T
         self.normal = torch.stack([cs_normal(*twiss, dtype=self.dtype, device=self.device) for twiss in self.normal])
+        self.sigma_normal = torch.zeros_like(self.normal)
 
 
     def coupled(self) -> None:
         """
         Set attributes for coupled model.
+
+        Set normalization matrices from input data and compute CS twiss
+        Note, CS twiss errors are set to zero
 
         Parameters
         ----------
@@ -465,6 +478,13 @@ class Model():
         self.sigma_normal = torch.tensor(self.sigma_normal, dtype=self.dtype, device=self.device)
         self.sigma_normal[self.sigma_normal.abs() < self._epsilon] = 0.0
         self.sigma_normal = self.sigma_normal.T.reshape(self.size, 4, 4)
+
+        self.ax, self.bx, self.ay, self.by = torch.stack([wolski_to_cs(wolski) for wolski in normal_to_wolski(self.normal)]).T
+
+        self.sigma_ax = torch.zeros_like(self.ax)
+        self.sigma_bx = torch.zeros_like(self.bx)
+        self.sigma_ay = torch.zeros_like(self.ay)
+        self.sigma_by = torch.zeros_like(self.by)
 
 
     def config_uncoupled(self,
@@ -492,7 +512,7 @@ class Model():
         """
         Save uncoupled model configuration to file.
 
-        Note, instance attribute is used corresponding named parameter is None.
+        Note, instance attribute value is used if corresponding named parameter is None.
 
         Parameters
         ----------
@@ -940,7 +960,7 @@ class Model():
     def save(self,
              file:str='model.json') -> None:
         """
-        Save model.
+        Save model to JSON.
 
         Parameters
         ----------
@@ -952,7 +972,7 @@ class Model():
         None
 
         """
-        skip = ['dtype', 'device', 'data_frame', 'transport', 'kick', 'error_kn', 'error_ks', 'turn', 'is_stable', 'out_twiss', 'out_normal', 'out_advance', 'out_tune']
+        skip = ['dtype', 'device', 'data_frame', 'orbit', 'transport', 'error_kn', 'error_ks', 'error_x', 'error_y', 'error_length', 'error_matrix', 'error_vector', 'turn', 'is_stable', 'out_twiss', 'out_normal', 'out_advance', 'out_tune', 'out_tune_fractional']
 
         data = {}
         for key, value in self.__dict__.items():
@@ -966,7 +986,7 @@ class Model():
     def load(self,
              file:str='model.json') -> None:
         """
-        Load model.
+        Load model from JSON.
 
         Parameters
         ----------
@@ -1058,7 +1078,7 @@ class Model():
                   dtype:torch.dtype=torch.float64,
                   device:torch.device=torch.device('cpu')) -> Model:
         """
-        Initialize model from file.
+        Initialize model from JSON file.
 
         Parameters
         ----------
@@ -1086,7 +1106,8 @@ class Model():
         Generate transport matrices between given probe and other locations.
 
         Matrices are generated from probe to other
-        One-turn matrices are generated if probe == other
+        Identity matrices are generated if probe == other
+        One-turn matrices can be generated with other = probe + self.size
         Input parameters should be 1D tensors with matching length
         Additionaly probe and/or other input parameter can be an int or str in self.name (not checked)
 
@@ -1114,8 +1135,6 @@ class Model():
         if isinstance(other, str):
             other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
 
-        other[probe == other] += self.size
-
         fx, _ = Decomposition.phase_advance(probe, other, self.nux, self.fx, error=False)
         fy, _ = Decomposition.phase_advance(probe, other, self.nuy, self.fy, error=False)
 
@@ -1127,35 +1146,370 @@ class Model():
                                       self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy)
 
         if self.model == 'coupled':
-                matrix = matrix_coupled(self.normal[probe], self.normal[other], torch.stack([fx, fy]).T)
+            matrix = matrix_coupled(self.normal[probe], self.normal[other], torch.stack([fx, fy]).T)
 
         return matrix.squeeze()
 
 
-    def make_transport(self) -> None:
+    @staticmethod
+    def matrix_kick(kn:torch.Tensor,
+                    ks:torch.Tensor) -> torch.Tensor:
         """
-        Set transport matrices between adjacent locations.
-
-        self.transport[i] is a transport matrix from i to i + 1
+        Generate thin quadrupole kick matrix.
 
         Parameters
         ----------
-        None
+        kn, ks: torch.Tensor
+            kn, ks
+
+        Returns
+        -------
+        thin quadrupole kick matrix (torch.Tensor)
+
+        """
+        i = torch.ones_like(kn)
+        o = torch.zeros_like(kn)
+
+        m = torch.stack([
+                torch.stack([i,   o,   o, o]),
+                torch.stack([-kn, i, +ks, o]),
+                torch.stack([  o, o,   i, o]),
+                torch.stack([+ks, o, +kn, i])
+            ])
+
+        return m
+
+
+    @staticmethod
+    def matrix_drif(l:torch.Tensor) -> torch.Tensor:
+        """
+        Generate drif matrix.
+
+        Parameters
+        ----------
+        l: torch.Tensor
+            length
+
+        Returns
+        -------
+        drif matrix (torch.Tensor)
+
+        """
+        i = torch.ones_like(l)
+        o = torch.zeros_like(l)
+
+        m = torch.stack([
+                torch.stack([i, l, o, o]),
+                torch.stack([o, i, o, o]),
+                torch.stack([o, o, i, l]),
+                torch.stack([o, o, o, i])
+            ])
+
+        return m
+
+
+    @staticmethod
+    def map_matrix(state:torch.Tensor,
+                   matrix:torch.Tensor) -> torch.Tensor:
+        """
+        Linear state transformation.
+
+        Parameters
+        ----------
+        state: torch.Tensor
+            state (qx, px, qy, py)
+        matrix: torch.Tensor
+            matrix
+
+        Returns
+        -------
+        transformed state (torch.Tensor)
+
+        """
+        return matrix @ state
+
+
+    @staticmethod
+    def map_vector(state:torch.Tensor,
+                   vector:torch.Tensor) -> torch.Tensor:
+        """
+        Shift state transformation.
+
+        Parameters
+        ----------
+        state: torch.Tensor
+            state (qx, px, qy, py)
+        vector: torch.Tensor
+            vector
+
+        Returns
+        -------
+        transformed state (torch.Tensor)
+
+        """
+        return state + vector
+
+
+    def make_error(self,
+                   kn:torch.Tensor,
+                   ks:torch.Tensor,
+                   *,
+                   length:float=0.0,
+                   angle_x:torch.Tensor=0.0,
+                   angle_y:torch.Tensor=0.0) -> None:
+        """
+        Generate errors for each segment.
+
+        Parameters
+        ----------
+        kn, ks: torch.Tensor
+            n & s thick quadrupole kick amplitudes
+        length: float
+            thick quadrupole length
+        angle_x, angle_y : torch.Tensor
+            x & y corrector angles
 
         Returns
         -------
         None
 
         """
-        probe = torch.arange(self.size, dtype=torch.int64, device=self.device)
-        self.transport = self.matrix(probe, probe + 1)
+        self.error_kn = kn*torch.randn(self.size, dtype=self.dtype, device=self.device) if isinstance(kn, float) else kn
+        self.error_ks = ks*torch.randn(self.size, dtype=self.dtype, device=self.device) if isinstance(ks, float) else ks
+
+        self.error_length = length*torch.ones(self.size, dtype=self.dtype, device=self.device) if isinstance(length, float) else length
+
+        self.error_x = angle_x*torch.randn(self.size, dtype=self.dtype, device=self.device) if isinstance(angle_x, float) else angle_x
+        self.error_y = angle_y*torch.randn(self.size, dtype=self.dtype, device=self.device) if isinstance(angle_y, float) else angle_y
+
+        self.error_matrix = []
+        for location in range(self.size):
+            drif = self.matrix_drif(0.5*self.error_length[location])
+            kick = self.matrix_kick(self.error_kn[location], self.error_ks[location])
+            self.error_matrix.append( drif @ kick @ drif)
+        self.error_matrix = torch.stack(self.error_matrix)
+
+        self.error_vector = torch.stack([torch.zeros_like(self.error_x), self.error_x, torch.zeros_like(self.error_y), self.error_y]).T
+
+
+    def map_transport(self,
+                      state:torch.Tensor,
+                      probe:int,
+                      other:int,
+                      *,
+                      error:bool=True) -> torch.Tensor:
+        """
+        Transport state from probe to other.
+
+        Parameters
+        ----------
+        state: torch.Tensor
+            input state
+        probe: int
+            probe index
+        other: int
+            other index
+        error: bool
+            flag to apply errors
+
+        Returns
+        -------
+        transformed state (torch.Tensor)
+
+        """
+        if isinstance(probe, str):
+            probe = self.name.index(probe)
+
+        if isinstance(other, str):
+            other = self.name.index(other)
+
+        other = probe + self.size if probe == other else other
+
+        for location in range(probe, other):
+            if error:
+                index = int(mod(location, self.size))
+                state = self.map_vector(state, self.error_vector[index])
+                state = self.map_matrix(state, +self.error_matrix[index])
+            state = self.map_matrix(state, self.matrix(location, location + 1))
+
+        for location in reversed(range(other, probe)):
+            state = self.map_matrix(state, self.matrix(location, location + 1).inverse())
+            if error:
+                index = int(mod(location, self.size))
+                state = self.map_matrix(state, self.error_matrix[index].inverse())
+                state = self.map_vector(state, -self.error_vector[index])
+
+        return state
+
+
+    def map_transport_matrix(self,
+                             probe:int,
+                             other:int,
+                             *,
+                             state:torch.Tensor=None,
+                             error:bool=True) -> torch.Tensor:
+        """
+        Compute transport matrix from probe to other.
+
+        Parameters
+        ----------
+        probe: int
+            probe index
+        other: int
+            other index
+        error: bool
+            flag to apply errors
+        state: torch.Tensor
+            input state
+
+        Returns
+        -------
+        transport matrix (torch.Tensor)
+
+        """
+        state = state if state != None else torch.tensor([0.0, 0.0, 0.0, 0.0], dtype=self.dtype, device=self.device)
+        return functorch.jacrev(lambda state: self.map_transport(state, probe, other, error=error))(state)
+
+
+    def make_trajectory(self,
+                        state:torch.Tensor,
+                        count:int,
+                        *,
+                        error:bool=True,
+                        transport:bool=False) -> torch.Tensor:
+        """
+        Generate test trajectories at for given initial state.
+
+        Note, mean values can be different from zero if error is True
+
+        Parameters
+        ----------
+        state: torch.Tensor
+            initial condition at 'HEAD' location
+        count: int
+            number of iterations
+        error: bool
+            flag to apply errors
+        transport: bool
+            flag to use transport matrices
+
+        Returns
+        -------
+        trajectories (torch.Tensor)
+
+        """
+        if transport:
+            trajectory = torch.zeros((self.size, count, *state.shape), dtype=self.dtype, device=self.device)
+            trajectory[0, 0] = state
+            for i in range(1, count):
+                trajectory[0, i] = self.turn @ trajectory[0, i - 1]
+            for i in range(1, self.size):
+                trajectory[i] = (self.transport[i] @ trajectory[0].T).T
+            return trajectory
+
+        trajectory = []
+        for _ in range(count):
+            for location in range(self.size):
+                trajectory.append(state)
+                state = self.map_transport(state, location, location + 1, error=error)
+        trajectory = torch.stack(trajectory).reshape(count, self.size, -1).swapaxes(0, 1)
+        return trajectory
+
+
+    def make_transport(self,
+                       *,
+                       error:bool=True,
+                       exact:bool=True,
+                       **kwargs) -> None:
+        """
+        Compute closed orbit and on-orbit transport matrices between locations.
+
+        Parameters
+        ----------
+        error: bool
+            flag to apply errors
+        exact: bool
+            flag to compute closed orbit using minimize
+        **kwargs:
+            passed to minimize
+
+        Returns
+        -------
+        None
+
+        """
+        def function(state):
+            state = torch.tensor(state, dtype=self.dtype, device=self.device)
+            return (state - self.map_transport(state, 0, 0, error=error)).norm().cpu().numpy()
+
+        def jacobian(state):
+            state = torch.tensor(state, dtype=self.dtype, device=self.device)
+            return functorch.jacrev(lambda state: (state - self.map_transport(state, 0, 0, error=error)).norm())(state).cpu().numpy()
+
+        state = torch.tensor([0.0, 0.0, 0.0, 0.0], dtype=self.dtype, device=self.device)
+
+        if error:
+            table = self.error_vector[0].roll(-1)
+            matrix = torch.block_diag(*torch.ones_like(state))
+            for location in range(1, self.size):
+                matrix = functorch.jacrev(lambda state: self.map_transport(state, location - 1, location, error=error))(state) @ matrix
+                table += self.error_vector[location].roll(-1) @ matrix
+            matrix = functorch.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ matrix
+            ax, bx, ay, by = table
+            state = (torch.block_diag(*torch.ones_like(state)) - matrix).inverse() @ matrix @ torch.stack([-bx, +ax, -by, +ay])
+
+        if exact:
+            state = minimize(function, state.cpu().numpy(), jac=jacobian, **kwargs)
+            state = torch.tensor(state.x, dtype=self.dtype, device=self.device)
+
+        self.orbit = self.make_trajectory(state, 1, error=error).squeeze(1)
+
+        self.transport = functorch.jacrev(lambda state: self.make_trajectory(state, 1, error=error))(state).squeeze(1)
+
+        *_, self.turn  = self.transport
+        self.turn = functorch.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ self.turn
+
+
+    def make_twiss(self,
+                   *,
+                   symplectify:bool=False) -> bool:
+        """
+        Compute and set twiss using self.transport matrices.
+
+        Parameters
+        ----------
+        symplectify: bool
+            flag to symplectify one-turn matrix
+
+        Returns
+        -------
+        stable flag (bool)
+
+        """
+        tune, normal, twiss = twiss_compute(to_symplectic(self.turn) if symplectify else self.turn)
+
+        self.is_stable = tune is not None
+        if not self.is_stable:
+            return self.is_stable
+
+        self.out_wolski = twiss_propagate(twiss, self.transport)
+        self.out_cs = torch.stack([wolski_to_cs(wolski) for wolski in self.out_wolski])
+        self.out_advance, self.out_normal = twiss_phase_advance(normal, self.transport)
+        self.out_advance = torch.vstack([self.out_advance, 2.0*numpy.pi*tune]).diff(1, 0)
+        self.out_advance = mod(self.out_advance + self._epsilon, 2.0*numpy.pi) - self._epsilon
+        self.out_tune = self.out_advance.sum(0)/(2.0*numpy.pi)
+        self.out_tune_fractional = tune
+
+        return self.is_stable
 
 
     def matrix_transport(self,
                          probe:int,
                          other:int) -> torch.Tensor:
         """
-        Generate transport matrix from probe to other using self.transport.
+        Generate transport matrix from probe to other using self.transport and self.turn.
+
+        Note, if probe == other, return identity matrix
 
         Parameters
         ----------
@@ -1175,212 +1529,99 @@ class Model():
         if isinstance(other, str):
             other = self.name.index(other)
 
-        if probe < other:
-            matrix = self.transport[probe]
-            for i in range(probe + 1, other):
-                matrix = self.transport[int(mod(i, self.size))] @ matrix
-            return matrix
+        index_probe = int(mod(probe, self.size))
+        index_other = int(mod(other, self.size))
+
+        shift_probe = torch.linalg.matrix_power(self.turn, (probe - index_probe) // self.size)
+        shift_other = torch.linalg.matrix_power(self.turn, (other - index_other) // self.size)
+
+        if probe <= other:
+            return (self.transport[index_other] @ shift_other) @ (self.transport[index_probe] @ shift_probe).inverse()
 
         if probe > other:
-            matrix = self.transport[other]
-            for i in range(other + 1, probe):
-                matrix = self.transport[int(mod(i, self.size))] @ matrix
-            return torch.inverse(matrix)
+            return self.matrix_transport(other, probe).inverse()
 
 
-    @staticmethod
-    @functorch.vmap
-    def matrix_kick(kn:torch.Tensor,
-                    ks:torch.Tensor) -> torch.Tensor:
+    def make_orbit(self,
+                   select:int,
+                   vector:torch.Tensor,
+                   matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor:
         """
-        Generate thin quadrupole kick matrices.
-
-        Input parameters should be 1D tensors with matching length
+        Compute closed orbit at all locations from shift given by vector at location select.
 
         Parameters
         ----------
-        kn, ks: torch.Tensor
-            kn, ks
+        select: int
+            corrector location
+        vector: torch.Tensor
+            corrector shift
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
 
         Returns
         -------
-        thin quadrupole kick matrices (torch.Tensor)
+        orbit (torch.Tensor)
 
         """
-        i = torch.ones_like(kn)
-        o = torch.zeros_like(kn)
-
-        m = torch.stack([
-                torch.stack([i,   o,   o, o]),
-                torch.stack([-kn, i, +ks, o]),
-                torch.stack([  o, o,   i, o]),
-                torch.stack([+ks, o, +kn, i])
-            ])
-
-        return m
+        state = (matrix(0, 0) - matrix(0, self.size)).inverse() @ matrix(select, self.size) @ vector
+        orbit = torch.zeros((self.size, *state.shape), dtype=self.dtype, device=self.device)
+        for index in range(self.size):
+            orbit[index] = matrix(0, min(index, select)) @ state
+            if index > select:
+                orbit[index] = matrix(select, index) @ (orbit[index] + vector)
+        return orbit
 
 
-    def make_kick(self,
-                  kn:torch.Tensor=None,
-                  ks:torch.Tensor=None) -> None:
+    def make_responce(self,
+                      corrector:list[int],
+                      monitor:list[int],
+                      matrix:Callable[[int, int], torch.Tensor],
+                      *,
+                      angle:float=1.0E-3) -> torch.Tensor:
         """
-        Generate thin quadrupole kick errors for each segment.
+        Compute x & y closed orbit responce matrix.
 
         Parameters
         ----------
-        kn, ks: torch.Tensor
-            kn, ks
+        corrector: list[int]
+            list of corrector locations
+        monitor: list[int]
+            list of monitor locations
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+        angle: float
+            corrector angle amplitude
 
         Returns
         -------
-        None
+        responce matrix (torch.Tensor)
 
         """
-        if isinstance(kn, float):
-            kn = kn*torch.randn(self.size, dtype=self.dtype, device=self.device)
+        rxx, rxy, ryx, ryy = [], [], [], []
 
-        if isinstance(ks, float):
-            ks = ks*torch.randn(self.size, dtype=self.dtype, device=self.device)
+        dx1 = torch.tensor([0.0, +angle, 0.0, 0.0], dtype=self.dtype, device=self.device)
+        dx2 = torch.tensor([0.0, -angle, 0.0, 0.0], dtype=self.dtype, device=self.device)
+        dy1 = torch.tensor([0.0, 0.0, 0.0, +angle], dtype=self.dtype, device=self.device)
+        dy2 = torch.tensor([0.0, 0.0, 0.0, -angle], dtype=self.dtype, device=self.device)
 
-        if len(kn) == self.size and len(ks) == self.size:
-            self.error_kn = kn
-            self.error_ks = ks
+        for select in corrector:
 
+            x1, _, y1, _ = self.make_orbit(select, dx1, matrix)[monitor].T
+            x2, _, y2, _ = self.make_orbit(select, dx2, matrix)[monitor].T
+            rxx.append((x1 - x2)/(2.0*angle))
+            rxy.append((y1 - y2)/(2.0*angle))
 
-    def apply_error(self,
-                    *,
-                    split:bool=False) -> None:
-        """
-        Apply errors to each transport segment.
+            x1, _, y1, _ = self.make_orbit(select, dy1, matrix)[monitor].T
+            x2, _, y2, _ = self.make_orbit(select, dy2, matrix)[monitor].T
+            ryx.append((x1 - x2)/(2.0*angle))
+            ryy.append((y1 - y2)/(2.0*angle))
 
-        self.transport[i] = self.kick[i] @ self.transport[i]
+        rxx = torch.stack(rxx)
+        rxy = torch.stack(rxy)
+        ryx = torch.stack(ryx)
+        ryy = torch.stack(ryy)
 
-        Parameters
-        ----------
-        split: bool
-            flag to split error
-            self.transport[i] = self.kick[i] @ self.transport[i] self.kick[i - 1]
-
-        Returns
-        -------
-        None
-
-        """
-        if hasattr(self, 'error_kn') and hasattr(self, 'error_ks'):
-            if split:
-                kick = self.matrix_kick(0.5*self.error_kn, 0.5*self.error_ks)
-                self.transport = torch.matmul(torch.matmul(kick, self.transport), kick.roll(1, 0))
-            else:
-                kick = self.matrix_kick(self.error_kn, self.error_ks)
-                self.transport = torch.matmul(kick, self.transport)
-
-
-    def make_turn(self) -> None:
-        """
-        Generate one-turn matrix at the 'HEAD' location using self.transport matrices.
-
-        Set self.turn attribute
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        None
-
-        """
-        self.turn, *_ = self.transport
-        for i in range(1, self.size):
-            self.turn = self.transport[i] @ self.turn
-
-
-    def make_twiss(self) -> bool:
-        """
-        Compute and set twiss using self.transport matrices.
-
-        Parameters
-        ----------
-        None
-
-        Returns
-        -------
-        stable flag (bool)
-
-        """
-        if not hasattr(self, 'transport'):
-            self.make_transport()
-
-        if not hasattr(self, 'turn'):
-            self.make_turn()
-
-        tune, normal, twiss = twiss_compute(self.turn)
-
-        self.is_stable = tune is not None
-
-        if not self.is_stable:
-            return self.is_stable
-
-        transport = torch.clone(self.transport)
-        for i in range(1, self.size):
-            transport[i] @= transport[i - 1]
-
-        self.out_twiss = twiss_propagate(twiss, transport).roll(1, 0)
-
-        self.out_advance, self.out_normal = twiss_phase_advance(normal, transport)
-
-        self.out_advance = self.out_advance.T
-        for i, advance in enumerate(self.out_advance):
-            self.out_advance[i], _ = Decomposition.phase_adjacent(tune[i], advance, error=False)
-            self.out_advance[i] = mod(self.out_advance[i] + self._epsilon, 2.0*numpy.pi) - self._epsilon
-        self.out_advance = self.out_advance.roll(1, 1)
-        self.out_tune = self.out_advance.sum(1)/(2.0*numpy.pi)
-        self.out_advance = self.out_advance.T
-
-        self.out_normal = self.out_normal.roll(1, 0)
-
-        return self.is_stable
-
-
-    def make_trajectory(self,
-                        length:int,
-                        initial:torch.Tensor,
-                        *,
-                        full:bool=True) -> torch.Tensor:
-        """
-        Generate test trajectories for given initial condition.
-
-        Parameters
-        ----------
-        length: int
-            number of iterations
-        initial: torch.Tensor
-            initial condition at 'HEAD' location
-        full: bool
-            flag to generate trajectories at all locations (else only at monitor locations)
-
-        Returns
-        -------
-        trajectories (torch.Tensor)
-
-        """
-        if not hasattr(self, 'transport'):
-            self.make_transport()
-
-        if not hasattr(self, 'turn'):
-            self.make_turn()
-
-        trajectory = torch.zeros((self.size, length, *initial.shape), dtype=self.dtype, device=self.device)
-
-        trajectory[0, 0] = initial
-
-        for i in range(1, length):
-            trajectory[0, i] = self.turn @ trajectory[0, i - 1]
-
-        for i in range(1, self.size):
-            trajectory[i] = (self.transport[i - 1] @ trajectory[i - 1].T).T
-
-        return trajectory if full else trajectory[self.monitor_index]
+        return torch.vstack([torch.hstack([rxx, rxy]), torch.hstack([ryx, ryy])])
 
 
     @staticmethod
