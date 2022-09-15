@@ -13,20 +13,25 @@ import pandas
 
 from typing import Callable
 from scipy.optimize import leastsq, minimize
+from scipy.interpolate import interp1d
 from joblib import Parallel, delayed
 
 from .util import mod, generate_pairs, generate_other
+from .statistics import mean, variance
 from .statistics import weighted_mean, weighted_variance
-from .statistics import mean, standard_deviation
 from .statistics import median, biweight_midvariance, standardize
 from .anomaly import threshold, dbscan, local_outlier_factor, isolation_forest
 from .decomposition import Decomposition
 from .model import Model
 from .table import Table
-from .parameterization import matrix_uncoupled, matrix_coupled
+from .parameterization import matrix_uncoupled, matrix_coupled, matrix_rotation
 from .parameterization import cs_normal, lb_normal, parametric_normal
-from .parameterization import wolski_to_cs, wolski_to_lb, normal_to_wolski
-from .parameterization import invariant, momenta, to_symplectic, twiss_compute
+from .parameterization import wolski_to_cs, cs_to_wolski
+from .parameterization import wolski_to_lb, lb_to_wolski
+from .parameterization import wolski_to_normal, normal_to_wolski
+from .parameterization import invariant, momenta
+from .parameterization import to_symplectic, twiss_compute, twiss_propagate
+
 
 class Twiss():
     """
@@ -120,13 +125,13 @@ class Twiss():
         Estimate cs twiss from amplitude.
     phase_correct(self, *, limit:int=None, **kwargs) -> None
         Use measured phases and model phases advances to correct x & y phase at monitor locations.
-    phase_virtual(self, limit:int=None, exclude:list=None, **kwargs) -> None
+    phase_virtual(self, *, limit:int=None, exclude:list=None, method:str='model', inverse:bool=True, forward:bool=True, nearest:bool=False, **kwargs) -> None
         Estimate x & y phase at virtual locations.
     phase_alfa(a_m:torch.Tensor, f_ij:torch.Tensor, f_m_ij:torch.Tensor, f_ik:torch.Tensor, f_m_ik:torch.Tensor, *, error:bool=True, model:bool=True, sigma_a_m:torch.Tensor=0.0, sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0, sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple:
         Estimate uncoupled twiss alfa at index (i) from given triplet (i, j, k) phase data.
     phase_beta(b_m:torch.Tensor, f_ij:torch.Tensor, f_m_ij:torch.Tensor, f_ik:torch.Tensor, f_m_ik:torch.Tensor, *, error:bool=True, model:bool=True, sigma_b_m:torch.Tensor=0.0, sigma_f_ij:torch.Tensor=0.0, sigma_f_m_ij:torch.Tensor=0.0, sigma_f_ik:torch.Tensor=0.0, sigma_f_m_ik:torch.Tensor=0.0) -> tuple
         Estimate uncoupled twiss beta at index (i) from given triplet (i, j, k) phase data.
-    get_twiss_from_phase(self, *, virtual:bool=True, error:bool=True, model:bool=False, use_correct:bool=False, use_correct_sigma:bool=False, use_model:bool=False) -> None
+    get_twiss_from_phase(self, *, error:bool=True, model:bool=False, use_correct:bool=False, use_correct_sigma:bool=False, use_model:bool=False) -> None
         Estimate cs twiss from phase data.
     filter_twiss(self, plane:str = 'x', *, phase:dict={'use': True, 'threshold': 10.00}, model:dict={'use': True, 'threshold': 00.50}, value:dict={'use': True, 'threshold': 00.25}, sigma:dict={'use': True, 'threshold': 00.25}, limit:dict={'use': True, 'threshold': 05.00}, error:dict={'use': True, 'threshold': 05.00}) -> dict
         Filter twiss for given data plane and cleaning options.
@@ -142,21 +147,23 @@ class Twiss():
         Bootstrap uncoupled twiss data.
     matrix(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor
         Generate transport matrices between given probe and other locations using measured twiss.
+    phase_advance(self, probe:torch.Tensor, other:torch.Tensor, **kwargs) -> torch.Tensor
+        Compute x & y phase advance between probe and other.
     get_momenta(self, start:int, count:int, probe:int, other:int, *, model:bool=True) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using single other monitor location.
     get_momenta_range(self, start:int, count:int, probe:int, limit:int, *, model:bool=True) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using range of monitor locations around probed monitor location (average momenta).
-    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, *, model:bool=True) -> torch.Tensor
+    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, *, model:bool=True, phony:bool=False, forward:bool=True, inverse:bool=True) -> torch.Tensor
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
     invariant_objective(beta:torch.Tensor, X:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], product:bool) -> torch.Tensor
         Evaluate invariant objective.
     invariant_objective_fixed(beta:torch.Tensor, X:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], product:bool) -> torch.Tensor
         Evaluate invariant objective (fixed invariants).
-    fit_objective(self, length:int, twiss:torch.Tensor, qx:torch.Tensor, px:torch.Tensor, qy:torch.Tensor, py:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, product:bool=True, jacobian:bool=False, ix:float=None, iy:float=None, count:int=512, fraction:float=0.75, n_jobs:int=6, **kwargs) -> tuple
+    fit_objective(self, length:int, twiss:torch.Tensor, qx:torch.Tensor, px:torch.Tensor, qy:torch.Tensor, py:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, product:bool=True, jacobian:bool=False, ix:float=None, iy:float=None, count:int=512, fraction:float=0.75, sigma:float=0.0, n_jobs:int=6, **kwargs) -> tuple
         Fit invariant objective.
-    fit_objective_fixed(self, length:int, twiss:torch.Tensor, ix:torch.Tensor, iy:torch.Tensor, qx:torch.Tensor, px:torch.Tensor, qy:torch.Tensor, py:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, product:bool=True, jacobian:bool=False, count:int=512, fraction:float=0.75, n_jobs:int=6, **kwargs) -> tuple
+    fit_objective_fixed(self, length:int, twiss:torch.Tensor, ix:torch.Tensor, iy:torch.Tensor, qx:torch.Tensor, px:torch.Tensor, qy:torch.Tensor, py:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, product:bool=True, jacobian:bool=False, count:int=512, fraction:float=0.75, sigma:float=0.0, n_jobs:int=6, **kwargs) -> tuple
         Fit invariant objective (fixed invariants).
-    get_twiss_from_data(self, start:int, length:int, normalization:Callable[[torch.Tensor], torch.Tensor], *, twiss:torch.Tensor=None, method:str='pair', limit:int=1, model:bool=True, product:bool=True, jacobian:bool=False, count:int=256, fraction:float=0.75, ix:float=None, iy:float=None, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
+    get_twiss_from_data(self, start:int, length:int, normalization:Callable[[torch.Tensor], torch.Tensor], *, twiss:torch.Tensor=None, method:str='pair', limit:int=1, model:bool=True, product:bool=True, jacobian:bool=False, count:int=256, fraction:float=0.75, ix:float=None, iy:float=None, sigma:float=0.0, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from signals (fit linear invariants).
     get_invariant(self, ix:torch.Tensor, iy:torch.Tensor, sx:torch.Tensor=None, sy:torch.Tensor=None, *, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> dict
         Compute invariants from get_twiss_from_data output.
@@ -166,6 +173,14 @@ class Twiss():
         Estimate twiss from ratio.
     get_twiss_from_matrix(self, start:int, length:int, *, power:int=1, method:str='pair', limit:int=1, model:bool=True, count:int=256, fraction:float=0.75, verbose:bool=False) -> torch.tensor
         Estimate twiss from n-turn matrix.
+    get_twiss_virtual_uncoupled(self, probe:int, *, limit:int=1, inverse:bool=True, forward:bool=True, use_phase:bool=False, bootstrap:bool=True, count:int=256, ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None, sigma_ax:torch.Tensor=None, sigma_bx:torch.Tensor=None, sigma_ay:torch.Tensor=None, sigma_by:torch.Tensor=None) -> tuple
+        Estimate CS twiss at (virtual) location.
+    get_twiss_virtual_coupled(self, probe:int, *, limit:int=1, inverse:bool=True, forward:bool=True, use_phase:bool=False, bootstrap:bool=True, count:int=256, n11:torch.Tensor=None, n33:torch.Tensor=None, n21:torch.Tensor=None, n43:torch.Tensor=None, n13:torch.Tensor=None, n31:torch.Tensor=None, n14:torch.Tensor=None, n41:torch.Tensor=None, sigma_n11:torch.Tensor=None, sigma_n33:torch.Tensor=None, sigma_n21:torch.Tensor=None, sigma_n43:torch.Tensor=None, sigma_n13:torch.Tensor=None, sigma_n31:torch.Tensor=None, sigma_n14:torch.Tensor=None, sigma_n41:torch.Tensor=None) -> tuple
+        Estimate free normalization matrix elements at (virtual) location.
+    phase_objective(beta:torch.Tensor, mux:torch.Tensor, muy:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
+        Evaluate phase objective.
+    get_twiss_from_phase_fit(self, *, limit:int=10, count:int=64, model:boot=True, verbose:bool=False, **kwargs) -> torch.Tensor
+        Estimate twiss from phase fit.
     process(self, value:torch.Tensor, error:torch.Tensor, *, mask:torch.Tensor=None, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> tuple
         Process data for single parameter for all locations with optional mask.
     save_model(self, file:str, **kwargs) -> None:
@@ -521,6 +536,8 @@ class Twiss():
         self.corrected_x, self.corrected_y = {}, {}
 
         limit = max(self.limit) if limit is None else limit
+        if limit <= 0:
+            raise ValueError(f'TWISS: expected limit > 0')
         index = self.model.monitor_index
 
         self.fx_corrected, self.sigma_fx_corrected = torch.clone(self.fx), torch.clone(self.sigma_fx)
@@ -562,8 +579,13 @@ class Twiss():
 
 
     def phase_virtual(self,
+                      *,
                       limit:int=None,
                       exclude:list=None,
+                      method:str='model',
+                      inverse:bool=True,
+                      forward:bool=True,
+                      nearest:bool=False,
                       **kwargs) -> None:
         """
         Estimate x & y phase at virtual locations.
@@ -580,6 +602,14 @@ class Twiss():
             range limit to use
         exclude: list
             list of virtual location to exclude
+        method: str
+            'model' or 'interpolate'
+        inverse: bool
+            flag to use other only in inverse direction
+        forward: bool
+            flag to use other only in forward direction
+        nearest: bool
+            flag to use nearest other
         **kwargs:
             passed to Decomposition.phase_virtual
 
@@ -588,47 +618,81 @@ class Twiss():
         None
 
         """
-        self.virtual_x, self.virtual_y = {}, {}
+        if method == 'model':
 
-        limit = max(self.limit) if limit is None else limit
-        exclude = [] if exclude is None else exclude
-        index = [index for index in self.model.virtual_index if index not in exclude]
+            self.virtual_x, self.virtual_y = {}, {}
 
-        nux, sigma_nux = self.table.nux, self.table.sigma_nux
-        NUX, sigma_NUX = self.model.nux, self.model.sigma_nux
+            limit = max(self.limit) if limit is None else limit
+            if limit <= 0:
+                raise ValueError(f'TWISS: expected limit > 0')
+            exclude = [] if exclude is None else exclude
+            index = [index for index in self.model.virtual_index if index not in exclude]
 
-        nuy, sigma_nuy = self.table.nuy, self.table.sigma_nuy
-        NUY, sigma_NUY = self.model.nuy, self.model.sigma_nuy
+            nux, sigma_nux = self.table.nux, self.table.sigma_nux
+            NUX, sigma_NUX = self.model.nux, self.model.sigma_nux
 
-        fx, sigma_fx = self.fx, self.sigma_fx
-        FX, sigma_FX = self.model.fx, self.model.sigma_fx
+            nuy, sigma_nuy = self.table.nuy, self.table.sigma_nuy
+            NUY, sigma_NUY = self.model.nuy, self.model.sigma_nuy
 
-        fy, sigma_fy = self.fy, self.sigma_fy
-        FY, sigma_FY = self.model.fy, self.model.sigma_fy
+            fx, sigma_fx = self.fx, self.sigma_fx
+            FX, sigma_FX = self.model.fx, self.model.sigma_fx
 
-        def auxiliary_x(probe):
-            return Decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
-                                               sigma_frequency=sigma_nux, sigma_frequency_model=sigma_NUX,
-                                               sigma_phase=sigma_fx, sigma_phase_model=sigma_FX,
-                                               use_probe=False,
-                                               **kwargs)
+            fy, sigma_fy = self.fy, self.sigma_fy
+            FY, sigma_FY = self.model.fy, self.model.sigma_fy
 
-        def auxiliary_y(probe):
-            return Decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
-                                               sigma_frequency=sigma_nuy, sigma_frequency_model=sigma_NUY,
-                                               sigma_phase=sigma_fy, sigma_phase_model=sigma_FY,
-                                               use_probe=False,
-                                               **kwargs)
+            def auxiliary_x(probe):
+                return Decomposition.phase_virtual(probe, limit, self.flag, nux, NUX, fx, FX,
+                                                sigma_frequency=sigma_nux, sigma_frequency_model=sigma_NUX,
+                                                sigma_phase=sigma_fx, sigma_phase_model=sigma_FX,
+                                                use_probe=False, inverse=inverse, forward=forward, nearest=nearest,
+                                                **kwargs)
 
-        data_x = [auxiliary_x(probe) for probe in index]
-        data_y = [auxiliary_y(probe) for probe in index]
+            def auxiliary_y(probe):
+                return Decomposition.phase_virtual(probe, limit, self.flag, nuy, NUY, fy, FY,
+                                                sigma_frequency=sigma_nuy, sigma_frequency_model=sigma_NUY,
+                                                sigma_phase=sigma_fy, sigma_phase_model=sigma_FY,
+                                                use_probe=False, inverse=inverse, forward=forward, nearest=nearest,
+                                                **kwargs)
 
-        for count, probe in enumerate(index):
-            self.virtual_x[probe], self.virtual_y[probe] = data_x[count], data_y[count]
-            self.fx[probe], self.sigma_fx[probe] = self.virtual_x[probe].get('model')
-            self.fy[probe], self.sigma_fy[probe] = self.virtual_y[probe].get('model')
-            self.fx_corrected[probe], self.sigma_fx_corrected[probe] = self.virtual_x[probe].get('model')
-            self.fy_corrected[probe], self.sigma_fy_corrected[probe] = self.virtual_y[probe].get('model')
+            data_x = [auxiliary_x(probe) for probe in index]
+            data_y = [auxiliary_y(probe) for probe in index]
+
+            for count, probe in enumerate(index):
+                self.virtual_x[probe], self.virtual_y[probe] = data_x[count], data_y[count]
+                self.fx[probe], self.sigma_fx[probe] = self.virtual_x[probe].get('model')
+                self.fy[probe], self.sigma_fy[probe] = self.virtual_y[probe].get('model')
+                self.fx_corrected[probe], self.sigma_fx_corrected[probe] = self.virtual_x[probe].get('model')
+                self.fy_corrected[probe], self.sigma_fy_corrected[probe] = self.virtual_y[probe].get('model')
+
+        if method == 'interpolate':
+
+            xr, *xs, xl = self.model.fx[self.model.monitor_index]
+            x = torch.stack([xl - self.model.mux, xr, *xs, xl, xr + self.model.mux]).cpu().numpy()
+
+            yr, *ys, yl = self.fx[self.model.monitor_index]
+            y1 = yl - 2.0*numpy.pi*self.table.nux
+            y2 = yr + 2.0*numpy.pi*self.table.nux
+            while y1 > yr: y1 -= 2.0*numpy.pi
+            while y2 < yl: y2 += 2.0*numpy.pi
+            y = torch.stack([y1, yr, *ys, yl, y2]).cpu().numpy()
+
+            f = interp1d(x, y, kind='linear', bounds_error=False, fill_value='extrapolate', assume_sorted=True)
+            x = self.model.fx[self.model.virtual_index].cpu().numpy()
+            self.fx[self.model.virtual_index] = torch.tensor(f(x), dtype=self.dtype, device=self.device)
+
+            xr, *xs, xl = self.model.fy[self.model.monitor_index]
+            x = torch.stack([xl - self.model.muy, xr, *xs, xl, xr + self.model.muy]).cpu().numpy()
+
+            yr, *ys, yl = self.fy[self.model.monitor_index]
+            y1 = yl - 2.0*numpy.pi*self.table.nuy
+            y2 = yr + 2.0*numpy.pi*self.table.nuy
+            while y1 > yr: y1 -= 2.0*numpy.pi
+            while y2 < yl: y2 += 2.0*numpy.pi
+            y = torch.stack([y1, yr, *ys, yl, y2]).cpu().numpy()
+
+            f = interp1d(x, y, kind='linear', bounds_error=False, fill_value='extrapolate', assume_sorted=True)
+            x = self.model.fy[self.model.virtual_index].cpu().numpy()
+            self.fy[self.model.virtual_index] = torch.tensor(f(x), dtype=self.dtype, device=self.device)
 
 
     @staticmethod
@@ -771,7 +835,6 @@ class Twiss():
 
     def get_twiss_from_phase(self,
                              *,
-                             virtual:bool=True,
                              error:bool=True,
                              model:bool=False,
                              use_correct:bool=False,
@@ -921,6 +984,8 @@ class Twiss():
             a, b, sigma_a, sigma_b = self.data_phase['ay'], self.data_phase['by'], self.data_phase['sigma_ay'], self.data_phase['sigma_by']
             f_ij, sigma_f_ij, f_m_ij, sigma_f_m_ij = self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij']
             f_ik, sigma_f_ik, f_m_ik, sigma_f_m_ik = self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik']
+            
+        mask *= b > 0.0
 
         if phase['use']:
             cot_ij, cot_m_ij = torch.abs(1.0/torch.tan(f_ij)), torch.abs(1.0/torch.tan(f_m_ij))
@@ -1123,7 +1188,7 @@ class Twiss():
 
         else:
 
-            weight = (mask.to(self.dtype)/sigma_a**2).nan_to_num(posinf=0.0, neginf=0.0)
+            weight = (mask.to(self.dtype)/sigma_a**2).nan_to_num(posinf=1.0)
             weight /= weight.sum()
             center = weighted_mean(a, weight=weight)
             spread = weighted_variance(a, weight=weight, center=center).sqrt()
@@ -1131,7 +1196,7 @@ class Twiss():
             result['sigma_a'] = spread
             result['error_a'] = (center - a_m)/a_m
 
-            weight = (mask.to(self.dtype)/sigma_b**2).nan_to_num(posinf=0.0, neginf=0.0)
+            weight = (mask.to(self.dtype)/sigma_b**2).nan_to_num(posinf=1.0)
             weight /= weight.sum()
             center = weighted_mean(b, weight=weight)
             spread = weighted_variance(b, weight=weight, center=center).sqrt()
@@ -1278,7 +1343,8 @@ class Twiss():
         Generate transport matrices between given probe and other locations using measured twiss.
 
         Matrices are generated from probe to other
-        One-turn matrices are generated if probe == other
+        Identity matrices are generated if probe == other
+        One-turn matrices can be generated with other = probe + self.size
         Input parameters should be 1D tensors with matching length
         Additionaly probe and/or other input parameter can be an int or str in self.name (not checked)
 
@@ -1306,22 +1372,61 @@ class Twiss():
         if isinstance(other, str):
             other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
 
-        other[probe == other] += self.size
-
         fx, _ = Decomposition.phase_advance(probe, other, self.table.nux, self.fx, error=False)
         fy, _ = Decomposition.phase_advance(probe, other, self.table.nuy, self.fy, error=False)
 
         probe = mod(probe, self.size).to(torch.int64)
         other = mod(other, self.size).to(torch.int64)
 
-        if self.model.model == 'uncoupled':
+        if self.model.model == 'coupled':
+            matrix = matrix_coupled(self.normal[probe], self.normal[other], torch.stack([fx, fy]).T)
+        else:
             matrix = matrix_uncoupled(self.ax[probe], self.bx[probe], self.ax[other], self.bx[other], fx,
                                       self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy)
 
-        if self.model.model == 'coupled':
-                matrix = matrix_coupled(self.normal[probe], self.normal[other], torch.stack([fx, fy]).T)
-
         return matrix.squeeze()
+
+
+    def phase_advance(self,
+                      probe:torch.Tensor,
+                      other:torch.Tensor,
+                      **kwargs) -> torch.Tensor:
+        """
+        Compute x & y phase advance between probe and other.
+
+        Parameters
+        ----------
+        probe: torch.Tensor
+            probe locations
+        other: torch.Tensor
+            other locations
+        kwargs:
+            passed to Decomposition.phase_advance
+
+        Returns
+        -------
+        values & errors (torch.Tensor)
+
+        """
+        if isinstance(probe, int):
+            probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
+
+        if isinstance(probe, str):
+            probe = torch.tensor([self.name.index(probe)], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, int):
+            other = torch.tensor([other], dtype=torch.int64, device=self.device)
+
+        if isinstance(other, str):
+            other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
+
+        mux, sigma_mux = Decomposition.phase_advance(probe, other, self.table.nux, self.fx,
+                                                     sigma_frequency=self.table.sigma_nux, sigma_phase=self.sigma_fx, **kwargs)
+
+        muy, sigma_muy = Decomposition.phase_advance(probe, other, self.table.nuy, self.fy,
+                                                     sigma_frequency=self.table.sigma_nuy, sigma_phase=self.sigma_fy, **kwargs)
+
+        return torch.stack([torch.stack([mux, sigma_mux]), torch.stack([muy, sigma_muy])])
 
 
     def get_momenta(self,
@@ -1413,16 +1518,23 @@ class Twiss():
 
 
     def get_momenta_lstsq(self,
-                    start:int,
-                    count:int,
-                    probe:int,
-                    limit:int,
-                    *,
-                    model:bool=True) -> torch.Tensor:
+                          start:int,
+                          count:int,
+                          probe:int,
+                          limit:int,
+                          *,
+                          model:bool=True,
+                          phony:bool=False,
+                          forward:bool=True,
+                          inverse:bool=True) -> torch.Tensor:
         """
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
 
         Note, self.table is expected to have x & y attributes
+
+        Note, probe is treated as location index if phony=True
+        In this case data at monitors in range around probe is used to fit coordinates and momenta
+        Data at location is not used even if location index is a monitor
 
         Parameters
         ----------
@@ -1436,26 +1548,36 @@ class Twiss():
             range limit
         model: bool
             flag to use model transport matrix from probe to other
+        phony: bool
+            flag to treat probe as virtual
+        inverse: bool
+            flag to move in the inverse direction
+        forward: bool
+            flag to move in the forward direction
 
         Returns
         -------
         (qx, px, qy, py) at the probe from start to start + count (torch.Tensor)
 
         """
-        others = [probe + index for index in range(-limit, limit + 1)]
-        shifts = [(other - int(mod(other, self.model.monitor_count))) // self.model.monitor_count for other in others]
-        others = [int(mod(other, self.model.monitor_count)) for other in others]
-
-        identity = torch.eye(4, dtype=self.dtype, device=self.device)
+        if not phony:
+            others = [probe + index for index in range(-limit*inverse, limit*forward + 1)]
+            shifts = [(other - int(mod(other, self.model.monitor_count))) // self.model.monitor_count for other in others]
+            others = [int(mod(other, self.model.monitor_count)) for other in others]
+        else:
+            others = [other for other in generate_other(probe, limit, self.flag, forward=forward, inverse=inverse)]
+            shifts = [(other - int(mod(other, self.model.size))) // self.model.size for other in others]
+            others = [int(mod(other, self.model.size)) for other in others]
+            others = [other - sum(1 for virtual in self.model.virtual_index if virtual < other) for other in others]
 
         A = []
         for other, shift in zip(others, shifts):
-            index_probe = self.model.monitor_index[probe]
+            index_probe = self.model.monitor_index[probe] if not phony else probe
             index_other = self.model.monitor_index[other] + shift*self.model.size
             if model:
-                matrix = self.model.matrix(index_probe, index_other) if index_probe != index_other else identity
+                matrix = self.model.matrix(index_probe, index_other)
             else:
-                matrix = self.matrix(index_probe, index_other) if index_probe != index_other else identity
+                matrix = self.matrix(index_probe, index_other)
             RX, _, RY, _ = matrix
             A.append(RX)
             A.append(RY)
@@ -1556,6 +1678,7 @@ class Twiss():
                       iy:float=None,
                       count:int=512,
                       fraction:float=0.75,
+                      sigma:float=0.0,
                       n_jobs:int=6,
                       **kwargs) -> tuple:
         """
@@ -1585,6 +1708,8 @@ class Twiss():
             number of samples
         fraction: float
             sample length fraction
+        sigma: float
+            twiss perturbation sigma
         n_jobs: int
             number of jobs
         **kwargs:
@@ -1599,15 +1724,13 @@ class Twiss():
 
         def objective(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            X = torch.tensor(X, dtype=self.dtype, device=self.device)
             return self.invariant_objective(beta, X, normalization, product).cpu().numpy()
 
         def derivative(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            X = torch.tensor(X, dtype=self.dtype, device=self.device)
             return (functorch.jacrev(self.invariant_objective)(beta, X, normalization, product)).cpu().numpy()
 
-        def task():
+        def task(sigma):
 
             index = torch.randint(0, length, (size, ), dtype=torch.int64, device=self.device)
 
@@ -1628,8 +1751,8 @@ class Twiss():
             if iy is not None:
                 jy = iy
 
-            beta = numpy.array([jx, jy, *twiss.cpu().numpy()])
-            X = torch.stack([QX, PX, QY, PY]).cpu().numpy()
+            beta = numpy.array([jx, jy, *(twiss + sigma*torch.randn_like(twiss)).cpu().numpy()])
+            X = torch.stack([QX, PX, QY, PY])
 
             if jacobian:
                 fit, cov, *_ = leastsq(objective, beta, args=(X, normalization, product), Dfun=derivative, full_output=1, **kwargs)
@@ -1645,7 +1768,7 @@ class Twiss():
 
             return fit, err
 
-        result = Parallel(n_jobs=n_jobs)(delayed(task)() for _ in range(count))
+        result = Parallel(n_jobs=n_jobs)(delayed(task)(sigma) for _ in range(count))
 
         value, error = numpy.array(result).swapaxes(0, 1)
         value = torch.tensor(value.T, dtype=self.dtype, device=self.device)
@@ -1669,6 +1792,7 @@ class Twiss():
                             jacobian:bool=False,
                             count:int=512,
                             fraction:float=0.75,
+                            sigma:float=0.0,
                             n_jobs:int=6,
                             **kwargs) -> tuple:
         """
@@ -1698,6 +1822,8 @@ class Twiss():
             number of samples
         fraction: float
             sample length fraction
+        sigma: float
+            twiss perturbation sigma
         n_jobs: int
             number of jobs
         **kwargs:
@@ -1712,15 +1838,13 @@ class Twiss():
 
         def objective(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            X = torch.tensor(X, dtype=self.dtype, device=self.device)
             return self.invariant_objective_fixed(beta, X, normalization, product).cpu().numpy()
 
         def derivative(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            X = torch.tensor(X, dtype=self.dtype, device=self.device)
             return (functorch.jacrev(self.invariant_objective_fixed)(beta, X, normalization, product)).cpu().numpy()
 
-        def task():
+        def task(sigma):
 
             index = torch.randint(0, length, (size, ), dtype=torch.int64, device=self.device)
 
@@ -1731,8 +1855,8 @@ class Twiss():
             QY = qy[index]
             PY = py[index]
 
-            beta = numpy.array([*twiss.cpu().numpy()])
-            X = torch.stack([IX, IY, QX, PX, QY, PY]).cpu().numpy()
+            beta = numpy.array([*(twiss + sigma*torch.randn_like(twiss)).cpu().numpy()])
+            X = torch.stack([IX, IY, QX, PX, QY, PY])
 
             if jacobian:
                 fit, cov, *_ = leastsq(objective, beta, args=(X, normalization, product), Dfun=derivative, full_output=1, **kwargs)
@@ -1748,7 +1872,7 @@ class Twiss():
 
             return fit, err
 
-        result = Parallel(n_jobs=n_jobs)(delayed(task)() for _ in range(count))
+        result = Parallel(n_jobs=n_jobs)(delayed(task)(sigma) for _ in range(count))
 
         value, error = numpy.array(result).swapaxes(0, 1)
         value = torch.tensor(value.T, dtype=self.dtype, device=self.device)
@@ -1766,12 +1890,16 @@ class Twiss():
                             method:str='pair',
                             limit:int=1,
                             model:bool=True,
+                            phony:bool=False,
+                            inverse:bool=True,
+                            forward:bool=True,
                             product:bool=True,
                             jacobian:bool=False,
                             count:int=256,
                             fraction:float=0.75,
                             ix:float=None,
                             iy:float=None,
+                            sigma:float=0.0,
                             n_jobs:int=6,
                             verbose:bool=False,
                             **kwargs) -> torch.Tensor:
@@ -1779,6 +1907,10 @@ class Twiss():
         Estimate twiss from signals (fit linear invariants).
 
         Note, invariant values can be fixed
+
+        Note, 'lstsq' method can be used to estimate orbits at virtual locations
+        If phony = True, twiss is only estimated at virtual locations
+        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -1802,6 +1934,12 @@ class Twiss():
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
         model: bool
             flag to use model transport for momenta computation
+        phony: bool
+            (lstsq) flag to treat probe as virtual
+        inverse: bool
+            (lstsq) flag to move in the inverse direction
+        forward: bool
+            (lstsq) flag to move in the forward direction
         product: bool
             flag to use product instead of sum
         jacobian: bool
@@ -1812,6 +1950,8 @@ class Twiss():
             sample length fraction
         ix & iy: float
             fixed invariant values
+        sigma: float
+            twiss perturbation sigma
         n_jobs: int
             number of jobs
         verbose: bool
@@ -1824,15 +1964,19 @@ class Twiss():
         estimated parameters and errors (torch.Tensor)
 
         """
+        if phony == True and model == False and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+
         result = []
 
-        for location in range(self.model.monitor_count):
+        locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        for location in locations:
 
             if verbose:
                 print(f'{location + 1}/{self.model.monitor_count}')
 
             probe = location
-            index_probe = self.model.monitor_index[probe]
+            index_probe = self.model.monitor_index[probe] if not phony else probe
 
             if twiss != None:
                 guess = twiss[probe]
@@ -1852,14 +1996,14 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
 
             if ix != None and iy != None:
                 ix = ix*torch.ones_like(qx)
                 iy = iy*torch.ones_like(qy)
-                fit = self.fit_objective_fixed(length, guess, ix, iy, qx, px, qy, py, normalization, product=product, jacobian=jacobian, count=count, fraction=fraction, n_jobs=n_jobs, **kwargs)
+                fit = self.fit_objective_fixed(length, guess, ix, iy, qx, px, qy, py, normalization, product=product, jacobian=jacobian, count=count, fraction=fraction, sigma=sigma, n_jobs=n_jobs, **kwargs)
             else:
-                fit = self.fit_objective(length, guess, qx, px, qy, py, normalization, product=product, jacobian=jacobian, count=count, fraction=fraction, n_jobs=n_jobs, **kwargs)
+                fit = self.fit_objective(length, guess, qx, px, qy, py, normalization, product=product, jacobian=jacobian, count=count, fraction=fraction, sigma=sigma, n_jobs=n_jobs, **kwargs)
 
             result.append(torch.stack(fit))
 
@@ -2042,6 +2186,9 @@ class Twiss():
                              method:str='pair',
                              limit:int=1,
                              model:bool=True,
+                             phony:bool=False,
+                             inverse:bool=True,
+                             forward:bool=True,
                              twiss:torch.Tensor=None,
                              n_jobs:int=6,
                              verbose:bool=False,
@@ -2050,6 +2197,10 @@ class Twiss():
         Estimate twiss from ratio.
 
         Note, minimize method is fixed to 'BFGS'
+
+        Note, 'lstsq' method can be used to estimate orbits at virtual locations
+        If phony = True, twiss is only estimated at virtual locations
+        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -2073,6 +2224,12 @@ class Twiss():
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
         model: bool
             flag to use model transport for momenta computation
+        phony: bool
+            (lstsq) flag to treat probe as virtual
+        inverse: bool
+            (lstsq) flag to move in the inverse direction
+        forward: bool
+            (lstsq) flag to move in the forward direction
         twiss: torch.Tensor
             [..., [n11, n33, n21, n43, n13, n31, n14, n41], ...]
             [..., [ax, bx, ay, by], ...]
@@ -2091,6 +2248,9 @@ class Twiss():
         estimated parameters and errors (torch.Tensor)
 
         """
+        if phony == True and model == False and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+
         result = []
 
         size = 1 + (length - len(window))//step
@@ -2099,13 +2259,14 @@ class Twiss():
             beta = torch.tensor(beta, dtype=window.dtype, device=window.device)
             return self.ratio_objective(beta, X, window, nux, nuy, normalization).cpu().numpy()
 
-        for location in range(self.model.monitor_count):
+        locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        for location in locations:
 
             if verbose:
                 print(f'{location + 1}/{self.model.monitor_count}')
 
             probe = location
-            index_probe = self.model.monitor_index[probe]
+            index_probe = self.model.monitor_index[probe] if not phony else probe
 
             if twiss != None:
                 guess = twiss[probe]
@@ -2127,7 +2288,7 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
 
             X = torch.stack([qx, px, qy, py])
 
@@ -2150,6 +2311,9 @@ class Twiss():
                               method:str='pair',
                               limit:int=1,
                               model:bool=True,
+                              phony:bool=False,
+                              inverse:bool=True,
+                              forward:bool=True,
                               count:int=256,
                               fraction:float=0.75,
                               verbose:bool=False) -> torch.tensor:
@@ -2157,6 +2321,10 @@ class Twiss():
         Estimate twiss from n-turn matrix.
 
         Note, return estimated tunes and free elements of normalization matrix for each location and each sample
+
+        Note, 'lstsq' method can be used to estimate orbits at virtual locations
+        If phony = True, twiss is only estimated at virtual locations
+        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -2172,6 +2340,12 @@ class Twiss():
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
         model: bool
             flag to use model transport for momenta computation
+        phony: bool
+            (lstsq) flag to treat probe as virtual
+        inverse: bool
+            (lstsq) flag to move in the inverse direction
+        forward: bool
+            (lstsq) flag to move in the forward direction
         count: int
             number of samples
         fraction: float
@@ -2184,13 +2358,17 @@ class Twiss():
         estimated parameters (torch.Tensor)
 
         """
+        if phony == True and model == False and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+
         result = []
 
         size = int(fraction*length)
 
         empty = torch.zeros(10, dtype=self.dtype, device=self.device)
 
-        for location in range(self.model.monitor_count):
+        locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        for location in locations:
 
             if verbose:
                 print(f'{location + 1}/{self.model.monitor_count}')
@@ -2204,7 +2382,7 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
 
             table = torch.randint(size - power, (count, size), dtype=torch.int64, device=self.device)
 
@@ -2229,6 +2407,400 @@ class Twiss():
                     box.append(empty)
 
             result.append(torch.stack(box).T)
+
+        return torch.stack(result)
+
+
+    def get_twiss_virtual_uncoupled(self,
+                                    probe:int,
+                                    *,
+                                    limit:int=1,
+                                    inverse:bool=True,
+                                    forward:bool=True,
+                                    use_phase:bool=False,
+                                    bootstrap:bool=True,
+                                    count:int=256,
+                                    ax:torch.Tensor=None,
+                                    bx:torch.Tensor=None,
+                                    ay:torch.Tensor=None,
+                                    by:torch.Tensor=None,
+                                    sigma_ax:torch.Tensor=None,
+                                    sigma_bx:torch.Tensor=None,
+                                    sigma_ay:torch.Tensor=None,
+                                    sigma_by:torch.Tensor=None) -> tuple:
+        """
+        Estimate CS twiss at (virtual) location.
+
+        Note, probe location can be virtual or monitor
+        Note, when use_phase flag is True, virtual phase is used
+
+        Parameters
+        ----------
+        probe: int
+            (virtual) location index
+        limit: int
+            range limit
+        inverse: bool
+            flag to use other only in inverse direction
+        forward: bool
+            flag to use other only in forward direction
+        use_phase: bool
+            flag to use (virtual) phase
+        bootstrap: bool
+            flag to bootstrap other
+        count: int
+            number of bootstrap samples
+        ax, bx, ay, by: torch.Tensor
+            CS twiss
+        sigma_ax, sigma_bx, sigma_ay, sigma_by: torch.Tensor
+            CS twiss errors
+
+        Returns
+        -------
+        CS twiss and errors at probe (tuple)
+
+        """
+        others = [other for other in generate_other(probe, limit, self.flag, inverse=inverse, forward=forward)]
+
+        ax = self.ax if ax == None else ax
+        bx = self.bx if bx == None else bx
+        ay = self.ay if ay == None else ay
+        by = self.by if by == None else by
+
+        sigma_ax = self.sigma_ax if sigma_ax == None else sigma_ax
+        sigma_bx = self.sigma_bx if sigma_bx == None else sigma_bx
+        sigma_ay = self.sigma_ay if sigma_ay == None else sigma_ay
+        sigma_by = self.sigma_by if sigma_by == None else sigma_by
+
+        value, error = [], []
+
+        for other in others:
+
+            index = int(mod(other, self.size))
+
+            if use_phase:
+                (mux, sigma_mux), (muy, sigma_muy) = self.phase_advance(other, probe).squeeze()
+
+            if bootstrap:
+                table_ax = ax[index] + sigma_ax[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_bx = bx[index] + sigma_bx[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_ay = ay[index] + sigma_ay[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_by = by[index] + sigma_by[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                if use_phase:
+                    table_mux = mux + sigma_mux*torch.randn(count, dtype=self.dtype, device=self.device)
+                    table_muy = muy + sigma_muy*torch.randn(count, dtype=self.dtype, device=self.device)
+            else:
+                table_ax = ax[index].unsqueeze(0)
+                table_bx = bx[index].unsqueeze(0)
+                table_ay = ay[index].unsqueeze(0)
+                table_by = by[index].unsqueeze(0)
+                if use_phase:
+                    table_mux = mux.unsqueeze(0)
+                    table_muy = muy.unsqueeze(0)
+
+            matrix = self.model.matrix(other, probe)
+
+            table = []
+            if use_phase:
+                for value_ax, value_bx, value_ay, value_by, value_mux, value_muy in zip(table_ax, table_bx, table_ay, table_by, table_mux, table_muy):
+                    normal = cs_normal(value_ax, value_bx, value_ay, value_by, dtype=self.dtype, device=self.device)
+                    normal = matrix @ normal @ matrix_rotation(torch.stack([value_mux, value_muy]).unsqueeze(0)).squeeze().inverse()
+                    normal = parametric_normal(*normal[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]], dtype=self.dtype, device=self.device)
+                    wolski = normal_to_wolski(normal.unsqueeze(0)).squeeze()
+                    table.append(wolski_to_cs(wolski))
+            else:
+                for value_ax, value_bx, value_ay, value_by in zip(table_ax, table_bx, table_ay, table_by):
+                    wolski = cs_to_wolski(value_ax, value_bx, value_ay, value_by, dtype=self.dtype, device=self.device)
+                    wolski = twiss_propagate(wolski, matrix.unsqueeze(0)).squeeze()
+                    table.append(wolski_to_cs(wolski))
+
+            table = torch.stack(table)
+            if bootstrap:
+                table_value = mean(table.T)
+                table_error = variance(table.T).sqrt()
+            else:
+                table_value = table.squeeze()
+                table_error = torch.stack([sigma_ax[index], sigma_bx[index], sigma_ay[index], sigma_bx[index]])
+
+            value.append(table_value)
+            error.append(table_error)
+
+        value = torch.stack(value).T
+        error = torch.stack(error).T
+        value, error = weighted_mean(value, weight=(1.0/error**2).nan_to_num(posinf=1)), weighted_variance(value, weight=(1.0/error**2).nan_to_num(posinf=1)).sqrt().nan_to_num()
+
+        return value, error
+
+
+    def get_twiss_virtual_coupled(self,
+                                probe:int,
+                                *,
+                                limit:int=1,
+                                inverse:bool=True,
+                                forward:bool=True,
+                                use_phase:bool=False,
+                                bootstrap:bool=True,
+                                count:int=256,
+                                n11:torch.Tensor=None,
+                                n33:torch.Tensor=None,
+                                n21:torch.Tensor=None,
+                                n43:torch.Tensor=None,
+                                n13:torch.Tensor=None,
+                                n31:torch.Tensor=None,
+                                n14:torch.Tensor=None,
+                                n41:torch.Tensor=None,
+                                sigma_n11:torch.Tensor=None,
+                                sigma_n33:torch.Tensor=None,
+                                sigma_n21:torch.Tensor=None,
+                                sigma_n43:torch.Tensor=None,
+                                sigma_n13:torch.Tensor=None,
+                                sigma_n31:torch.Tensor=None,
+                                sigma_n14:torch.Tensor=None,
+                                sigma_n41:torch.Tensor=None) -> tuple:
+        """
+        Estimate free normalization matrix elements at (virtual) location.
+
+        Note, probe location can be virtual or monitor
+        Note, when use_phase flag is True, virtual phase is used
+
+        Parameters
+        ----------
+        probe: int
+            (virtual) location index
+        limit: int
+            range limit
+        inverse: bool
+            flag to use other only in inverse direction
+        forward: bool
+            flag to use other only in forward direction
+        use_phase: bool
+            flag to use (virtual) phase
+        bootstrap: bool
+            flag to bootstrap other
+        count: int
+            number of bootstrap samples
+        n11, n33, n21, n43, n13, n31, n14, n41: torch.Tensor
+            free normalization matrix elements
+        sigma_n11, sigma_n33, sigma_n21, sigma_n43, sigma_n13, sigma_n31, sigma_n14, sigma_n41: torch.Tensor
+            free normalization matrix elements errors
+
+        Returns
+        -------
+        normalization matrix elements and errors at probe (tuple)
+
+        """
+        others = [other for other in generate_other(probe, limit, self.flag, inverse=inverse, forward=forward)]
+
+        n11 = self.normal[:, 0, 0] if n11 == None else n11
+        n33 = self.normal[:, 2, 2] if n33 == None else n33
+        n21 = self.normal[:, 1, 0] if n21 == None else n21
+        n43 = self.normal[:, 3, 2] if n43 == None else n43
+        n13 = self.normal[:, 0, 2] if n13 == None else n13
+        n31 = self.normal[:, 2, 0] if n31 == None else n31
+        n14 = self.normal[:, 0, 3] if n14 == None else n14
+        n41 = self.normal[:, 3, 0] if n41 == None else n41
+
+        sigma_n11 = self.sigma_normal[:, 0, 0] if sigma_n11 == None else sigma_n11
+        sigma_n33 = self.sigma_normal[:, 2, 2] if sigma_n33 == None else sigma_n33
+        sigma_n21 = self.sigma_normal[:, 1, 0] if sigma_n21 == None else sigma_n21
+        sigma_n43 = self.sigma_normal[:, 3, 2] if sigma_n43 == None else sigma_n43
+        sigma_n13 = self.sigma_normal[:, 0, 2] if sigma_n13 == None else sigma_n13
+        sigma_n31 = self.sigma_normal[:, 2, 0] if sigma_n31 == None else sigma_n31
+        sigma_n14 = self.sigma_normal[:, 0, 3] if sigma_n14 == None else sigma_n14
+        sigma_n41 = self.sigma_normal[:, 3, 0] if sigma_n41 == None else sigma_n41
+
+        value, error = [], []
+
+        for other in others:
+
+            index = int(mod(other, self.size))
+
+            if use_phase:
+                (mux, sigma_mux), (muy, sigma_muy) = self.phase_advance(other, probe).squeeze()
+
+            if bootstrap:
+                table_n11 = n11[index] + sigma_n11[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n33 = n33[index] + sigma_n33[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n21 = n21[index] + sigma_n21[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n43 = n43[index] + sigma_n43[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n13 = n13[index] + sigma_n13[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n31 = n31[index] + sigma_n31[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n14 = n14[index] + sigma_n14[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                table_n41 = n41[index] + sigma_n41[index]*torch.randn(count, dtype=self.dtype, device=self.device)
+                if use_phase:
+                    table_mux = mux + sigma_mux*torch.randn(count, dtype=self.dtype, device=self.device)
+                    table_muy = muy + sigma_muy*torch.randn(count, dtype=self.dtype, device=self.device)
+            else:
+                table_n11 = n11[index].unsqueeze(0)
+                table_n33 = n33[index].unsqueeze(0)
+                table_n21 = n21[index].unsqueeze(0)
+                table_n43 = n43[index].unsqueeze(0)
+                table_n13 = n13[index].unsqueeze(0)
+                table_n31 = n31[index].unsqueeze(0)
+                table_n14 = n14[index].unsqueeze(0)
+                table_n41 = n41[index].unsqueeze(0)
+                if use_phase:
+                    table_mux = mux.unsqueeze(0)
+                    table_muy = muy.unsqueeze(0)
+
+            matrix = self.model.matrix(other, probe)
+
+            table = []
+            if use_phase:
+                for value_n11, value_n33, value_n21, value_n43, value_n13, value_n31, value_n14, value_n41, value_mux, value_muy in zip(table_n11, table_n33, table_n21, table_n43, table_n13, table_n31, table_n14, table_n41, table_mux, table_muy):
+                    normal = parametric_normal(value_n11, value_n33, value_n21, value_n43, value_n13, value_n31, value_n14, value_n41, dtype=self.dtype, device=self.device)
+                    normal = matrix @ normal @ matrix_rotation(torch.stack([value_mux, value_muy]).unsqueeze(0)).squeeze().inverse()
+                    normal = parametric_normal(*normal[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]])
+                    table.append(normal[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]])
+            else:
+                for value_n11, value_n33, value_n21, value_n43, value_n13, value_n31, value_n14, value_n41 in zip(table_n11, table_n33, table_n21, table_n43, table_n13, table_n31, table_n14, table_n41):
+                    wolski = normal_to_wolski(parametric_normal(value_n11, value_n33, value_n21, value_n43, value_n13, value_n31, value_n14, value_n41, dtype=self.dtype, device=self.device).unsqueeze(0)).squeeze()
+                    wolski = twiss_propagate(wolski, matrix.unsqueeze(0))
+                    table.append(wolski_to_normal(wolski).squeeze()[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]])
+
+            table = torch.stack(table)
+            if bootstrap:
+                table_value = mean(table.T)
+                table_error = variance(table.T).sqrt()
+            else:
+                table_value = table.squeeze()
+                table_error = torch.stack([sigma_n11[index], sigma_n33[index], sigma_n21[index], sigma_n43[index], sigma_n13[index], sigma_n31[index], sigma_n14[index], sigma_n41[index]])
+
+            value.append(table_value)
+            error.append(table_error)
+
+        value = torch.stack(value).T
+        error = torch.stack(error).T
+        value, error = weighted_mean(value, weight=(1.0/error**2).nan_to_num(posinf=1)), weighted_variance(value, weight=(1.0/error**2).nan_to_num(posinf=1)).sqrt().nan_to_num()
+
+        return value, error
+
+
+    @staticmethod
+    def phase_objective(beta:torch.Tensor,
+                        mux:torch.Tensor,
+                        muy:torch.Tensor,
+                        matrix:torch.Tensor) -> torch.Tensor:
+        """
+        Evaluate phase objective.
+
+        Parameters
+        ----------
+        beta: torch.Tensor
+            n11, n33, n21, n43, n13, n31, n14, n41
+        mux & muy: torch.Tensor
+            x & y phase advances
+        matrix: torch.Tensor
+            transport matrices
+
+        Returns
+        -------
+        objective value (torch.Tensor)
+
+        """
+        n11, n33, n21, n43, n13, n31, n14, n41 = beta
+
+        m11, m12, m13, m14 = matrix[:, 0].T
+        m21, m22, m23, m24 = matrix[:, 1].T
+        m31, m32, m33, m34 = matrix[:, 2].T
+        m41, m42, m43, m44 = matrix[:, 3].T
+
+        x_sin  = - m11*n11
+        x_sin += - m12*n21
+        x_sin += - m13*n31
+        x_sin += - m14*n41
+        x_sin *= torch.sin(mux)
+
+        x_cos  = m12*n33*(n11 + n14*(n33*n41 - n31*n43))/(n11*(n11*n33 - n13*n31))
+        x_cos += m13*n14*n33/n11
+        x_cos += m14*(n13*n14*n33*n41 + n11*(n13 - n14*n33*n43))/(n11*(n13*n31 - n11*n33))
+        x_cos *= torch.cos(mux)
+
+        y_sin  = - m31*n13
+        y_sin += - m32*(n13*n21 + n33*n41 - n31*n43)/n11
+        y_sin += - m33*n33
+        y_sin += - m34*n43
+        y_sin *= torch.sin(muy)
+
+        y_cos  = m31*n14
+        y_cos += m32*(-n31 + n14*n21*n33 + n14*n31*(-n13*n21 - n33*n41 + n31*n43)/n11)/(n11*n33 - n13*n31)
+        y_cos += m34*(n11 + n14*(n33*n41 - n31*n43))/(n11*n33 - n13*n31)
+        y_cos *= torch.cos(muy)
+
+        x_sum = x_cos + x_sin
+        y_sum = y_cos + y_sin
+
+        return (x_sum**2 * y_sum**2).sqrt()
+
+
+    def get_twiss_from_phase_fit(self,
+                                *,
+                                limit:int=10,
+                                count:int=64,
+                                model:bool=True,
+                                verbose:bool=False,
+                                **kwargs) -> torch.Tensor:
+        """
+        Estimate twiss from phase fit.
+
+        Note, if model is True, model transport between locations is used
+
+        Parameters
+        ----------
+        limit: int
+            range limit
+        count: int
+            number of samples
+        model: bool
+            frag to use model transport
+        verbose: bool
+            verbose flag
+        **kwargs:
+            passed to leastsq
+
+        Returns
+        -------
+        estimated parameters (torch.Tensor)
+
+        """
+        def objective(beta, mux, muy, matrix):
+            beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
+            return self.phase_objective(beta, mux, muy, matrix).cpu().numpy()
+
+        result = []
+        for location in range(self.model.monitor_count):
+
+            if verbose:
+                print(f'{location + 1}/{self.model.monitor_count}')
+
+            probe = location
+
+            others = [probe + index for index in range(-limit, limit + 1) if index != 0]
+            shifts = [(other - int(mod(other, self.model.monitor_count))) // self.model.monitor_count for other in others]
+            others = [int(mod(other, self.model.monitor_count)) for other in others]
+
+            index_probe = self.model.monitor_index[probe]
+            index_other = [self.model.monitor_index[other] + shift*self.model.size for other, shift in zip(others, shifts)]
+
+            beta = self.model.normal[index_probe]
+            beta = (beta[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]])
+            beta = beta.cpu().numpy()
+
+            index_other = torch.tensor(index_other, dtype=torch.int64, device=self.device)
+            index_probe = index_probe*torch.ones_like(index_other)
+
+            matrix = self.matrix(index_probe, index_other) if not model else self.model.matrix(index_probe, index_other)
+
+            mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, self.fx)
+            muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, self.fy)
+
+            index = torch.randint(2*limit, (count, 2*limit), dtype=torch.int64, device=self.device)
+            table = []
+            for i in index:
+                fit, *_ = leastsq(objective, beta, args=(mux[i], muy[i], matrix[i]), full_output=1, **kwargs)
+                table.append(fit)
+            table = torch.tensor(numpy.array(table), dtype=self.dtype, device=self.device).T
+            result.append(table)
 
         return torch.stack(result)
 
