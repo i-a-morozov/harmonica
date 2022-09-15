@@ -180,7 +180,7 @@ def twiss_compute(matrix:torch.Tensor,
     r = []
     for i in range(d):
         a = (n[2*i, 2*i + 1] + 1j*n[2*i, 2*i]).angle() - 0.5*numpy.pi
-        b = torch.tensor([[a.cos(), a.sin()], [-a.sin(), a.cos()]])
+        b = torch.tensor([[a.cos(), a.sin()], [-a.sin(), a.cos()]], dtype=dtype, device=device)
         r.append(b)
 
     n = n @ torch.block_diag(*r)
@@ -230,20 +230,10 @@ def twiss_phase_advance(normal:torch.Tensor,
     phase advances and final normalization matrices for each transport matrix (tuple)
 
     """
-    d = len(normal) // 2
-
-    index = torch.arange(d, dtype=torch.int64, device=normal.device)
-
-    local = torch.matmul(matrix, normal)
-
-    angle = mod(torch.arctan2(local[:, 2*index, 2*index + 1], local[:, 2*index, 2*index]), 2.0*numpy.pi).T
-    angle_cos = angle.cos()
-    angle_sin = angle.sin()
-
-    rotation = torch.stack([+angle_cos, -angle_sin, +angle_sin, +angle_cos])
-    rotation = torch.stack([torch.block_diag(*block.reshape(-1, 2, 2)) for block in rotation.swapaxes(0, -1)])
-
-    return angle.T, local @ rotation
+    index = torch.arange(len(normal) // 2, dtype=torch.int64, device=normal.device)
+    local = matrix @ normal
+    angle = mod(torch.arctan2(local[:, 2*index, 2*index + 1], local[:, 2*index, 2*index]), 2.0*numpy.pi)
+    return angle, local @ matrix_rotation(-angle)
 
 
 def normal_to_wolski(normal:torch.Tensor) -> torch.Tensor:
