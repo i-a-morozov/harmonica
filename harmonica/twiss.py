@@ -147,13 +147,15 @@ class Twiss():
         Bootstrap uncoupled twiss data.
     matrix(self, probe:torch.Tensor, other:torch.Tensor) -> torch.Tensor
         Generate transport matrices between given probe and other locations using measured twiss.
+    matrix_virtual(self, probe:int, other:int, *, close:str='nearest') -> torch.Tensor
+        Compute virtual transport matrix between probe and other.
     phase_advance(self, probe:torch.Tensor, other:torch.Tensor, **kwargs) -> torch.Tensor
         Compute x & y phase advance between probe and other.
     get_momenta(self, start:int, count:int, probe:int, other:int, *, model:bool=True) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using single other monitor location.
     get_momenta_range(self, start:int, count:int, probe:int, limit:int, *, model:bool=True) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using range of monitor locations around probed monitor location (average momenta).
-    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, *, model:bool=True, phony:bool=False, forward:bool=True, inverse:bool=True) -> torch.Tensor
+    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, *, model:bool=True, phony:bool=False, forward:bool=True, inverse:bool=True, use_virtual:bool=False) -> torch.Tensor
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
     invariant_objective(beta:torch.Tensor, X:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], product:bool) -> torch.Tensor
         Evaluate invariant objective.
@@ -1346,7 +1348,7 @@ class Twiss():
         Identity matrices are generated if probe == other
         One-turn matrices can be generated with other = probe + self.size
         Input parameters should be 1D tensors with matching length
-        Additionaly probe and/or other input parameter can be an int or str in self.name (not checked)
+        Additionaly probe and/or other input parameter can be an int or str in self.model.name (not checked)
 
         Parameters
         ----------
@@ -1364,13 +1366,13 @@ class Twiss():
             probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
 
         if isinstance(probe, str):
-            probe = torch.tensor([self.name.index(probe)], dtype=torch.int64, device=self.device)
+            probe = torch.tensor([self.model.name.index(probe)], dtype=torch.int64, device=self.device)
 
         if isinstance(other, int):
             other = torch.tensor([other], dtype=torch.int64, device=self.device)
 
         if isinstance(other, str):
-            other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
+            other = torch.tensor([self.model.name.index(other)], dtype=torch.int64, device=self.device)
 
         fx, _ = Decomposition.phase_advance(probe, other, self.table.nux, self.fx, error=False)
         fy, _ = Decomposition.phase_advance(probe, other, self.table.nuy, self.fy, error=False)
@@ -1385,6 +1387,168 @@ class Twiss():
                                       self.ay[probe], self.by[probe], self.ay[other], self.by[other], fy)
 
         return matrix.squeeze()
+
+
+    def matrix_virtual(self,
+                    probe:int,
+                    other:int, *,
+                    close:str='nearest') -> torch.Tensor:
+        """
+        Compute virtual transport matrix between probe and other.
+
+        Note, kind (virtual or monitor) is defined by self.flag
+        Note, both probe and other are expected to be on the first turn
+
+        (monitor -> monitor)
+        M(m, m') = M(m, m')
+
+        (monitor -> virtual)
+        M(m, v)  = M(m', v) M(m, m')
+        m  - monitor
+        v  - virtual
+        m' - monitor close to v
+
+        (virtual -> monitor)
+        M(v, m)  = M(v, m') M(m', m)
+        m  - monitor
+        v  - virtual
+        m' - monitor close to v
+
+        (virtual -> virtual)
+        M(v, v') = M(m', v') M(m, m') M(v, m)
+        v  - virtual
+        v' - virtual
+        m  - monitor close to v
+        m' - monitor close to v'
+
+        Parameters
+        ----------
+        probe: int
+            probe locations
+        other: int
+            other locations
+        close: str
+            'forward', 'inverse' or 'nearest'
+
+        Returns
+        -------
+        virtual transport matrix (torch.Tensor)
+
+        """
+        if isinstance(probe, str):
+            probe = self.model.name.index(probe)
+
+        if isinstance(other, str):
+            other = self.model.name.index(other)
+
+        is_probe = int(self.flag[probe])
+        is_other = int(self.flag[other])
+
+        match (is_probe, is_other):
+
+            case (1, 1):
+
+                return self.matrix(probe, other)
+
+            case (1, 0):
+
+                forward = int(mod(other + 1, self.size))
+                while not self.flag[forward]:
+                    forward = int(mod(forward + 1, self.size))
+                time_forward = self.model.time[forward]
+                if forward < other: forward += self.model.size
+
+                inverse = int(mod(other - 1, self.size))
+                while not self.flag[inverse]:
+                    inverse = int(mod(inverse - 1, self.size))
+                time_inverse = self.model.time[inverse]
+                if inverse > other: inverse -= self.model.size
+
+                if close == 'forward':
+                    return self.model.matrix(forward, other) @ self.matrix(probe, forward)
+
+                if close == 'inverse':
+                    return self.model.matrix(inverse, other) @ self.matrix(probe, inverse)
+
+                if close == 'nearest':
+
+                    delta_forward = abs(time_forward - self.model.time[other])
+                    delta_inverse = abs(time_inverse - self.model.time[other])
+                    nearest = forward if delta_forward <= delta_inverse else inverse
+
+                    return self.model.matrix(nearest, other) @ self.matrix(probe, nearest)
+
+            case (0, 1):
+
+                forward = int(mod(probe + 1, self.size))
+                while not self.flag[forward]:
+                    forward = int(mod(forward + 1, self.size))
+                time_forward = self.model.time[forward]
+                if forward < probe: forward += self.model.size
+
+                inverse = int(mod(probe - 1, self.size))
+                while not self.flag[inverse]:
+                    inverse = int(mod(inverse - 1, self.size))
+                time_inverse = self.model.time[inverse]
+                if inverse > probe: inverse -= self.model.size
+
+                if close == 'forward':
+                    return self.matrix(forward, other) @ self.model.matrix(probe, forward)
+
+                if close == 'inverse':
+                    return self.matrix(inverse, other) @ self.model.matrix(probe, inverse)
+
+                if close == 'nearest':
+
+                    delta_forward = abs(time_forward - self.model.time[other])
+                    delta_inverse = abs(time_inverse - self.model.time[other])
+                    nearest = forward if delta_forward <= delta_inverse else inverse
+
+                    return self.matrix(nearest, other) @ self.model.matrix(probe, nearest)
+
+            case (0, 0):
+
+                forward_probe = int(mod(probe + 1, self.size))
+                while not self.flag[forward_probe]:
+                    forward_probe = int(mod(forward_probe + 1, self.size))
+                time_forward_probe = self.model.time[forward_probe]
+                if forward_probe < probe: forward_probe += self.model.size
+
+                inverse_probe = int(mod(probe - 1, self.size))
+                while not self.flag[inverse_probe]:
+                    inverse_probe = int(mod(inverse_probe - 1, self.size))
+                time_inverse_probe = self.model.time[inverse_probe]
+                if inverse_probe > probe: inverse_probe -= self.model.size
+
+                forward_other = int(mod(other + 1, self.size))
+                while not self.flag[forward_other]:
+                    forward_other = int(mod(forward_other + 1, self.size))
+                time_forward_other = self.model.time[forward_other]
+                if forward_other < other: forward_other += self.model.size
+
+                inverse_other = int(mod(other - 1, self.size))
+                while not self.flag[inverse_other]:
+                    inverse_other = int(mod(inverse_other - 1, self.size))
+                time_inverse_other = self.model.time[inverse_other]
+                if inverse_other > other: inverse_other -= self.model.size
+
+                if close == 'forward':
+                    return self.model.matrix(forward_other, other) @ self.matrix(forward_probe, forward_other) @ self.model.matrix(probe, forward_probe)
+
+                if close == 'inverse':
+                    return self.model.matrix(inverse_other, other) @ self.matrix(inverse_probe, inverse_other) @ self.model.matrix(probe, inverse_probe)
+
+                if close == 'nearest':
+
+                    delta_forward_probe = abs(time_forward_probe - self.model.time[probe])
+                    delta_inverse_probe = abs(time_inverse_probe - self.model.time[probe])
+                    nearest_probe = forward_probe if delta_forward_probe <= delta_inverse_probe else inverse_probe
+
+                    delta_forward_other = abs(time_forward_other - self.model.time[other])
+                    delta_inverse_other = abs(time_inverse_other - self.model.time[other])
+                    nearest_other = forward_other if delta_forward_other <= delta_inverse_other else inverse_other
+
+                    return self.model.matrix(nearest_other, other) @ self.matrix(nearest_probe, nearest_other) @ self.model.matrix(probe, nearest_probe)
 
 
     def phase_advance(self,
@@ -1412,13 +1576,13 @@ class Twiss():
             probe = torch.tensor([probe], dtype=torch.int64, device=self.device)
 
         if isinstance(probe, str):
-            probe = torch.tensor([self.name.index(probe)], dtype=torch.int64, device=self.device)
+            probe = torch.tensor([self.model.name.index(probe)], dtype=torch.int64, device=self.device)
 
         if isinstance(other, int):
             other = torch.tensor([other], dtype=torch.int64, device=self.device)
 
         if isinstance(other, str):
-            other = torch.tensor([self.name.index(other)], dtype=torch.int64, device=self.device)
+            other = torch.tensor([self.model.name.index(other)], dtype=torch.int64, device=self.device)
 
         mux, sigma_mux = Decomposition.phase_advance(probe, other, self.table.nux, self.fx,
                                                      sigma_frequency=self.table.sigma_nux, sigma_phase=self.sigma_fx, **kwargs)
@@ -1526,7 +1690,8 @@ class Twiss():
                           model:bool=True,
                           phony:bool=False,
                           forward:bool=True,
-                          inverse:bool=True) -> torch.Tensor:
+                          inverse:bool=True,
+                          use_virtual:bool=False) -> torch.Tensor:
         """
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
 
@@ -1554,12 +1719,17 @@ class Twiss():
             flag to move in the inverse direction
         forward: bool
             flag to move in the forward direction
+        use_virtual: bool
+            flag to use self.matrix_virtual
 
         Returns
         -------
         (qx, px, qy, py) at the probe from start to start + count (torch.Tensor)
 
         """
+        if limit <= 0:
+            raise ValueError(f'TWISS: expected limit >= 1')
+
         if not phony:
             others = [probe + index for index in range(-limit*inverse, limit*forward + 1)]
             shifts = [(other - int(mod(other, self.model.monitor_count))) // self.model.monitor_count for other in others]
@@ -1568,14 +1738,14 @@ class Twiss():
             others = [other for other in generate_other(probe, limit, self.flag, forward=forward, inverse=inverse)]
             shifts = [(other - int(mod(other, self.model.size))) // self.model.size for other in others]
             others = [int(mod(other, self.model.size)) for other in others]
-            others = [other - sum(1 for virtual in self.model.virtual_index if virtual < other) for other in others]
+            others = [other - sum(1 for virtual in self.model.virtual_index if virtual <= other) for other in others]
 
         A = []
         for other, shift in zip(others, shifts):
             index_probe = self.model.monitor_index[probe] if not phony else probe
             index_other = self.model.monitor_index[other] + shift*self.model.size
             if model:
-                matrix = self.model.matrix(index_probe, index_other)
+                matrix = self.model.matrix(index_probe, index_other) if not use_virtual else self.matrix_virtual(index_probe, index_other)
             else:
                 matrix = self.matrix(index_probe, index_other)
             RX, _, RY, _ = matrix
@@ -1902,6 +2072,7 @@ class Twiss():
                             sigma:float=0.0,
                             n_jobs:int=6,
                             verbose:bool=False,
+                            use_virtual:bool=False,
                             **kwargs) -> torch.Tensor:
         """
         Estimate twiss from signals (fit linear invariants).
@@ -1956,6 +2127,8 @@ class Twiss():
             number of jobs
         verbose: bool
             verbose flag
+        use_virtual: bool
+            flag to use self.matrix_virtual
         **kwargs:
             passed to leastsq
 
@@ -1996,7 +2169,7 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
 
             if ix != None and iy != None:
                 ix = ix*torch.ones_like(qx)
@@ -2192,6 +2365,7 @@ class Twiss():
                              twiss:torch.Tensor=None,
                              n_jobs:int=6,
                              verbose:bool=False,
+                             use_virtual:bool=False,
                              **kwargs) -> torch.Tensor:
         """
         Estimate twiss from ratio.
@@ -2240,6 +2414,8 @@ class Twiss():
             number of jobs
         verbose: bool
             verbose flag
+        use_virtual: bool
+            flag to use self.matrix_virtual
         **kwargs:
             passed to minimize
 
@@ -2288,7 +2464,7 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
 
             X = torch.stack([qx, px, qy, py])
 
@@ -2316,7 +2492,8 @@ class Twiss():
                               forward:bool=True,
                               count:int=256,
                               fraction:float=0.75,
-                              verbose:bool=False) -> torch.tensor:
+                              verbose:bool=False,
+                              use_virtual:bool=False) -> torch.tensor:
         """
         Estimate twiss from n-turn matrix.
 
@@ -2352,6 +2529,8 @@ class Twiss():
             sample length fraction
         verbose: bool
             verbose flag
+        use_virtual: bool
+            flag to use self.matrix_virtual
 
         Returns
         -------
@@ -2382,7 +2561,7 @@ class Twiss():
                 qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
 
             table = torch.randint(size - power, (count, size), dtype=torch.int64, device=self.device)
 
