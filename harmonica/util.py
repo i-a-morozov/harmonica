@@ -360,6 +360,52 @@ def make_mask(size:int,
     return mask
 
 
+# Read TFS table
+def read_tfs(file:str) -> tuple[dict, dict]:
+    """
+    Read TFS table.
+
+    Parameters
+    ----------
+    file: str
+        input file name
+
+    Returns
+    -------
+    head and data dictionaries (tuple[dict, dict])
+    head is a dictionary with parameters {key: value}
+    data is a dictionary with columns {name: {..., key: value, ...}
+
+    """
+    keys, units = None, None
+    head, data = {}, {}
+
+    with open('twiss.tfs') as stream:
+
+        for line in stream:
+
+            if line.startswith('@'):
+                _, key, unit, *value = line.split()
+                unit = str if unit.endswith('s') else float
+                head[key] = unit((' '.join(value)).replace('"', ''))
+                continue
+
+            if line.startswith('*'):
+                _, _, *keys = line.split()
+                continue
+
+            if line.startswith('$'):
+                _, *units = line.split()
+                units = [{'%s': str, '%le': float}[unit] for unit in units]
+                continue
+
+            values = line.split()
+            name, *values = [unit(value.replace('"','')) for unit, value in zip(units, values)]
+            data[name] = {key: value for key, value in zip(keys, values)}
+
+    return head, data
+
+
 def fst(array):
     """
     Returns the first elemet.
