@@ -1621,7 +1621,7 @@ class Model():
         ryx = torch.stack(ryx)
         ryy = torch.stack(ryy)
 
-        return torch.vstack([torch.hstack([rxx, rxy]), torch.hstack([ryx, ryy])])
+        return torch.vstack([torch.hstack([rxx, rxy]), torch.hstack([ryx, ryy])]).T
 
 
     @staticmethod
