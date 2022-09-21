@@ -572,19 +572,21 @@ class Decomposition():
         err = err.reshape(size, count)
 
         if method == 'noise':
-            weight = mask/err**2
+            weight = mask*res**2/err**2
+            weight /= weight.sum(-1).reshape(-1, 1)
             center = weighted_mean(res, weight=weight)
             spread = weighted_variance(res, weight=weight, center=center).sqrt()
             return (center, spread, res)
 
         if method != 'error':
-            raise Exception(f'DECOMPOSITION: unknown method {method}')
+            raise ValueError(f'DECOMPOSITION: unknown method {method}')
 
         _, err = self.harmonic_sum(frequency, window.window, work.work, error=True, sigma=err.flatten(), sigma_frequency=sigma_frequency)
         *_, err, _ = err.T
         err = err.reshape(size, count)
 
-        weight = mask/err**2
+        weight = mask*res**2/err**2
+        weight /= weight.sum(-1).reshape(-1, 1)
         center = weighted_mean(res, weight=weight)
         spread = weighted_variance(res, weight=weight, center=center).sqrt()
         return (center, spread, res)
@@ -676,8 +678,9 @@ class Decomposition():
         work = self.data.__class__.from_data(window, work)
 
         res, _ = self.harmonic_sum(frequency, window.window, work.work)
-        *_, res = res.T
+        *_, amp, res = res.T
         res = res.reshape(size, count)
+        amp = amp.reshape(size, count)
 
         add = torch.linspace(0, (count - 1)*step*2.0*numpy.pi*frequency, count, dtype=self.data.dtype, device=self.data.device)
         res = mod(res - add, 2.0*numpy.pi, -numpy.pi)
@@ -710,7 +713,8 @@ class Decomposition():
         err = err.reshape(size, count)
 
         if method == 'noise':
-            weight = mask/err**2
+            weight = mask*amp**2/err**2
+            weight /= weight.sum(-1).reshape(-1, 1)
             center = weighted_mean(res, weight=weight)
             spread = weighted_variance(res, weight=weight, center=center).sqrt()
             return (center, spread, res)
@@ -722,7 +726,8 @@ class Decomposition():
         *_, err, _ = err.T
         err = err.reshape(size, count)
 
-        weight = mask/err**2
+        weight = mask*amp**2/err**2
+        weight /= weight.sum(-1).reshape(-1, 1)
         center = weighted_mean(res, weight=weight)
         spread = weighted_variance(res, weight=weight, center=center).sqrt()
         return (center, spread, res)
