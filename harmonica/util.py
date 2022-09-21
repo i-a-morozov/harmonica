@@ -380,7 +380,7 @@ def read_tfs(file:str) -> tuple[dict, dict]:
     keys, units = None, None
     head, data = {}, {}
 
-    with open('twiss.tfs') as stream:
+    with open(file) as stream:
 
         for line in stream:
 
