@@ -2591,8 +2591,8 @@ class Twiss():
                 A = torch.stack([qx_n, px_n, qy_n, py_n]).T
                 B = torch.stack([qx_m, px_m, qy_m, py_m]).T
 
-                matrix = to_symplectic(torch.linalg.lstsq(A, B).solution.T)
-                tune, normal, _ = twiss_compute(matrix)
+                transport = to_symplectic(torch.linalg.lstsq(A, B).solution.T)
+                tune, normal, _ = twiss_compute(transport)
                 if tune is not None:
                     box.append(torch.cat([tune, normal[[0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]]]))
                 else:
