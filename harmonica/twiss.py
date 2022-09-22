@@ -151,11 +151,11 @@ class Twiss():
         Compute virtual transport matrix between probe and other.
     phase_advance(self, probe:torch.Tensor, other:torch.Tensor, **kwargs) -> torch.Tensor
         Compute x & y phase advance between probe and other.
-    get_momenta(self, start:int, count:int, probe:int, other:int, *, model:bool=True) -> torch.Tensor
+    get_momenta(self, start:int, count:int, probe:int, other:int, matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using single other monitor location.
-    get_momenta_range(self, start:int, count:int, probe:int, limit:int, *, model:bool=True) -> torch.Tensor
+    get_momenta_range(self, start:int, count:int, probe:int, limit:int, matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor
         Compute x & y momenta at the probe monitor location using range of monitor locations around probed monitor location (average momenta).
-    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, *, model:bool=True, phony:bool=False, forward:bool=True, inverse:bool=True, use_virtual:bool=False) -> torch.Tensor
+    get_momenta_lstsq(self, start:int, count:int, probe:int, limit:int, matrix:Callable[[int, int], torch.Tensor], *, phony:bool=False, forward:bool=True, inverse:bool=True) -> torch.Tensor
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
     invariant_objective(beta:torch.Tensor, X:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], product:bool) -> torch.Tensor
         Evaluate invariant objective.
@@ -165,15 +165,15 @@ class Twiss():
         Fit invariant objective.
     fit_objective_fixed(self, length:int, twiss:torch.Tensor, ix:torch.Tensor, iy:torch.Tensor, qx:torch.Tensor, px:torch.Tensor, qy:torch.Tensor, py:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, product:bool=True, jacobian:bool=False, count:int=512, fraction:float=0.75, sigma:float=0.0, n_jobs:int=6, **kwargs) -> tuple
         Fit invariant objective (fixed invariants).
-    get_twiss_from_data(self, start:int, length:int, normalization:Callable[[torch.Tensor], torch.Tensor], *, twiss:torch.Tensor=None, method:str='pair', limit:int=1, model:bool=True, product:bool=True, jacobian:bool=False, count:int=256, fraction:float=0.75, ix:float=None, iy:float=None, sigma:float=0.0, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
+    get_twiss_from_data(self, start:int, length:int, normalization:Callable[[torch.Tensor], torch.Tensor], matrix:Callable[[int, int], torch.Tensor], *, twiss:torch.Tensor=None, method:str='pair', limit:int=1, index:list[int]=None, phony:bool=False, inverse:bool=True, forward:bool=True, product:bool=True, jacobian:bool=False, count:int=256, fraction:float=0.75, ix:float=None, iy:float=None, sigma:float=0.0, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from signals (fit linear invariants).
     get_invariant(self, ix:torch.Tensor, iy:torch.Tensor, sx:torch.Tensor=None, sy:torch.Tensor=None, *, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> dict
         Compute invariants from get_twiss_from_data output.
     ratio_objective(beta:torch.Tensor, X:torch.Tensor, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor]) -> torch.Tensor
         Evaluate ratio objective.
-    get_twiss_from_ratio(self, start:int, length:int, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], *, step:int=1, method:str='pair', limit:int=1, model:bool=True, twiss:torch.Tensor=None, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
+    get_twiss_from_ratio(self, start:int, length:int, window:torch.Tensor, nux:torch.Tensor, nuy:torch.Tensor, normalization:Callable[[torch.Tensor], torch.Tensor], matrix:Callable[[int, int], torch.Tensor], *, step:int=1, method:str='pair', limit:int=1, index:list[int]=None, phony:bool=False, inverse:bool=True, forward:bool=True, twiss:torch.Tensor=None, n_jobs:int=6, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from ratio.
-    get_twiss_from_matrix(self, start:int, length:int, *, power:int=1, method:str='pair', limit:int=1, model:bool=True, count:int=256, fraction:float=0.75, verbose:bool=False) -> torch.tensor
+    get_twiss_from_matrix(self, start:int, length:int, matrix:Callable[[int, int], torch.Tensor], *, power:int=1, method:str='pair', limit:int=1, index:list[int]=None, phony:bool=False, inverse:bool=True, forward:bool=True, count:int=256, fraction:float=0.75, verbose:bool=False) -> torch.tensor
         Estimate twiss from n-turn matrix.
     get_twiss_virtual_uncoupled(self, probe:int, *, limit:int=1, inverse:bool=True, forward:bool=True, use_phase:bool=False, bootstrap:bool=True, count:int=256, ax:torch.Tensor=None, bx:torch.Tensor=None, ay:torch.Tensor=None, by:torch.Tensor=None, sigma_ax:torch.Tensor=None, sigma_bx:torch.Tensor=None, sigma_ay:torch.Tensor=None, sigma_by:torch.Tensor=None) -> tuple
         Estimate CS twiss at (virtual) location.
@@ -934,7 +934,7 @@ class Twiss():
                      model:dict={'use': True, 'threshold': 00.50},
                      value:dict={'use': True, 'threshold': 00.25},
                      sigma:dict={'use': True, 'threshold': 00.25},
-                     limit:dict={'use': True, 'threshold': 05.00},
+                     limit:dict={'use': True, 'threshold': 05.00}, 
                      error:dict={'use': True, 'threshold': 05.00}) -> dict:
         """
         Filter twiss for given data plane and cleaning options.
@@ -1598,8 +1598,7 @@ class Twiss():
                     count:int,
                     probe:int,
                     other:int,
-                    *,
-                    model:bool=True) -> torch.Tensor:
+                    matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor:
         """
         Compute x & y momenta at the probe monitor location using single other monitor location.
 
@@ -1615,8 +1614,11 @@ class Twiss():
             probe monitor location index
         other: int
             other monitor location index
-        model: bool
-            flag to use model transport matrix from probe to other
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
 
         Returns
         -------
@@ -1637,7 +1639,7 @@ class Twiss():
         index_probe = self.model.monitor_index[probe]
         index_other = self.model.monitor_index[other] + shift*self.model.size
 
-        matrix = self.model.matrix(index_probe, index_other) if model else self.matrix(index_probe, index_other)
+        matrix = matrix(index_probe, index_other)
 
         px1, py1 = momenta(matrix, qx1, qx2, qy1, qy2)
 
@@ -1649,8 +1651,7 @@ class Twiss():
                     count:int,
                     probe:int,
                     limit:int,
-                    *,
-                    model:bool=True) -> torch.Tensor:
+                    matrix:Callable[[int, int], torch.Tensor]) -> torch.Tensor:
         """
         Compute x & y momenta at the probe monitor location using range of monitor locations around probed monitor location (average momenta).
 
@@ -1666,8 +1667,11 @@ class Twiss():
             probe monitor location index
         limit: int
             range limit
-        model: bool
-            flag to use model transport matrix from probe to other
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
 
         Returns
         -------
@@ -1677,7 +1681,7 @@ class Twiss():
         result = []
         others = [probe + index for index in range(-limit, limit + 1) if index != 0]
         for other in others:
-            result.append(self.get_momenta(start, count, probe, other, model=model))
+            result.append(self.get_momenta(start, count, probe, other, matrix))
         return torch.stack(result).mean(0)
 
 
@@ -1686,12 +1690,11 @@ class Twiss():
                           count:int,
                           probe:int,
                           limit:int,
+                          matrix:Callable[[int, int], torch.Tensor],
                           *,
-                          model:bool=True,
                           phony:bool=False,
                           forward:bool=True,
-                          inverse:bool=True,
-                          use_virtual:bool=False) -> torch.Tensor:
+                          inverse:bool=True) -> torch.Tensor:
         """
         Compute x & y coordinates and momenta at the probe monitor location using range of monitor locations around probed monitor location (lstsq fit).
 
@@ -1711,16 +1714,17 @@ class Twiss():
             probe monitor location index
         limit: int
             range limit
-        model: bool
-            flag to use model transport matrix from probe to other
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
         phony: bool
             flag to treat probe as virtual
         inverse: bool
             flag to move in the inverse direction
         forward: bool
             flag to move in the forward direction
-        use_virtual: bool
-            flag to use self.matrix_virtual
 
         Returns
         -------
@@ -1744,11 +1748,8 @@ class Twiss():
         for other, shift in zip(others, shifts):
             index_probe = self.model.monitor_index[probe] if not phony else probe
             index_other = self.model.monitor_index[other] + shift*self.model.size
-            if model:
-                matrix = self.model.matrix(index_probe, index_other) if not use_virtual else self.matrix_virtual(index_probe, index_other)
-            else:
-                matrix = self.matrix(index_probe, index_other)
-            RX, _, RY, _ = matrix
+            transport = matrix(index_probe, index_other)
+            RX, _, RY, _ = transport
             A.append(RX)
             A.append(RY)
         A = torch.stack(A)
@@ -2055,11 +2056,12 @@ class Twiss():
                             start:int,
                             length:int,
                             normalization:Callable[[torch.Tensor], torch.Tensor],
+                            matrix:Callable[[int, int], torch.Tensor],
                             *,
                             twiss:torch.Tensor=None,
                             method:str='pair',
                             limit:int=1,
-                            model:bool=True,
+                            index:list[int]=None,
                             phony:bool=False,
                             inverse:bool=True,
                             forward:bool=True,
@@ -2072,7 +2074,6 @@ class Twiss():
                             sigma:float=0.0,
                             n_jobs:int=6,
                             verbose:bool=False,
-                            use_virtual:bool=False,
                             **kwargs) -> torch.Tensor:
         """
         Estimate twiss from signals (fit linear invariants).
@@ -2081,7 +2082,6 @@ class Twiss():
 
         Note, 'lstsq' method can be used to estimate orbits at virtual locations
         If phony = True, twiss is only estimated at virtual locations
-        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -2093,6 +2093,11 @@ class Twiss():
             parametric_normal
             cs_normal
             lb_normal
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
         twiss: torch.Tensor
             [..., [n11, n33, n21, n43, n13, n31, n14, n41], ...]
             [..., [ax, bx, ay, by], ...]
@@ -2103,8 +2108,8 @@ class Twiss():
             momenta computation method 'pair' or 'range' or 'lstsq'
         limit: int
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
-        model: bool
-            flag to use model transport for momenta computation
+        index: list[int]
+            list of location indices
         phony: bool
             (lstsq) flag to treat probe as virtual
         inverse: bool
@@ -2127,8 +2132,6 @@ class Twiss():
             number of jobs
         verbose: bool
             verbose flag
-        use_virtual: bool
-            flag to use self.matrix_virtual
         **kwargs:
             passed to leastsq
 
@@ -2137,12 +2140,14 @@ class Twiss():
         estimated parameters and errors (torch.Tensor)
 
         """
-        if phony == True and model == False and method != 'lstsq':
-            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+        if phony == True and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with method = "lstsq"')
 
         result = []
 
         locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        if index != None:
+            locations = index
         for location in locations:
 
             if verbose:
@@ -2163,13 +2168,13 @@ class Twiss():
                     guess = wolski_to_lb(normal_to_wolski(guess.unsqueeze(0)).squeeze())
 
             if method == 'pair':
-                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, model=model)
+                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, matrix)
 
             if method == 'range':
-                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, matrix)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, matrix, phony=phony, inverse=inverse, forward=forward)
 
             if ix != None and iy != None:
                 ix = ix*torch.ones_like(qx)
@@ -2354,18 +2359,18 @@ class Twiss():
                              nux:torch.Tensor,
                              nuy:torch.Tensor,
                              normalization:Callable[[torch.Tensor], torch.Tensor],
+                             matrix:Callable[[int, int], torch.Tensor],
                              *,
                              step:int=1,
                              method:str='pair',
                              limit:int=1,
-                             model:bool=True,
+                             index:list[int]=None,
                              phony:bool=False,
                              inverse:bool=True,
                              forward:bool=True,
                              twiss:torch.Tensor=None,
                              n_jobs:int=6,
                              verbose:bool=False,
-                             use_virtual:bool=False,
                              **kwargs) -> torch.Tensor:
         """
         Estimate twiss from ratio.
@@ -2374,7 +2379,6 @@ class Twiss():
 
         Note, 'lstsq' method can be used to estimate orbits at virtual locations
         If phony = True, twiss is only estimated at virtual locations
-        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -2390,14 +2394,19 @@ class Twiss():
             parametric_normal
             cs_normal
             lb_normal
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
         step: int
             shift step
         method: str
             momenta computation method 'pair' or 'range' or 'lstsq'
         limit: int
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
-        model: bool
-            flag to use model transport for momenta computation
+        index: list[int]
+            list of location indices
         phony: bool
             (lstsq) flag to treat probe as virtual
         inverse: bool
@@ -2414,8 +2423,6 @@ class Twiss():
             number of jobs
         verbose: bool
             verbose flag
-        use_virtual: bool
-            flag to use self.matrix_virtual
         **kwargs:
             passed to minimize
 
@@ -2424,8 +2431,8 @@ class Twiss():
         estimated parameters and errors (torch.Tensor)
 
         """
-        if phony == True and model == False and method != 'lstsq':
-            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+        if phony == True and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with method = "lstsq"')
 
         result = []
 
@@ -2436,6 +2443,8 @@ class Twiss():
             return self.ratio_objective(beta, X, window, nux, nuy, normalization).cpu().numpy()
 
         locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        if index != None:
+            locations = index
         for location in locations:
 
             if verbose:
@@ -2458,13 +2467,13 @@ class Twiss():
             guess = guess.cpu().numpy()
 
             if method == 'pair':
-                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, model=model)
+                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, matrix)
 
             if method == 'range':
-                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, matrix)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, matrix, phony=phony, inverse=inverse, forward=forward)
 
             X = torch.stack([qx, px, qy, py])
 
@@ -2482,18 +2491,18 @@ class Twiss():
     def get_twiss_from_matrix(self,
                               start:int,
                               length:int,
+                              matrix:Callable[[int, int], torch.Tensor],
                               *,
                               power:int=1,
                               method:str='pair',
                               limit:int=1,
-                              model:bool=True,
+                              index:list[int]=None,
                               phony:bool=False,
                               inverse:bool=True,
                               forward:bool=True,
                               count:int=256,
                               fraction:float=0.75,
-                              verbose:bool=False,
-                              use_virtual:bool=False) -> torch.tensor:
+                              verbose:bool=False) -> torch.tensor:
         """
         Estimate twiss from n-turn matrix.
 
@@ -2501,7 +2510,6 @@ class Twiss():
 
         Note, 'lstsq' method can be used to estimate orbits at virtual locations
         If phony = True, twiss is only estimated at virtual locations
-        In this case use model = True and method = 'lstsq'
 
         Parameters
         ----------
@@ -2509,14 +2517,19 @@ class Twiss():
             first turn index
         length: int
             maximum sample length to use
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
         power: int
             matrix power
         method: str
             momenta computation method 'pair' or 'range' or 'lstsq'
         limit: int
             -1 or 1 (or relative shift value) for 'pair', >= 1 for 'range' or 'lstsq'
-        model: bool
-            flag to use model transport for momenta computation
+        index: list[int]
+            list of location indices
         phony: bool
             (lstsq) flag to treat probe as virtual
         inverse: bool
@@ -2529,16 +2542,14 @@ class Twiss():
             sample length fraction
         verbose: bool
             verbose flag
-        use_virtual: bool
-            flag to use self.matrix_virtual
 
         Returns
         -------
         estimated parameters (torch.Tensor)
 
         """
-        if phony == True and model == False and method != 'lstsq':
-            raise Exception(f'TWISS: phony = True only works with model = True and method = "lstsq"')
+        if phony == True and method != 'lstsq':
+            raise Exception(f'TWISS: phony = True only works with method = "lstsq"')
 
         result = []
 
@@ -2547,6 +2558,8 @@ class Twiss():
         empty = torch.zeros(10, dtype=self.dtype, device=self.device)
 
         locations = range(self.model.monitor_count) if not phony else self.model.virtual_index
+        if index != None:
+            locations = index
         for location in locations:
 
             if verbose:
@@ -2555,13 +2568,13 @@ class Twiss():
             probe = location
 
             if method == 'pair':
-                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, model=model)
+                qx, px, qy, py = self.get_momenta(start, length, probe, probe + limit, matrix)
 
             if method == 'range':
-                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, model=model)
+                qx, px, qy, py = self.get_momenta_range(start, length, probe, limit, matrix)
 
             if method == 'lstsq':
-                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, model=model, phony=phony, inverse=inverse, forward=forward, use_virtual=use_virtual)
+                qx, px, qy, py = self.get_momenta_lstsq(start, length, probe, limit, matrix, phony=phony, inverse=inverse, forward=forward)
 
             table = torch.randint(size - power, (count, size), dtype=torch.int64, device=self.device)
 
@@ -2712,30 +2725,30 @@ class Twiss():
 
 
     def get_twiss_virtual_coupled(self,
-                                probe:int,
-                                *,
-                                limit:int=1,
-                                inverse:bool=True,
-                                forward:bool=True,
-                                use_phase:bool=False,
-                                bootstrap:bool=True,
-                                count:int=256,
-                                n11:torch.Tensor=None,
-                                n33:torch.Tensor=None,
-                                n21:torch.Tensor=None,
-                                n43:torch.Tensor=None,
-                                n13:torch.Tensor=None,
-                                n31:torch.Tensor=None,
-                                n14:torch.Tensor=None,
-                                n41:torch.Tensor=None,
-                                sigma_n11:torch.Tensor=None,
-                                sigma_n33:torch.Tensor=None,
-                                sigma_n21:torch.Tensor=None,
-                                sigma_n43:torch.Tensor=None,
-                                sigma_n13:torch.Tensor=None,
-                                sigma_n31:torch.Tensor=None,
-                                sigma_n14:torch.Tensor=None,
-                                sigma_n41:torch.Tensor=None) -> tuple:
+                                  probe:int,
+                                  *,
+                                  limit:int=1,
+                                  inverse:bool=True,
+                                  forward:bool=True,
+                                  use_phase:bool=False,
+                                  bootstrap:bool=True,
+                                  count:int=256,
+                                  n11:torch.Tensor=None,
+                                  n33:torch.Tensor=None,
+                                  n21:torch.Tensor=None,
+                                  n43:torch.Tensor=None,
+                                  n13:torch.Tensor=None,
+                                  n31:torch.Tensor=None,
+                                  n14:torch.Tensor=None,
+                                  n41:torch.Tensor=None,
+                                  sigma_n11:torch.Tensor=None,
+                                  sigma_n33:torch.Tensor=None,
+                                  sigma_n21:torch.Tensor=None,
+                                  sigma_n43:torch.Tensor=None,
+                                  sigma_n13:torch.Tensor=None,
+                                  sigma_n31:torch.Tensor=None,
+                                  sigma_n14:torch.Tensor=None,
+                                  sigma_n41:torch.Tensor=None) -> tuple:
         """
         Estimate free normalization matrix elements at (virtual) location.
 
