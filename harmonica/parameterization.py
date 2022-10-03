@@ -8,6 +8,9 @@ import numpy
 import torch
 import functorch
 
+from typing import Callable
+from math import factorial
+
 from .util import mod
 
 
@@ -154,7 +157,7 @@ def twiss_compute(matrix:torch.Tensor,
         v[i] /= (-1j*(v1 @ m_s.to(cdtype) @ v2)).abs().sqrt()
 
     for i in range(d):
-        o = torch.imag(l[i].log()).argsort()
+        o = torch.clone(l[i].log()).imag.argsort()
         l[i], v[i] = l[i, o], v[i, o]
 
     t = 1.0 - l.log().abs().mean(-1)/(2.0*numpy.pi)
@@ -163,12 +166,13 @@ def twiss_compute(matrix:torch.Tensor,
     n = (n @ m_c).real
     w = torch.stack([n @ m_p[i] @ n.T for i in range(d)])
 
-    o = torch.tensor([w[i].diag().argmax() for i in range(d)]).argsort()
+    o = torch.stack([w[i].diag().argmax() for i in range(d)]).argsort()
     t, v = t[o], v[o]
     n = torch.cat([*v]).H
     n = (n @ m_c).real
 
     f = torch.stack(torch.hsplit(n.T @ m_s @ n - m_s, d)).abs().sum((1, -1)) > epsilon
+
     for i in range(d):
         if f[i]:
             t[i] = (1.0 - t[i]).abs()
@@ -180,7 +184,7 @@ def twiss_compute(matrix:torch.Tensor,
     r = []
     for i in range(d):
         a = (n[2*i, 2*i + 1] + 1j*n[2*i, 2*i]).angle() - 0.5*numpy.pi
-        b = torch.tensor([[a.cos(), a.sin()], [-a.sin(), a.cos()]], dtype=dtype, device=device)
+        b = torch.stack([torch.stack([a.cos(), a.sin()]), torch.stack([-a.sin(), a.cos()])])
         r.append(b)
 
     n = n @ torch.block_diag(*r)
@@ -207,8 +211,7 @@ def twiss_propagate(twiss:torch.Tensor,
     Wolski twiss matrices for each transport matrix (torch.Tensor)
 
     """
-    return torch.stack([torch.matmul(matrix, torch.matmul(twiss[i], matrix.swapaxes(1, -1))) for i in range(len(twiss))]).swapaxes(0, 1)
-    # return matrix.unsqueeze(1) @ twiss.unsqueeze(0) @ matrix.swapaxes(1, -1).unsqueeze(1)
+    return matrix.unsqueeze(1) @ twiss.unsqueeze(0) @ matrix.swapaxes(1, -1).unsqueeze(1)
 
 
 def twiss_phase_advance(normal:torch.Tensor,
@@ -858,6 +861,143 @@ def momenta(matrix:torch.Tensor,
     py1 += qy2*m12/(m12*m34 - m14*m32)
 
     return torch.stack([px1, py1])
+
+
+def make_monomial_indices(dimension:int,
+                          degree:int,
+                          *,
+                          dtype:torch.dtype=torch.int64,
+                          device:torch.device=torch.device('cpu')) -> torch.Tensor:
+    """
+    Generate monomial indices table for given dimension and total monomial degree.
+
+    Note, table is generated for only given degree, i.e. table.sum(-1) = [..., degree, ...]
+
+    Parameters
+    ----------
+    dimension: int
+        dimension (number of input variables/parameters)
+    degree: int
+        maximum total monomial degree
+    dtype: torch.dtype
+        data type
+    device: torch.device
+        data device
+
+    Returns
+    -------
+    indices table (torch.Tensor)
+
+    """
+    if degree == 1:
+        return torch.eye(dimension, dtype=dtype, device=device)
+
+    unit = make_monomial_indices(dimension, 1)
+    keys = make_monomial_indices(dimension, degree - 1)
+
+    return torch.cat([keys + row for row in unit])
+
+
+def make_derivatives(dimension:int,
+                     degree:int,
+                     out:int,
+                     mapping:Callable[[torch.Tensor, ...], torch.Tensor],
+                     *args:tuple[torch.Tensor],
+                     jacobian:Callable[[Callable], Callable]=functorch.jacfwd,
+                     dtype:torch.dtype=torch.int64,
+                     device:torch.device=torch.device('cpu')) -> tuple:
+    """
+    Generate derivatives for given mapping upto given total monomial degree.
+
+    Note, derivatives are computed with respect to the first argument
+
+    Parameters
+    ----------
+    dimension: int
+        dimension (number of input variables/parameters)
+    degree: int
+        maximum total monomial degree
+    out: int
+        mapping output size
+    mapping: Callable[[torch.Tensor, ...], torch.Tensor]
+        mapping
+    *args: tuple[torch.Tensor]
+        mapping arguments
+    jacobian: Callable[[Callable], Callable]
+        jacobian (jacrev or jacfwd)
+    dtype: torch.dtype
+        data type
+    device: torch.device
+        data device
+
+    Returns
+    -------
+    list of derivative tensors (jacobian, hessian, ...) and monomial coefficients dictionary (tuple)
+
+    """
+    data = []
+
+    mark = []
+    grid = {}
+    for i in range(out):
+        grid[i] = {}
+
+    for i in range(1, 1 + degree):
+
+        keys = tuple(map(tuple, make_monomial_indices(dimension, i, dtype=dtype, device=device).tolist()))
+        mark.extend(dict.fromkeys(keys))
+
+        function = mapping
+        for _ in range(i):
+            function = jacobian(function)
+
+        derivative = function(*args)
+        data.append(derivative)
+
+        factor = 1.0/factorial(i)
+        for j in range(out):
+            values = factor*(derivative[j].flatten())
+            for key, value in zip(keys, values):
+                if key not in grid[j]:
+                    grid[j][key]  = value
+                else:
+                    grid[j][key] += value
+
+    grid = dict(zip(mark, torch.stack([torch.stack([*grid[i].values()]) for i in range(out)]).T))
+
+    return data, grid
+
+
+def evaluate(state:torch.Tensor,
+             table:list[torch.Tensor]) -> torch.Tensor:
+    """
+    Evaluate deviation without constant part.
+
+    Parameters
+    ----------
+    state: torch.Tensor
+        deviation state
+    table: list[torch.Tensor] or monomial dictionary
+        list of derivative tensors (jacobian, hessian, ...)
+
+    Returns
+    -------
+    evaluation result (torch.Tensor)
+
+    """
+    if isinstance(table, list):
+        result = []
+        for degree, matrix in enumerate(table):
+            value = torch.clone(matrix)
+            for _ in range(degree + 1):
+                value @= state
+            result.append(value/factorial(degree + 1))
+        return torch.stack(result).sum(0)
+
+    if isinstance(table, dict):
+        keys = torch.tensor([*table.keys()], dtype=torch.int64, device=state.device)
+        values = torch.stack([*table.values()])
+        return (values.T * (state**keys).prod(-1)).sum(-1)
 
 
 def main():
