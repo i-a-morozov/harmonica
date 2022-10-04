@@ -206,6 +206,12 @@ class Model():
         Generate thin quadrupole kick matrix.
     matrix_drif(l:torch.Tensor) -> torch.Tensor
         Generate drif matrix.
+    matrix_fquad(l:torch.Tensor, kn:torch.Tensor) -> torch.Tensor
+        Generate thick focusing normal quadrupole matrix.
+    matrix_dquad(l:torch.Tensor, kn:torch.Tensor) -> torch.Tensor
+        Generate thick defocusing normal quadrupole matrix.
+    matrix_quad(l:torch.Tensor, kn:torch.Tensor, ks:torch.Tensor) -> torch.Tensor
+        Generate thick quadrupole matrix.
     map_matrix(state:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
         Linear state transformation.
     map_vector(state:torch.Tensor, vector:torch.Tensor) -> torch.Tensor
@@ -1209,6 +1215,125 @@ class Model():
 
 
     @staticmethod
+    def matrix_fquad(l:torch.Tensor,
+                     kn:torch.Tensor) -> torch.Tensor:
+        """
+        Generate thick focusing normal quadrupole matrix.
+
+        Note, valid if kn > 0
+
+        Parameters
+        ----------
+        l: torch.Tensor
+            length
+        kn: torch.Tensor
+            strength
+
+        Returns
+        -------
+        normal focusing quadrupole matrix (torch.Tensor)
+
+        """
+        i = torch.ones_like(l)
+        o = torch.zeros_like(l)
+
+        m = torch.stack([
+                torch.stack([torch.cos(torch.sqrt(kn)*l), torch.sin(torch.sqrt(kn)*l)/torch.sqrt(kn), o, o]),
+                torch.stack([-(torch.sqrt(kn)*torch.sin(torch.sqrt(kn)*l)), torch.cos(torch.sqrt(kn)*l), o, o]),
+                torch.stack([o, o, torch.cosh(torch.sqrt(kn)*l),torch.sinh(torch.sqrt(kn)*l)/torch.sqrt(kn)]),
+                torch.stack([o, o, torch.sqrt(kn)*torch.sinh(torch.sqrt(kn)*l),torch.cosh(torch.sqrt(kn)*l)])
+            ])
+
+        return m
+
+
+    @staticmethod
+    def matrix_dquad(l:torch.Tensor,
+                     kn:torch.Tensor) -> torch.Tensor:
+        """
+        Generate thick defocusing normal quadrupole matrix.
+
+        Note, valid if kn > 0
+
+        Parameters
+        ----------
+        l: torch.Tensor
+            length
+        k: torch.Tensor
+            strength
+
+        Returns
+        -------
+        normal defocusing quadrupole matrix (torch.Tensor)
+
+        """
+        i = torch.ones_like(l)
+        o = torch.zeros_like(l)
+
+        m = torch.stack([
+                torch.stack([torch.cosh(torch.sqrt(kn)*l),torch.sinh(torch.sqrt(kn)*l)/torch.sqrt(kn), o, o]),
+                torch.stack([torch.sqrt(kn)*torch.sinh(torch.sqrt(kn)*l),torch.cosh(torch.sqrt(kn)*l), o, o]),
+                torch.stack([o, o, torch.cos(torch.sqrt(kn)*l),torch.sin(torch.sqrt(kn)*l)/torch.sqrt(kn)]),
+                torch.stack([o, o, -(torch.sqrt(kn)*torch.sin(torch.sqrt(kn)*l)), torch.cos(torch.sqrt(kn)*l)])
+            ])
+
+        return m
+
+
+    @staticmethod
+    def matrix_quad(l:torch.Tensor,
+                    kn:torch.Tensor,
+                    ks:torch.Tensor) -> torch.Tensor:
+        """
+        Generate thick quadrupole matrix.
+
+        Note, valid if both kn or ks are none zero
+
+        Parameters
+        ----------
+        l: torch.Tensor
+            length
+        kn: torch.Tensor
+            kn strength
+        ks: torch.Tensor
+            ks strength
+
+        Returns
+        -------
+        quadrupole matrix (torch.Tensor)
+
+        """
+        m = torch.stack([
+                torch.stack([
+                    ((kn + torch.sqrt(kn**2 + ks**2))*torch.cos((kn**2 + ks**2)**0.25*l) + (-kn + torch.sqrt(kn**2 + ks**2))*torch.cosh((kn**2 + ks**2)**0.25*l))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    ((kn + torch.sqrt(kn**2 + ks**2))*torch.sin((kn**2 + ks**2)**0.25*l) + (-kn + torch.sqrt(kn**2 + ks**2))*torch.sinh((kn**2 + ks**2)**0.25*l))/(2.*(kn**2 + ks**2)**0.75),
+                    (ks*(-torch.cos((kn**2 + ks**2)**0.25*l) + torch.cosh((kn**2 + ks**2)**0.25*l)))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    (ks*(-torch.sin((kn**2 + ks**2)**0.25*l) + torch.sinh((kn**2 + ks**2)**0.25*l)))/(2.*(kn**2 + ks**2)**0.75)
+                ]),
+                torch.stack([
+                    (-((ks**2 + kn*(kn + torch.sqrt(kn**2 + ks**2)))*torch.sin((kn**2 + ks**2)**0.25*l)) + (kn**2 + ks**2 - kn*torch.sqrt(kn**2 + ks**2))*torch.sinh((kn**2 + ks**2)**0.25*l))/(2.*(kn**2 + ks**2)**0.75),
+                    ((kn + torch.sqrt(kn**2 + ks**2))*torch.cos((kn**2 + ks**2)**0.25*l) + (-kn + torch.sqrt(kn**2 + ks**2))*torch.cosh((kn**2 + ks**2)**0.25*l))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    (ks*(torch.sin((kn**2 + ks**2)**0.25*l) + torch.sinh((kn**2 + ks**2)**0.25*l)))/(2.*(kn**2 + ks**2)**0.25),
+                    (ks*(-torch.cos((kn**2 + ks**2)**0.25*l) + torch.cosh((kn**2 + ks**2)**0.25*l)))/(2.*torch.sqrt(kn**2 + ks**2))
+                ]),
+                torch.stack([
+                    (ks*(-torch.cos((kn**2 + ks**2)**0.25*l) + torch.cosh((kn**2 + ks**2)**0.25*l)))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    (ks*(-torch.sin((kn**2 + ks**2)**0.25*l) + torch.sinh((kn**2 + ks**2)**0.25*l)))/(2.*(kn**2 + ks**2)**0.75),
+                    ((-kn + torch.sqrt(kn**2 + ks**2))*torch.cos((kn**2 + ks**2)**0.25*l) + (kn + torch.sqrt(kn**2 + ks**2))*torch.cosh((kn**2 + ks**2)**0.25*l))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    ((-kn + torch.sqrt(kn**2 + ks**2))*torch.sin((kn**2 + ks**2)**0.25*l) + (kn + torch.sqrt(kn**2 + ks**2))*torch.sinh((kn**2 + ks**2)**0.25*l))/(2.*(kn**2 + ks**2)**0.75)
+                ]),
+                torch.stack([
+                    (ks*(torch.sin((kn**2 + ks**2)**0.25*l) + torch.sinh((kn**2 + ks**2)**0.25*l)))/(2.*(kn**2 + ks**2)**0.25),
+                    (ks*(-torch.cos((kn**2 + ks**2)**0.25*l) + torch.cosh((kn**2 + ks**2)**0.25*l)))/(2.*torch.sqrt(kn**2 + ks**2)),
+                    (-((kn**2 + ks**2 - kn*torch.sqrt(kn**2 + ks**2))*torch.sin((kn**2 + ks**2)**0.25*l)) + (ks**2 + kn*(kn + torch.sqrt(kn**2 + ks**2)))*torch.sinh((kn**2 + ks**2)**0.25*l))/(2.*(kn**2 + ks**2)**0.75),
+                    ((-kn + torch.sqrt(kn**2 + ks**2))*torch.cos((kn**2 + ks**2)**0.25*l) + (kn + torch.sqrt(kn**2 + ks**2))*torch.cosh((kn**2 + ks**2)**0.25*l))/(2.*torch.sqrt(kn**2 + ks**2))
+                ])
+            ])
+
+        return m
+
+
+    @staticmethod
     def map_matrix(state:torch.Tensor,
                    matrix:torch.Tensor) -> torch.Tensor:
         """
@@ -1286,7 +1411,7 @@ class Model():
         for location in range(self.size):
             drif = self.matrix_drif(0.5*self.error_length[location])
             kick = self.matrix_kick(self.error_kn[location], self.error_ks[location])
-            self.error_matrix.append( drif @ kick @ drif)
+            self.error_matrix.append(drif @ kick @ drif)
         self.error_matrix = torch.stack(self.error_matrix)
 
         self.error_vector = torch.stack([torch.zeros_like(self.error_x), self.error_x, torch.zeros_like(self.error_y), self.error_y]).T
