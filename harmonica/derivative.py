@@ -5,7 +5,6 @@ Compute mapping derivatives.
 """
 
 import torch
-import functorch
 
 from typing import Callable
 from math import factorial
@@ -16,7 +15,7 @@ from .util import flatten
 def derivative(degree:int,
                mapping:Callable[[torch.Tensor, ...], torch.Tensor],
                *args:tuple[torch.Tensor],
-               jacobian:Callable[[Callable], Callable]=functorch.jacfwd) -> tuple:
+               jacobian:Callable[[Callable], Callable]=torch.func.jacfwd) -> tuple:
     """
     Compute derivatives for given mapping upto given total monomial degree.
 

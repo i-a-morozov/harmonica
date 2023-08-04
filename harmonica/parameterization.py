@@ -6,7 +6,6 @@ Compute (coupled) twiss parameters.
 
 import numpy
 import torch
-import functorch
 
 from .util import mod
 
@@ -597,7 +596,7 @@ def cs_to_wolski(ax:torch.Tensor,
     return torch.stack([w1, w2])
 
 
-@functorch.vmap
+@torch.func.vmap
 def matrix_uncoupled(ax1:torch.Tensor,
                      bx1:torch.Tensor,
                      ax2:torch.Tensor,
@@ -656,7 +655,7 @@ def matrix_uncoupled(ax1:torch.Tensor,
     return torch.block_diag(mx, my)
 
 
-@functorch.vmap
+@torch.func.vmap
 def matrix_coupled(normal1:torch.Tensor,
                    normal2:torch.Tensor,
                    advance12:torch.Tensor) -> torch.Tensor:
@@ -688,7 +687,7 @@ def matrix_coupled(normal1:torch.Tensor,
     return normal2 @ rotation @ normal1.inverse()
 
 
-@functorch.vmap
+@torch.func.vmap
 def matrix_rotation(advance12:torch.Tensor) -> torch.Tensor:
     """
     Generate rotation matrices using phase advances between given locations.

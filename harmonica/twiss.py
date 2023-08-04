@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import numpy
 import torch
-import functorch
 import pandas
 
 from typing import Callable
@@ -1899,7 +1898,7 @@ class Twiss():
 
         def derivative(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            return (functorch.jacrev(self.invariant_objective)(beta, X, normalization, product)).cpu().numpy()
+            return (torch.func.jacrev(self.invariant_objective)(beta, X, normalization, product)).cpu().numpy()
 
         def task(sigma):
 
@@ -2013,7 +2012,7 @@ class Twiss():
 
         def derivative(beta, X, normalization, product):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            return (functorch.jacrev(self.invariant_objective_fixed)(beta, X, normalization, product)).cpu().numpy()
+            return (torch.func.jacrev(self.invariant_objective_fixed)(beta, X, normalization, product)).cpu().numpy()
 
         def task(sigma):
 

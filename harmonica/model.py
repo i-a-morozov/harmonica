@@ -6,7 +6,6 @@ Setup linear model from CS twiss or normalization matrices at locations of inter
 from __future__ import annotations
 
 import torch
-import functorch
 import numpy
 import pandas
 import yaml
@@ -1493,7 +1492,7 @@ class Model():
 
         """
         state = state if state != None else torch.tensor([0.0, 0.0, 0.0, 0.0], dtype=self.dtype, device=self.device)
-        return functorch.jacrev(lambda state: self.map_transport(state, probe, other, error=error))(state)
+        return torch.func.jacrev(lambda state: self.map_transport(state, probe, other, error=error))(state)
 
 
     def make_trajectory(self,
@@ -1569,7 +1568,7 @@ class Model():
 
         def jacobian(state):
             state = torch.tensor(state, dtype=self.dtype, device=self.device)
-            return functorch.jacrev(lambda state: (state - self.map_transport(state, 0, 0, error=error)).norm())(state).cpu().numpy()
+            return torch.func.jacrev(lambda state: (state - self.map_transport(state, 0, 0, error=error)).norm())(state).cpu().numpy()
 
         state = torch.tensor([0.0, 0.0, 0.0, 0.0], dtype=self.dtype, device=self.device)
 
@@ -1577,9 +1576,9 @@ class Model():
             table = self.error_vector[0].roll(-1)
             matrix = torch.block_diag(*torch.ones_like(state))
             for location in range(1, self.size):
-                matrix = functorch.jacrev(lambda state: self.map_transport(state, location - 1, location, error=error))(state) @ matrix
+                matrix = torch.func.jacrev(lambda state: self.map_transport(state, location - 1, location, error=error))(state) @ matrix
                 table += self.error_vector[location].roll(-1) @ matrix
-            matrix = functorch.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ matrix
+            matrix = torch.func.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ matrix
             ax, bx, ay, by = table
             state = (torch.block_diag(*torch.ones_like(state)) - matrix).inverse() @ matrix @ torch.stack([-bx, +ax, -by, +ay])
 
@@ -1589,10 +1588,10 @@ class Model():
 
         self.orbit = self.make_trajectory(state, 1, error=error).squeeze(1)
 
-        self.transport = functorch.jacrev(lambda state: self.make_trajectory(state, 1, error=error))(state).squeeze(1)
+        self.transport = torch.func.jacrev(lambda state: self.make_trajectory(state, 1, error=error))(state).squeeze(1)
 
         *_, self.turn  = self.transport
-        self.turn = functorch.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ self.turn
+        self.turn = torch.func.jacrev(lambda state: self.map_transport(state, self.size - 1, self.size, error=error))(state) @ self.turn
 
 
     def make_twiss(self,
