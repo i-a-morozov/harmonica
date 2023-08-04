@@ -180,7 +180,7 @@ class Twiss():
         Estimate free normalization matrix elements at (virtual) location.
     phase_objective(beta:torch.Tensor, mux:torch.Tensor, muy:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
         Evaluate phase objective.
-    get_twiss_from_phase_fit(self, *, limit:int=10, count:int=64, model:boot=True, verbose:bool=False, **kwargs) -> torch.Tensor
+    get_twiss_from_phase_fit(self, matrix: Callable[[int, int], torch.Tensor], *, limit:int=10, count:int=64, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from phase fit.
     process(self, value:torch.Tensor, error:torch.Tensor, *, mask:torch.Tensor=None, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> tuple
         Process data for single parameter for all locations with optional mask.
@@ -985,7 +985,7 @@ class Twiss():
             a, b, sigma_a, sigma_b = self.data_phase['ay'], self.data_phase['by'], self.data_phase['sigma_ay'], self.data_phase['sigma_by']
             f_ij, sigma_f_ij, f_m_ij, sigma_f_m_ij = self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij']
             f_ik, sigma_f_ik, f_m_ik, sigma_f_m_ik = self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik']
-            
+
         mask *= b > 0.0
 
         if phase['use']:
@@ -2925,12 +2925,12 @@ class Twiss():
 
 
     def get_twiss_from_phase_fit(self,
-                                *,
-                                limit:int=10,
-                                count:int=64,
-                                model:bool=True,
-                                verbose:bool=False,
-                                **kwargs) -> torch.Tensor:
+                                 matrix: Callable[[int, int], torch.Tensor],
+                                 *,
+                                 limit:int=10,
+                                 count:int=64,
+                                 verbose:bool=False,
+                                 **kwargs) -> torch.Tensor:
         """
         Estimate twiss from phase fit.
 
@@ -2938,12 +2938,15 @@ class Twiss():
 
         Parameters
         ----------
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
         limit: int
             range limit
         count: int
             number of samples
-        model: bool
-            frag to use model transport
         verbose: bool
             verbose flag
         **kwargs:
@@ -2980,7 +2983,7 @@ class Twiss():
             index_other = torch.tensor(index_other, dtype=torch.int64, device=self.device)
             index_probe = index_probe*torch.ones_like(index_other)
 
-            matrix = self.matrix(index_probe, index_other) if not model else self.model.matrix(index_probe, index_other)
+            transport = matrix(index_probe, index_other)
 
             mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, self.fx)
             muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, self.fy)
@@ -2988,7 +2991,7 @@ class Twiss():
             index = torch.randint(2*limit, (count, 2*limit), dtype=torch.int64, device=self.device)
             table = []
             for i in index:
-                fit, *_ = leastsq(objective, beta, args=(mux[i], muy[i], matrix[i]), full_output=1, **kwargs)
+                fit, *_ = leastsq(objective, beta, args=(mux[i], muy[i], transport[i]), full_output=1, **kwargs)
                 table.append(fit)
             table = torch.tensor(numpy.array(table), dtype=self.dtype, device=self.device).T
             result.append(table)
