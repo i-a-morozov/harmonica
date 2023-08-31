@@ -1,4 +1,3 @@
-# HARMONICA, 2021-2022
-## i.a.morozov@inp.nsk.su
+# HARMONICA, 2021-2023
 
 TbT data processing, frequency and parameters estimation, twiss parameters
