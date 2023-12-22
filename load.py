@@ -9,6 +9,8 @@ Note, run softIoc -d harmonica.db first
 import argparse
 parser = argparse.ArgumentParser(prog='load', description='Load configuration data into harmonica epics process variables.')
 parser.add_argument('-t', '--test', action='store_true', help='flag to load test TbT data')
+parser.add_argument('-f', '--file', type=str, help='configuration file', default='config.yaml')
+parser.add_argument('-d', '--dispersion', action='store_true', help='flag to load dispersion data')
 args = parser.parse_args()
 
 # Import
@@ -19,7 +21,7 @@ import pandas
 from tqdm import tqdm
 
 # Load configuration
-with open('config.yaml', 'r') as stream:
+with open(args.file, 'r') as stream:
   try:
     config = yaml.safe_load(stream)
   except yaml.YAMLError as exception:
@@ -73,6 +75,11 @@ for name, data in tqdm(config.items(), unit='record'):
   epics.caput(f'H:{name}:MODEL:SIGMA_BY', data['SIGMA_BY'])
   epics.caput(f'H:{name}:MODEL:SIGMA_AY', data['SIGMA_AY'])
   epics.caput(f'H:{name}:MODEL:SIGMA_FY', data['SIGMA_FY'])
+  if args.dispersion:
+    epics.caput(f'H:{name}:MODEL:DX', data['DX'])
+    epics.caput(f'H:{name}:MODEL:DY', data['DY'])
+    epics.caput(f'H:{name}:MODEL:SIGMA_DX', data['SIGMA_DX'])
+    epics.caput(f'H:{name}:MODEL:SIGMA_DY', data['SIGMA_DY'])
   if args.test and name in table:
     epics.caput(f'H:{name}:DATA:X', frame['X'][name])
     epics.caput(f'H:{name}:DATA:Y', frame['Y'][name])

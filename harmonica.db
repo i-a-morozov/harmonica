@@ -76,6 +76,18 @@
     record(waveform, "H:HEAD:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # STP2
     record(waveform, "H:STP2:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -126,6 +138,18 @@
     record(waveform, "H:STP2:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # IV4P
     record(waveform, "H:IV4P:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -176,6 +200,18 @@
     record(waveform, "H:IV4P:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # STP4
     record(waveform, "H:STP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -226,6 +262,18 @@
     record(waveform, "H:STP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP1
     record(waveform, "H:SRP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -276,6 +324,18 @@
     record(waveform, "H:SRP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP2
     record(waveform, "H:SRP2:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -326,6 +386,18 @@
     record(waveform, "H:SRP2:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP3
     record(waveform, "H:SRP3:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -376,6 +448,18 @@
     record(waveform, "H:SRP3:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP4
     record(waveform, "H:SRP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -426,6 +510,18 @@
     record(waveform, "H:SRP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP5
     record(waveform, "H:SRP5:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -476,6 +572,18 @@
     record(waveform, "H:SRP5:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP6
     record(waveform, "H:SRP6:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -526,6 +634,18 @@
     record(waveform, "H:SRP6:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP7
     record(waveform, "H:SRP7:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -576,6 +696,18 @@
     record(waveform, "H:SRP7:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP8
     record(waveform, "H:SRP8:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -626,6 +758,18 @@
     record(waveform, "H:SRP8:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP9
     record(waveform, "H:SRP9:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -676,6 +820,18 @@
     record(waveform, "H:SRP9:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SIP1
     record(waveform, "H:SIP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -726,6 +882,18 @@
     record(waveform, "H:SIP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SIP2
     record(waveform, "H:SIP2:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -776,6 +944,18 @@
     record(waveform, "H:SIP2:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP10
     record(waveform, "H:SRP10:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -826,6 +1006,18 @@
     record(waveform, "H:SRP10:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP11
     record(waveform, "H:SRP11:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -876,6 +1068,18 @@
     record(waveform, "H:SRP11:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP12
     record(waveform, "H:SRP12:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -926,6 +1130,18 @@
     record(waveform, "H:SRP12:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP13
     record(waveform, "H:SRP13:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -976,6 +1192,18 @@
     record(waveform, "H:SRP13:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP14
     record(waveform, "H:SRP14:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1026,6 +1254,18 @@
     record(waveform, "H:SRP14:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP15
     record(waveform, "H:SRP15:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1076,6 +1316,18 @@
     record(waveform, "H:SRP15:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP16
     record(waveform, "H:SRP16:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1126,6 +1378,18 @@
     record(waveform, "H:SRP16:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SRP17
     record(waveform, "H:SRP17:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1176,6 +1440,18 @@
     record(waveform, "H:SRP17:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SEP5
     record(waveform, "H:SEP5:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1226,6 +1502,18 @@
     record(waveform, "H:SEP5:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SEP4
     record(waveform, "H:SEP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1276,6 +1564,18 @@
     record(waveform, "H:SEP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SEP3
     record(waveform, "H:SEP3:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1326,6 +1626,18 @@
     record(waveform, "H:SEP3:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SEP1
     record(waveform, "H:SEP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1376,6 +1688,18 @@
     record(waveform, "H:SEP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # SEP0
     record(waveform, "H:SEP0:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1426,6 +1750,18 @@
     record(waveform, "H:SEP0:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # IP
     record(waveform, "H:IP:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1476,6 +1812,18 @@
     record(waveform, "H:IP:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NEP0
     record(waveform, "H:NEP0:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1526,6 +1874,18 @@
     record(waveform, "H:NEP0:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NEP1
     record(waveform, "H:NEP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1576,6 +1936,18 @@
     record(waveform, "H:NEP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NEP3
     record(waveform, "H:NEP3:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1626,6 +1998,18 @@
     record(waveform, "H:NEP3:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NEP4
     record(waveform, "H:NEP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1676,6 +2060,18 @@
     record(waveform, "H:NEP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NEP5
     record(waveform, "H:NEP5:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1726,6 +2122,18 @@
     record(waveform, "H:NEP5:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP17
     record(waveform, "H:NRP17:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1776,6 +2184,18 @@
     record(waveform, "H:NRP17:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP16
     record(waveform, "H:NRP16:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1826,6 +2246,18 @@
     record(waveform, "H:NRP16:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP15
     record(waveform, "H:NRP15:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1876,6 +2308,18 @@
     record(waveform, "H:NRP15:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP14
     record(waveform, "H:NRP14:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1926,6 +2370,18 @@
     record(waveform, "H:NRP14:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP13
     record(waveform, "H:NRP13:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -1976,6 +2432,18 @@
     record(waveform, "H:NRP13:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP12
     record(waveform, "H:NRP12:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2026,6 +2494,18 @@
     record(waveform, "H:NRP12:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP11
     record(waveform, "H:NRP11:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2076,6 +2556,18 @@
     record(waveform, "H:NRP11:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP10
     record(waveform, "H:NRP10:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2126,6 +2618,18 @@
     record(waveform, "H:NRP10:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NIP3
     record(waveform, "H:NIP3:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2176,6 +2680,18 @@
     record(waveform, "H:NIP3:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NIP1
     record(waveform, "H:NIP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2226,6 +2742,18 @@
     record(waveform, "H:NIP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP9
     record(waveform, "H:NRP9:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2276,6 +2804,18 @@
     record(waveform, "H:NRP9:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP8
     record(waveform, "H:NRP8:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2326,6 +2866,18 @@
     record(waveform, "H:NRP8:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP7
     record(waveform, "H:NRP7:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2376,6 +2928,18 @@
     record(waveform, "H:NRP7:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP6
     record(waveform, "H:NRP6:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2426,6 +2990,18 @@
     record(waveform, "H:NRP6:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP5
     record(waveform, "H:NRP5:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2476,6 +3052,18 @@
     record(waveform, "H:NRP5:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP4
     record(waveform, "H:NRP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2526,6 +3114,18 @@
     record(waveform, "H:NRP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP3
     record(waveform, "H:NRP3:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2576,6 +3176,18 @@
     record(waveform, "H:NRP3:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP2
     record(waveform, "H:NRP2:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2626,6 +3238,18 @@
     record(waveform, "H:NRP2:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NRP1
     record(waveform, "H:NRP1:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2676,6 +3300,18 @@
     record(waveform, "H:NRP1:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NTP4
     record(waveform, "H:NTP4:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2726,6 +3362,18 @@
     record(waveform, "H:NTP4:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # IV4E
     record(waveform, "H:IV4E:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2776,6 +3424,18 @@
     record(waveform, "H:IV4E:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NTP2
     record(waveform, "H:NTP2:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2826,6 +3486,18 @@
     record(waveform, "H:NTP2:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # NTP0
     record(waveform, "H:NTP0:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2876,6 +3548,18 @@
     record(waveform, "H:NTP0:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # STP0
     record(waveform, "H:STP0:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2926,6 +3610,18 @@
     record(waveform, "H:STP0:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     
     # TAIL
     record(waveform, "H:TAIL:TYPE")              {field(NELM, "1")    field(FTVL, "STRING")}
@@ -2976,4 +3672,16 @@
     record(waveform, "H:TAIL:PHASE:BX:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:PHASE:AY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:PHASE:BY:ERROR")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:RATIO:VALUE:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:RATIO:ERROR:X")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:RATIO:VALUE:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:RATIO:ERROR:Y")     {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:MODEL:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:VALUE:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:ERROR:DX")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:MODEL:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:VALUE:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:ERROR:DY")          {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:MODEL:SIGMA_DX")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:MODEL:SIGMA_DY")    {field(NELM, "1")    field(FTVL, "DOUBLE")}
     

@@ -58,6 +58,8 @@ def record_make(name:str) -> str:
     ----------
     name: str
         location name
+    dispersion: bool, default=False
+        dispersion flag
 
     Returns
     -------
@@ -114,13 +116,26 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:PHASE:BX:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:PHASE:AY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:PHASE:BY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:RATIO:VALUE:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:RATIO:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:RATIO:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:RATIO:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:VALUE:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:ERROR:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:VALUE:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:ERROR:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:SIGMA_DX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:SIGMA_DY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     '''
 
 
 # Load data to location record
 def record_load(name:str,
                 data:dict,
-                connection_timeout:float=1.0) -> None:
+                connection_timeout:float=1.0,
+                dispersion:bool=False) -> None:
     """
     Load data into epics process variables for given location.
 
@@ -131,6 +146,9 @@ def record_load(name:str,
     data: dict
         location data
         {TYPE:str, FLAG:int, JOIN:int, RISE:int, TIME:float, *:float}
+    dispersion: bool, default=False
+        dispersion flag
+
 
     Returns
     -------
@@ -151,6 +169,10 @@ def record_load(name:str,
     epics.caput(f'H:{name}:MODEL:AY', data.get('AY'), connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:FY', data.get('FY'), connection_timeout=connection_timeout)
 
+    if dispersion:
+        epics.caput(f'H:{name}:MODEL:DX', data.get('DX'), connection_timeout=connection_timeout)
+        epics.caput(f'H:{name}:MODEL:DY', data.get('DY'), connection_timeout=connection_timeout)
+
     epics.caput(f'H:{name}:MODEL:SIGMA_BX', data.get('SIGMA_BX'), connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:SIGMA_AX', data.get('SIGMA_AX'), connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:SIGMA_FX', data.get('SIGMA_FX'), connection_timeout=connection_timeout)
@@ -158,6 +180,10 @@ def record_load(name:str,
     epics.caput(f'H:{name}:MODEL:SIGMA_BY', data.get('SIGMA_BY'), connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:SIGMA_AY', data.get('SIGMA_AY'), connection_timeout=connection_timeout)
     epics.caput(f'H:{name}:MODEL:SIGMA_FY', data.get('SIGMA_FY'), connection_timeout=connection_timeout)
+
+    if dispersion:
+        epics.caput(f'H:{name}:MODEL:SIGMA_DX', data.get('SIGMA_DX'), connection_timeout=connection_timeout)
+        epics.caput(f'H:{name}:MODEL:SIGMA_DY', data.get('SIGMA_DY'), connection_timeout=connection_timeout)
 
 
 # Load TbT data from file
