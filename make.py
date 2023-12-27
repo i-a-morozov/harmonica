@@ -3,12 +3,18 @@ Generate harmonica.db
 
 """
 
+# Parse arguments
+import argparse
+parser = argparse.ArgumentParser(prog='make', description='Generate harmonica db.')
+parser.add_argument('-f', '--file', type=str, help='configuration file', default='config.yaml')
+args = parser.parse_args()
+
 # Import
 import yaml
 from harmonica.util import record_make
 
 # Load configuration
-with open('config.yaml', 'r') as stream:
+with open(args.file, 'r') as stream:
   try:
     config = yaml.safe_load(stream)
   except yaml.YAMLError as exception:

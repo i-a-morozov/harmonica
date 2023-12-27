@@ -43,7 +43,7 @@
     record(waveform, "H:HEAD:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:HEAD:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:HEAD:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:HEAD:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -110,7 +110,7 @@
     record(waveform, "H:STP2:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:STP2:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP2:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP2:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -177,7 +177,7 @@
     record(waveform, "H:IV4P:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:IV4P:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4P:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4P:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -244,7 +244,7 @@
     record(waveform, "H:STP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:STP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -311,7 +311,7 @@
     record(waveform, "H:SRP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -378,7 +378,7 @@
     record(waveform, "H:SRP2:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP2:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP2:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP2:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -445,7 +445,7 @@
     record(waveform, "H:SRP3:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP3:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP3:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP3:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -512,7 +512,7 @@
     record(waveform, "H:SRP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -579,7 +579,7 @@
     record(waveform, "H:SRP5:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP5:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP5:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP5:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -646,7 +646,7 @@
     record(waveform, "H:SRP6:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP6:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP6:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP6:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -713,7 +713,7 @@
     record(waveform, "H:SRP7:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP7:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP7:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP7:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -780,7 +780,7 @@
     record(waveform, "H:SRP8:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP8:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP8:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP8:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -847,7 +847,7 @@
     record(waveform, "H:SRP9:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP9:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP9:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP9:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -914,7 +914,7 @@
     record(waveform, "H:SIP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SIP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -981,7 +981,7 @@
     record(waveform, "H:SIP2:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SIP2:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SIP2:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SIP2:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1048,7 +1048,7 @@
     record(waveform, "H:SRP10:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP10:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP10:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP10:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1115,7 +1115,7 @@
     record(waveform, "H:SRP11:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP11:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP11:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP11:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1182,7 +1182,7 @@
     record(waveform, "H:SRP12:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP12:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP12:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP12:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1249,7 +1249,7 @@
     record(waveform, "H:SRP13:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP13:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP13:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP13:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1316,7 +1316,7 @@
     record(waveform, "H:SRP14:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP14:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP14:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP14:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1383,7 +1383,7 @@
     record(waveform, "H:SRP15:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP15:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP15:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP15:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1450,7 +1450,7 @@
     record(waveform, "H:SRP16:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP16:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP16:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP16:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1517,7 +1517,7 @@
     record(waveform, "H:SRP17:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SRP17:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SRP17:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SRP17:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1584,7 +1584,7 @@
     record(waveform, "H:SEP5:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SEP5:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP5:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP5:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1651,7 +1651,7 @@
     record(waveform, "H:SEP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SEP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1718,7 +1718,7 @@
     record(waveform, "H:SEP3:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SEP3:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP3:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP3:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1785,7 +1785,7 @@
     record(waveform, "H:SEP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SEP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1852,7 +1852,7 @@
     record(waveform, "H:SEP0:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:SEP0:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:SEP0:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:SEP0:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1919,7 +1919,7 @@
     record(waveform, "H:IP:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:IP:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IP:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IP:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -1986,7 +1986,7 @@
     record(waveform, "H:NEP0:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NEP0:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP0:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP0:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2053,7 +2053,7 @@
     record(waveform, "H:NEP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NEP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2120,7 +2120,7 @@
     record(waveform, "H:NEP3:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NEP3:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP3:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP3:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2187,7 +2187,7 @@
     record(waveform, "H:NEP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NEP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2254,7 +2254,7 @@
     record(waveform, "H:NEP5:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NEP5:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NEP5:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NEP5:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2321,7 +2321,7 @@
     record(waveform, "H:NRP17:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP17:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP17:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP17:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2388,7 +2388,7 @@
     record(waveform, "H:NRP16:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP16:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP16:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP16:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2455,7 +2455,7 @@
     record(waveform, "H:NRP15:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP15:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP15:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP15:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2522,7 +2522,7 @@
     record(waveform, "H:NRP14:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP14:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP14:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP14:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2589,7 +2589,7 @@
     record(waveform, "H:NRP13:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP13:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP13:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP13:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2656,7 +2656,7 @@
     record(waveform, "H:NRP12:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP12:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP12:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP12:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2723,7 +2723,7 @@
     record(waveform, "H:NRP11:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP11:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP11:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP11:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2790,7 +2790,7 @@
     record(waveform, "H:NRP10:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP10:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP10:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP10:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2857,7 +2857,7 @@
     record(waveform, "H:NIP3:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NIP3:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP3:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP3:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2924,7 +2924,7 @@
     record(waveform, "H:NIP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NIP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NIP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NIP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -2991,7 +2991,7 @@
     record(waveform, "H:NRP9:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP9:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP9:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP9:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3058,7 +3058,7 @@
     record(waveform, "H:NRP8:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP8:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP8:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP8:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3125,7 +3125,7 @@
     record(waveform, "H:NRP7:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP7:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP7:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP7:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3192,7 +3192,7 @@
     record(waveform, "H:NRP6:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP6:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP6:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP6:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3259,7 +3259,7 @@
     record(waveform, "H:NRP5:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP5:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP5:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP5:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3326,7 +3326,7 @@
     record(waveform, "H:NRP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3393,7 +3393,7 @@
     record(waveform, "H:NRP3:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP3:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP3:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP3:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3460,7 +3460,7 @@
     record(waveform, "H:NRP2:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP2:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP2:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP2:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3527,7 +3527,7 @@
     record(waveform, "H:NRP1:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NRP1:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NRP1:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NRP1:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3594,7 +3594,7 @@
     record(waveform, "H:NTP4:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NTP4:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP4:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP4:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3661,7 +3661,7 @@
     record(waveform, "H:IV4E:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:IV4E:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:IV4E:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:IV4E:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3728,7 +3728,7 @@
     record(waveform, "H:NTP2:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NTP2:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP2:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP2:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3795,7 +3795,7 @@
     record(waveform, "H:NTP0:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:NTP0:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:NTP0:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:NTP0:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3862,7 +3862,7 @@
     record(waveform, "H:STP0:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:STP0:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:STP0:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:STP0:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}
@@ -3929,7 +3929,7 @@
     record(waveform, "H:TAIL:SNR:X")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:DATA:Y")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:NOISE:Y")           {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:TAIL:SNT:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
+    record(waveform, "H:TAIL:SNR:Y")             {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:DATA:I")            {field(NELM, "8192") field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:FREQUENCY:VALUE:X") {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:TAIL:FREQUENCY:VALUE:Y") {field(NELM, "1")    field(FTVL, "DOUBLE")}

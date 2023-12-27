@@ -94,7 +94,7 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:SNR:X")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:Y")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:NOISE:Y")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:SNT:Y")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:SNR:Y")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:I")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:FREQUENCY:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:FREQUENCY:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
