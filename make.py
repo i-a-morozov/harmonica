@@ -27,20 +27,9 @@ common = """
     record(waveform, "H:FREQUENCY:MODEL:Y")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:FREQUENCY:VALUE:X")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:FREQUENCY:VALUE:Y")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:FREQUENCY:VALUE:Z")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:FREQUENCY:ERROR:X")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
     record(waveform, "H:FREQUENCY:ERROR:Y")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:FREQUENCY:ERROR:Z")      {field(NELM, "1")    field(FTVL, "DOUBLE")}
 
-    # ACTION (MONITOR)
-    record(waveform, "H:ACTION:LIST:VALUE:X")    {field(NELM, "1024")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:LIST:ERROR:X")    {field(NELM, "1024")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:LIST:VALUE:Y")    {field(NELM, "1024")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:LIST:ERROR:Y")    {field(NELM, "1024")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:VALUE:X")         {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:ERROR:X")         {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:VALUE:Y")         {field(NELM, "1")    field(FTVL, "DOUBLE")}
-    record(waveform, "H:ACTION:ERROR:Y")         {field(NELM, "1")    field(FTVL, "DOUBLE")}
 """
 
 # Generate records

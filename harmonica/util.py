@@ -76,17 +76,25 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:MODEL:BX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:AX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:FX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:BY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:AY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:FY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_BX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_AX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_FX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:SIGMA_DX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_BY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_AY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:MODEL:SIGMA_FY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:MODEL:SIGMA_DY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:X")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:NOISE:X")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:SNR:X")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:Y")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:NOISE:Y")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:SNT:Y")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:DATA:I")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:FREQUENCY:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:FREQUENCY:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
@@ -120,14 +128,11 @@ def record_make(name:str) -> str:
     record(waveform, "H:{name}:RATIO:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:RATIO:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:RATIO:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:VALUE:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:ERROR:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:VALUE:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:ERROR:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
     record(waveform, "H:{name}:ERROR:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_DX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_DY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "H:{name}:ANOMALY")           {{field(NELM, "1")    field(FTVL, "SHORT")}}
     '''
 
 
