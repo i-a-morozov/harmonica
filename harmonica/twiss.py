@@ -10,7 +10,7 @@ import numpy
 import torch
 import pandas
 
-from typing import Callable
+from typing import Callable, Optional
 from scipy.optimize import leastsq, minimize
 from scipy.interpolate import interp1d
 from joblib import Parallel, delayed
@@ -2057,7 +2057,7 @@ class Twiss():
                             normalization:Callable[[torch.Tensor], torch.Tensor],
                             matrix:Callable[[int, int], torch.Tensor],
                             *,
-                            twiss:torch.Tensor=None,
+                            twiss:Optional[torch.Tensor]=None,
                             method:str='pair',
                             limit:int=1,
                             index:list[int]=None,
@@ -2068,8 +2068,8 @@ class Twiss():
                             jacobian:bool=False,
                             count:int=256,
                             fraction:float=0.75,
-                            ix:float=None,
-                            iy:float=None,
+                            ix:Optional[float]=None,
+                            iy:Optional[float]=None,
                             sigma:float=0.0,
                             n_jobs:int=6,
                             verbose:bool=False,
