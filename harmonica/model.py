@@ -363,11 +363,11 @@ class Model():
             if self.model == 'coupled':
                 self.coupled()
 
-            self.fx = torch.tensor(self.data_frame.loc['FX'], dtype=self.dtype, device=self.device)
-            self.fy = torch.tensor(self.data_frame.loc['FY'], dtype=self.dtype, device=self.device)
+            self.fx = torch.tensor(self.data_frame.loc['FX'].array, dtype=self.dtype, device=self.device)
+            self.fy = torch.tensor(self.data_frame.loc['FY'].array, dtype=self.dtype, device=self.device)
 
-            self.sigma_fx = torch.tensor(self.data_frame.loc['SIGMA_FX'], dtype=self.dtype, device=self.device)
-            self.sigma_fy = torch.tensor(self.data_frame.loc['SIGMA_FY'], dtype=self.dtype, device=self.device)
+            self.sigma_fx = torch.tensor(self.data_frame.loc['SIGMA_FX'].array, dtype=self.dtype, device=self.device)
+            self.sigma_fy = torch.tensor(self.data_frame.loc['SIGMA_FY'].array, dtype=self.dtype, device=self.device)
 
             *_, self.mux = self.fx
             *_, self.muy = self.fy
@@ -441,17 +441,17 @@ class Model():
         None
 
         """
-        self.ax = torch.tensor(self.data_frame.loc['AX'], dtype=self.dtype, device=self.device)
-        self.bx = torch.tensor(self.data_frame.loc['BX'], dtype=self.dtype, device=self.device)
+        self.ax = torch.tensor(self.data_frame.loc['AX'].array, dtype=self.dtype, device=self.device)
+        self.bx = torch.tensor(self.data_frame.loc['BX'].array, dtype=self.dtype, device=self.device)
 
-        self.ay = torch.tensor(self.data_frame.loc['AY'], dtype=self.dtype, device=self.device)
-        self.by = torch.tensor(self.data_frame.loc['BY'], dtype=self.dtype, device=self.device)
+        self.ay = torch.tensor(self.data_frame.loc['AY'].array, dtype=self.dtype, device=self.device)
+        self.by = torch.tensor(self.data_frame.loc['BY'].array, dtype=self.dtype, device=self.device)
 
-        self.sigma_ax = torch.tensor(self.data_frame.loc['SIGMA_AX'], dtype=self.dtype, device=self.device)
-        self.sigma_bx = torch.tensor(self.data_frame.loc['SIGMA_BX'], dtype=self.dtype, device=self.device)
+        self.sigma_ax = torch.tensor(self.data_frame.loc['SIGMA_AX'].array, dtype=self.dtype, device=self.device)
+        self.sigma_bx = torch.tensor(self.data_frame.loc['SIGMA_BX'].array, dtype=self.dtype, device=self.device)
 
-        self.sigma_ay = torch.tensor(self.data_frame.loc['SIGMA_AY'], dtype=self.dtype, device=self.device)
-        self.sigma_by = torch.tensor(self.data_frame.loc['SIGMA_BY'], dtype=self.dtype, device=self.device)
+        self.sigma_ay = torch.tensor(self.data_frame.loc['SIGMA_AY'].array, dtype=self.dtype, device=self.device)
+        self.sigma_by = torch.tensor(self.data_frame.loc['SIGMA_BY'].array, dtype=self.dtype, device=self.device)
 
         self.normal = torch.stack([self.ax, self.bx, self.ay, self.by]).T
         self.normal = torch.stack([cs_normal(*twiss, dtype=self.dtype, device=self.device) for twiss in self.normal])
