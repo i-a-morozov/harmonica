@@ -4,6 +4,7 @@ Constants & auxiliary functions.
 
 """
 
+import re
 import epics
 import numpy
 import torch
@@ -47,6 +48,56 @@ def pv_make(name:str,
         plane = {'X':'x', 'Y':'z', 'I':'i'}[plane.upper()]
 
     return f'H:{name}:DATA:{plane.upper()}' if flag else f'VEPP4:{name}:turns_{plane}-I'
+
+
+# Filter BPM dictionary by regex patterns
+def bpm_select(bpm:dict,
+               skip:list=None,
+               only:list=None) -> dict:
+    """
+    Filter BPM dictionary using regular expression patterns.
+
+    Parameters
+    ----------
+    bpm: dict
+        BPM data dictionary {name: value}
+    skip: list, default=None
+        regex patterns to skip matching BPM names
+    only: list, default=None
+        regex patterns to keep matching BPM names
+
+    Returns
+    -------
+    Filtered BPM dictionary (dict)
+
+    """
+    if skip and only:
+        raise ValueError('error: --skip and --only are mutually exclusive')
+
+    names = [*bpm]
+
+    def match(patterns:list, option:str) -> set:
+        selected = set()
+        for pattern in patterns:
+            try:
+                regex = re.compile(pattern, re.IGNORECASE)
+            except re.error as exception:
+                raise ValueError(f'error: invalid regex pattern {pattern!r} for {option}: {exception}') from exception
+            matched = [name for name in names if regex.search(name)]
+            if not matched:
+                raise ValueError(f'error: regex pattern {pattern!r} for {option} does not match any BPM')
+            selected.update(matched)
+        return selected
+
+    if skip:
+        selected = match(skip, 'skip')
+        return {name: value for name, value in bpm.items() if name not in selected}
+
+    if only:
+        selected = match(only, 'only')
+        return {name: value for name, value in bpm.items() if name in selected}
+
+    return bpm.copy()
 
 
 # Generate DB location record
