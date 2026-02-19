@@ -2,6 +2,7 @@
 
 # Import
 import sys
+sys.path.append('../..')
 import argparse
 import os
 import epics
@@ -13,7 +14,6 @@ from harmonica.table import Table
 from harmonica.twiss import Twiss
 
 # Input arguments flag
-sys.path.append('../..')
 _, *flag = sys.argv
 
 # Parse arguments

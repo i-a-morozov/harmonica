@@ -2,6 +2,7 @@
 
 # Import
 import sys
+sys.path.append('../..')
 import argparse
 import os
 import epics
@@ -14,7 +15,6 @@ from harmonica.table import Table
 from harmonica.twiss import Twiss
 
 # Input arguments flag
-sys.path.append('../..')
 _, *flag = sys.argv
 
 # Parse arguments
@@ -208,6 +208,7 @@ if args.plot:
   df['ERROR_BY'] = (by_m - by)/by_m
   df['DELTA_BY'] = sigma_by/by_m
   monitor_index = numpy.array([index - 1 for index in model.monitor_index], dtype=numpy.int64)
+  virtual_index = numpy.array([index - 1 for index in model.virtual_index if 0 < index < model.size - 1], dtype=numpy.int64)
   if monitor_index.size == 0:
     rms_bx = 100.0*numpy.sqrt(numpy.nanmean(df['ERROR_BX'].to_numpy()**2))
     rms_by = 100.0*numpy.sqrt(numpy.nanmean(df['ERROR_BY'].to_numpy()**2))
@@ -254,6 +255,34 @@ if args.plot:
   plot.add_trace(plty2, row=2, col=2)
   plot.update_xaxes(title_text='BPM', row=2, col=2)
   plot.update_yaxes(title_text='(BY_M-BY)/BY_M', row=2, col=2)
+  if virtual_index.size != 0:
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'BX': df.BX[virtual_index], 'SIGMA_BX': df.SIGMA_BX[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='BX', error_y='SIGMA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='BX (VIRTUAL)', legendgroup='virtual', showlegend=True)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=1, col=1)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'BY': df.BY[virtual_index], 'SIGMA_BY': df.SIGMA_BY[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='BY', error_y='SIGMA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'BY', 'SIGMA_BY'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='BY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=1, col=2)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'ERROR_BX': df.ERROR_BX[virtual_index], 'DELTA_BX': df.DELTA_BX[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='ERROR_BX', error_y='DELTA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BX', 'DELTA_BX'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='(BX_M-BX)/BX_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=2, col=1)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'ERROR_BY': df.ERROR_BY[virtual_index], 'DELTA_BY': df.DELTA_BY[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='ERROR_BY', error_y='DELTA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BY', 'DELTA_BY'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='(BY_M-BY)/BY_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=2, col=2)
   if args.amplitude:
     mask = pandas.DataFrame({'BPM':name, 'BX':bx_a, 'SIGMA_BX':sigma_bx_a})
     mask = scatter(mask, x='BPM', y='BX', error_y='SIGMA_BX', color_discrete_sequence=['red'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
@@ -321,6 +350,34 @@ if args.plot:
   plot.add_trace(plty2, row=2, col=2)
   plot.update_xaxes(title_text='BPM', row=2, col=2)
   plot.update_yaxes(title_text='AY_M-AY', row=2, col=2)
+  if virtual_index.size != 0:
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'AX': df.AX[virtual_index], 'SIGMA_AX': df.SIGMA_AX[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='AX (VIRTUAL)', legendgroup='virtual', showlegend=True)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=1, col=1)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'AY': df.AY[virtual_index], 'SIGMA_AY': df.SIGMA_AY[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=1, col=2)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'ERROR_AX': df.ERROR_AX[virtual_index], 'SIGMA_AX': df.SIGMA_AX[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='ERROR_AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='AX_M-AX (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=2, col=1)
+
+    virtual = pandas.DataFrame({'BPM': df.BPM[virtual_index], 'ERROR_AY': df.ERROR_AY[virtual_index], 'SIGMA_AY': df.SIGMA_AY[virtual_index]})
+    virtual = scatter(virtual, x='BPM', y='ERROR_AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
+    virtual.update_traces(marker={'size': 10})
+    virtual.update_traces(name='AY_M-AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = virtual.data
+    plot.add_trace(virtual, row=2, col=2)
   plot.update_layout(legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5))
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)

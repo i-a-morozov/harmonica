@@ -2,6 +2,7 @@
 
 # Import
 import sys
+sys.path.append('../..')
 import argparse
 import epics
 import numpy
@@ -13,7 +14,6 @@ from harmonica.window import Window
 from harmonica.data import Data
 
 # Input arguments flag
-sys.path.append('../..')
 _, *flag = sys.argv
 
 # Parse arguments

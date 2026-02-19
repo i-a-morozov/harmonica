@@ -2,6 +2,7 @@
 
 # Import
 import sys
+sys.path.append('../..')
 import argparse
 import epics
 import numpy
@@ -15,7 +16,6 @@ from harmonica.filter import Filter
 from harmonica.frequency import Frequency
 
 # Input arguments flag
-sys.path.append('../..')
 _, *flag = sys.argv
 
 # Parse arguments

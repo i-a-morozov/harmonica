@@ -2,6 +2,7 @@
 
 # Import
 import sys
+sys.path.append('../..')
 import argparse
 import epics
 import numpy
@@ -10,7 +11,6 @@ from datetime import datetime
 from harmonica.util import bpm_select
 
 # Input arguments flag
-sys.path.append('../..')
 _, *flag = sys.argv
 
 # Parse arguments
