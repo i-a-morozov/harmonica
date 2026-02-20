@@ -2,7 +2,6 @@
 
 # Import
 import sys
-sys.path.append('../..')
 import argparse
 import epics
 import numpy
@@ -50,6 +49,8 @@ parser.add_argument('-m', '--method', choices=('none', 'noise', 'error'), help='
 parser.add_argument('--dht', action='store_true', help='flag to use DHT estimator')
 parser.add_argument('--drop', type=int, help='number of endpoints to drop in DHT', default=32)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--snr', action='store_true', help='flag to compute signal-to-noise ratio from noise PVs')
+parser.add_argument('--lg', action='store_true', help='flag to compute SNR in dB: 20*log10(A/sigma)')
 parser.add_argument('--coupled', action='store_true', help='flag to compute coupled amplitude using opposite-plane frequency')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
@@ -127,6 +128,9 @@ if args.length > length:
 if args.window < 0.0:
   exit(f'error: window order {args.window} should be greater or equal to zero')
 
+if args.lg and not args.snr:
+  exit('error: --lg requires --snr')
+
 # Load TbT data
 size = len(bpm)
 count = length + offset + rise
@@ -179,6 +183,18 @@ else:
   value = table[:, +args.drop:-args.drop].mean(-1)
   error = table[:, +args.drop:-args.drop].std(-1)
 
+# Compute SNR
+snr = None
+if args.snr:
+  noise = numpy.array(epics.caget_many([f'H:{name}:NOISE:{plane}' for name in bpm]), dtype=numpy.float64)
+  amplitude = value.cpu().numpy()
+  with numpy.errstate(divide='ignore', invalid='ignore'):
+    if args.lg:
+      ratio = amplitude/noise
+      snr = numpy.where(ratio > 0.0, 20.0*numpy.log10(ratio), numpy.nan)
+    else:
+      snr = (amplitude/noise)**2
+
 # Plot
 if args.plot:
   from plotly.express import scatter
@@ -203,11 +219,24 @@ if args.plot:
   plot.update_traces(mode='lines+markers', line={'width': 1.5}, marker={'size': 5})
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
+  if args.snr:
+    df = pandas.DataFrame()
+    df['BPM'] = [*bpm.keys()]
+    df['SNR'] = snr
+    title = f'{TIME}: SNR {"[dB] " if args.lg else ""}({mode})'
+    plot = scatter(df, x='BPM', y='SNR', title=title, opacity=0.75, color_discrete_sequence=['blue'], hover_data=['BPM', 'SNR'])
+    plot.update_traces(mode='lines+markers', line={'width': 1.5}, marker={'size': 5})
+    config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
+    plot.show(config=config)
 
 # Save to file
 if args.save:
   filename = f'{"amplitude_coupled" if args.coupled else "amplitude"}_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, value.cpu().numpy())
+  if args.snr:
+    suffix = 'snr_lg' if args.lg else 'snr'
+    filename = f'{"%s_coupled" % suffix if args.coupled else suffix}_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+    numpy.save(filename, snr)
 
 # Save to epics
 if args.update and args.coupled:
@@ -219,3 +248,5 @@ if args.update and not args.coupled:
     epics.caput_many([f'H:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
   else:
     epics.caput_many([f'H:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], torch.zeros_like(value).cpu().numpy())
+  if args.snr:
+    epics.caput_many([f'H:{name}:SNR:{plane}' for name in bpm], snr)

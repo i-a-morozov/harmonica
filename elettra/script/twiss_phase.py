@@ -2,7 +2,6 @@
 
 # Import
 import sys
-sys.path.append('../..')
 import argparse
 import os
 import epics

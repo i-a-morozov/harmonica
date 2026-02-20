@@ -2,7 +2,6 @@
 
 # Import
 import sys
-sys.path.append('../..')
 import argparse
 import epics
 import numpy
@@ -40,6 +39,7 @@ parser.add_argument('--auto', action='store_true', help='flag to plot autocorrel
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
+parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV noise data')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Time
@@ -148,3 +148,8 @@ if args.plot:
 if args.save:
   filename = f'noise_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
   numpy.save(filename, std.cpu())
+
+# Save to epics
+if args.update:
+  plane = args.plane.upper()
+  epics.caput_many([f'H:{name}:NOISE:{plane}' for name in bpm], std.cpu().numpy())

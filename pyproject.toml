@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harmonica"
+version = "0.0.2"
+description = "TbT data processing, frequency and parameters estimation, twiss parameters from amplitude and phase (combinations)"
+readme = "README.MD"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Ivan Morozov" }]
+dependencies = [
+    "botorch",
+    "gpytorch",
+    "joblib",
+    "nufft",
+    "numpy",
+    "pandas",
+    "pyepics",
+    "PyYAML",
+    "scikit-learn",
+    "scipy",
+    "statsmodels",
+    "torch"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools.packages.find]
+include = ["harmonica*"]
