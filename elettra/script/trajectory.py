@@ -27,6 +27,8 @@ select.add_argument('--only', metavar='PATTERN', nargs='+', help='space separate
 parser.add_argument('-o', '--offset', type=int, help='rise offset for all BPMs', default=0)
 parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise data (drop first turns)')
 parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
+parser.add_argument('--trajectory', action='store_true', help='flag to save trajectory matrix')
+parser.add_argument('--compare', action='store_true', help='flag to compare current trajectory against saved')
 transform = parser.add_mutually_exclusive_group()
 transform.add_argument('--mean', action='store_true', help='flag to remove mean')
 transform.add_argument('--median', action='store_true', help='flag to remove median')
@@ -37,6 +39,7 @@ parser.add_argument('--type', choices=('full', 'randomized'), help='SVD computat
 parser.add_argument('--buffer', type=int, help='buffer size to use for randomized hankel filter', default=16)
 parser.add_argument('--count', type=int, help='number of iterations to use for randomized hankel filter', default=16)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
+parser.add_argument('--difference', action='store_true', help='flag to plot pairwise BPM differences (bpm1-bpm2, bpm3-bpm4, ...)')
 parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
@@ -146,24 +149,65 @@ data = tbt.make_signal(args.length, tbt.work)
 
 # Convert to numpy
 data = data.cpu().numpy()
-name = [name for name in bpm] * args.length
+trajectory = data.reshape(args.length, size)
+bpm_name = [name for name in bpm]
+name = bpm_name * args.length
 turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
 time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
 
+# Compare with saved trajectory
+if args.compare:
+  try:
+    reference = numpy.load('trajectory.npy')
+  except FileNotFoundError:
+    exit('error: trajectory.npy is not found')
+  except Exception as exception:
+    exit(f'error: failed to load trajectory.npy: {exception}')
+  reference = numpy.asarray(reference)
+  difference = trajectory[:args.length] - reference[:args.length]
+  df = pandas.DataFrame()
+  df['BPM'] = bpm_name * args.length
+  df['TURN'] = numpy.array([numpy.zeros(size, dtype=numpy.int32) + i for i in range(args.length)]).flatten().astype(str)
+  df['TIME'] = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
+  df['DIFF'] = difference.flatten()
+  from plotly.express import line
+  plot = line(df, x='TIME', y='DIFF', color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY DIFF)', markers=True)
+  config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
+  plot.show(config=config)
+
 # Plot
 if args.plot:
-  df = pandas.DataFrame()
-  df['BPM'] = name
-  df['TURN'] = turn.astype(str)
-  df['TIME'] = time
-  df[args.plane.upper()] = data
   from plotly.express import line
-  plot = line(df, x='TIME', y=args.plane.upper(), color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY)', markers=True)
+  if args.difference:
+    pair_size = size//2
+    if pair_size == 0:
+      exit('error: at least two BPMs are required for --difference')
+    trajectory_diff = trajectory[:, 0:2*pair_size:2] - trajectory[:, 1:2*pair_size:2]
+    pair_name = [f'{name_1}-{name_2}' for name_1, name_2 in zip(bpm_name[0:2*pair_size:2], bpm_name[1:2*pair_size:2])]
+    pair_position = 0.5*(position[0:2*pair_size:2] + position[1:2*pair_size:2])
+    pair_turn = numpy.array([numpy.zeros(pair_size, dtype=numpy.int32) + i for i in range(args.length)]).flatten()
+    pair_time = 1/LENGTH*numpy.array([pair_position + LENGTH * i for i in range(args.length)]).flatten()
+    df = pandas.DataFrame()
+    df['BPM'] = pair_name * args.length
+    df['TURN'] = pair_turn.astype(str)
+    df['TIME'] = pair_time
+    df['DIFF'] = trajectory_diff.flatten()
+    plot = line(df, x='TIME', y='DIFF', color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY PAIR DIFF)', markers=True)
+  else:
+    df = pandas.DataFrame()
+    df['BPM'] = name
+    df['TURN'] = turn.astype(str)
+    df['TIME'] = time
+    df[args.plane.upper()] = data
+    plot = line(df, x='TIME', y=args.plane.upper(), color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY)', markers=True)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Save to file
-data = numpy.array([time, data])
 if args.save:
   filename = f'tbt_trajectory_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, data)
+  numpy.save(filename, numpy.array([time, data]))
+
+# Save trajectory matrix to file
+if args.trajectory:
+  numpy.save('trajectory.npy', trajectory)

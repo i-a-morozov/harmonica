@@ -21,7 +21,7 @@ from harmonica.frequency import Frequency
 _, *flag = sys.argv
 
 # Parse arguments
-parser = argparse.ArgumentParser(prog='hs_frequency', description='Save/plot frequency data for selected BPMs and plane.')
+parser = argparse.ArgumentParser(prog='frequency', description='Save/plot frequency data for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
 parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=1024)
 select = parser.add_mutually_exclusive_group()
