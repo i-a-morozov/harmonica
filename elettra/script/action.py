@@ -144,7 +144,7 @@ if args.plot:
     mask = scatter(mask, x='BPM', y='JY', error_y='SIGMA_JY', color_discrete_sequence=['red'], hover_data=['BPM', 'JY', 'SIGMA_JY'])
     mask.update_traces(marker={'size': 10})
     mask, *_ = mask.data
-    plot.add_trace(mask_y, row=2, col=1)
+    plot.add_trace(mask, row=2, col=1)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
