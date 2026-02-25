@@ -4,6 +4,7 @@ Constants & auxiliary functions.
 
 """
 
+from typing import Optional
 import re
 import epics
 import numpy
@@ -24,6 +25,7 @@ LENGTH:float = 366.075
 # Generate TbT PV name
 def pv_make(name:str,
             plane:str,
+            prefix:str='H',
             flag:bool=False) -> str:
     """
     Generate PV name for given BPM name and data plane.
@@ -36,24 +38,21 @@ def pv_make(name:str,
         BPM name
     plane: str
         selected plane (x, y or i)
-    flag: bool
-        flag to use harmonica PV prefix
+    prefix: str, default='H'
+        PV prefix
 
     Returns
     -------
     PV name (str)
 
     """
-    if not flag:
-        plane = {'X':'x', 'Y':'z', 'I':'i'}[plane.upper()]
-
-    return f'H:{name}:DATA:{plane.upper()}' if flag else f'VEPP4:{name}:turns_{plane}-I'
+    return f'{prefix}:{name}:DATA:{plane.upper()}'
 
 
 # Filter BPM dictionary by regex patterns
 def bpm_select(bpm:dict,
-               skip:list=None,
-               only:list=None) -> dict:
+               skip:Optional[list]=None,
+               only:Optional[list]=None) -> dict:
     """
     Filter BPM dictionary using regular expression patterns.
 
@@ -101,7 +100,7 @@ def bpm_select(bpm:dict,
 
 
 # Generate DB location record
-def record_make(name:str) -> str:
+def record_make(name:str, prefix:str='H') -> str:
     """
     Generate DB location record for given location name.
 
@@ -119,77 +118,78 @@ def record_make(name:str) -> str:
     """
     return f'''
     # {name}
-    record(waveform, "H:{name}:TYPE")              {{field(NELM, "1")    field(FTVL, "STRING")}}
-    record(waveform, "H:{name}:FLAG")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
-    record(waveform, "H:{name}:JOIN")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
-    record(waveform, "H:{name}:RISE")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
-    record(waveform, "H:{name}:TIME")              {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:BX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:AX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:FX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:BY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:AY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:FY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_BX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_AX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_FX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_DX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_BY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_AY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_FY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:MODEL:SIGMA_DY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:DATA:X")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:NOISE:X")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:SNR:X")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:DATA:Y")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:NOISE:Y")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:SNR:Y")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:DATA:I")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:FREQUENCY:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:FREQUENCY:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:FREQUENCY:ERROR:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:FREQUENCY:ERROR:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:ERROR:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:ERROR:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:VALUE:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:IX:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:IY:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:IX:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:IY:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:BX:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:BY:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:BX:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:AMPLITUDE:BY:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:AX:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:BX:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:AY:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:BY:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:AX:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:BX:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:AY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:PHASE:BY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:RATIO:VALUE:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:RATIO:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:RATIO:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:RATIO:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:VALUE:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:VALUE:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:ERROR:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:ERROR:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
-    record(waveform, "H:{name}:ANOMALY")           {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{prefix}:{name}:TYPE")              {{field(NELM, "1")    field(FTVL, "STRING")}}
+    record(waveform, "{prefix}:{name}:FLAG")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{prefix}:{name}:JOIN")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{prefix}:{name}:RISE")              {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{prefix}:{name}:TIME")              {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:BX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:AX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:FX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:BY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:AY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:FY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_BX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_AX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_FX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_DX")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_BY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_AY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_FY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:MODEL:SIGMA_DY")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:DATA:X")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:NOISE:X")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:SNR:X")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:DATA:Y")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:NOISE:Y")           {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:SNR:Y")             {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:DATA:I")            {{field(NELM, "8192") field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:FREQUENCY:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:FREQUENCY:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:FREQUENCY:ERROR:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:FREQUENCY:ERROR:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:VALUE:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:VALUE:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:ERROR:X") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:ERROR:Y") {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:VALUE:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:IX:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:IY:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:IX:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:IY:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:BX:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:BY:VALUE"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:BX:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:AMPLITUDE:BY:ERROR"){{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:AX:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:BX:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:AY:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:BY:VALUE")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:AX:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:BX:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:AY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:PHASE:BY:ERROR")    {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:RATIO:VALUE:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:RATIO:ERROR:X")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:RATIO:VALUE:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:RATIO:ERROR:Y")     {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:VALUE:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:VALUE:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:ERROR:DX")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:ERROR:DY")          {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{prefix}:{name}:ANOMALY")           {{field(NELM, "1")    field(FTVL, "SHORT")}}
     '''
 
 
 # Load data to location record
 def record_load(name:str,
                 data:dict,
+                prefix:str='H',
                 connection_timeout:float=1.0,
                 dispersion:bool=False) -> None:
     """
@@ -202,6 +202,8 @@ def record_load(name:str,
     data: dict
         location data
         {TYPE:str, FLAG:int, JOIN:int, RISE:int, TIME:float, *:float}
+    prefix: str, default='H'
+        PV prefix
     dispersion: bool, default=False
         dispersion flag
 
@@ -211,35 +213,35 @@ def record_load(name:str,
     None
 
     """
-    epics.caput(f'H:{name}:TYPE', data.get('TYPE'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:FLAG', data.get('FLAG'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:JOIN', data.get('JOIN'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:RISE', data.get('RISE'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:TIME', data.get('TIME'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:TYPE', data.get('TYPE'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:FLAG', data.get('FLAG'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:JOIN', data.get('JOIN'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:RISE', data.get('RISE'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:TIME', data.get('TIME'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:BX', data.get('BX'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:AX', data.get('AX'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:FX', data.get('FX'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:BX', data.get('BX'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:AX', data.get('AX'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:FX', data.get('FX'), connection_timeout=connection_timeout)
 
-    epics.caput(f'H:{name}:MODEL:BY', data.get('BY'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:AY', data.get('AY'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:FY', data.get('FY'), connection_timeout=connection_timeout)
-
-    if dispersion:
-        epics.caput(f'H:{name}:MODEL:DX', data.get('DX'), connection_timeout=connection_timeout)
-        epics.caput(f'H:{name}:MODEL:DY', data.get('DY'), connection_timeout=connection_timeout)
-
-    epics.caput(f'H:{name}:MODEL:SIGMA_BX', data.get('SIGMA_BX'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_AX', data.get('SIGMA_AX'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_FX', data.get('SIGMA_FX'), connection_timeout=connection_timeout)
-
-    epics.caput(f'H:{name}:MODEL:SIGMA_BY', data.get('SIGMA_BY'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_AY', data.get('SIGMA_AY'), connection_timeout=connection_timeout)
-    epics.caput(f'H:{name}:MODEL:SIGMA_FY', data.get('SIGMA_FY'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:BY', data.get('BY'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:AY', data.get('AY'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:FY', data.get('FY'), connection_timeout=connection_timeout)
 
     if dispersion:
-        epics.caput(f'H:{name}:MODEL:SIGMA_DX', data.get('SIGMA_DX'), connection_timeout=connection_timeout)
-        epics.caput(f'H:{name}:MODEL:SIGMA_DY', data.get('SIGMA_DY'), connection_timeout=connection_timeout)
+        epics.caput(f'{prefix}:{name}:MODEL:DX', data.get('DX'), connection_timeout=connection_timeout)
+        epics.caput(f'{prefix}:{name}:MODEL:DY', data.get('DY'), connection_timeout=connection_timeout)
+
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_BX', data.get('SIGMA_BX'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_AX', data.get('SIGMA_AX'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_FX', data.get('SIGMA_FX'), connection_timeout=connection_timeout)
+
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_BY', data.get('SIGMA_BY'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_AY', data.get('SIGMA_AY'), connection_timeout=connection_timeout)
+    epics.caput(f'{prefix}:{name}:MODEL:SIGMA_FY', data.get('SIGMA_FY'), connection_timeout=connection_timeout)
+
+    if dispersion:
+        epics.caput(f'{prefix}:{name}:MODEL:SIGMA_DX', data.get('SIGMA_DX'), connection_timeout=connection_timeout)
+        epics.caput(f'{prefix}:{name}:MODEL:SIGMA_DY', data.get('SIGMA_DY'), connection_timeout=connection_timeout)
 
 
 # Load TbT data from file
@@ -334,7 +336,7 @@ def generate_other(probe:int,
     other (list)
 
     """
-    other = []
+    other:list[int] = []
     total = len(flags)
 
     local = []
@@ -365,7 +367,7 @@ def generate_pairs(limit:int,
                    count:int,
                    *,
                    probe:int=0,
-                   table:list=None,
+                   table:Optional[list]=None,
                    dtype:torch.dtype=torch.int64,
                    device:torch.device=torch.device('cpu')) -> torch.Tensor:
     """
@@ -459,7 +461,6 @@ def read_tfs(file:str) -> tuple[dict, dict]:
     data is a dictionary with columns {name: {..., key: value, ...}
 
     """
-    keys, units = None, None
     head, data = {}, {}
 
     with open(file) as stream:
@@ -467,8 +468,8 @@ def read_tfs(file:str) -> tuple[dict, dict]:
         for line in stream:
 
             if line.startswith('@'):
-                _, key, unit, *value = line.split()
-                unit = str if unit.endswith('s') else float
+                _, key, description, *value = line.split()
+                unit = str if description.endswith('s') else float
                 head[key] = unit((' '.join(value)).replace('"', ''))
                 continue
 
@@ -477,8 +478,8 @@ def read_tfs(file:str) -> tuple[dict, dict]:
                 continue
 
             if line.startswith('$'):
-                _, *units = line.split()
-                units = [{'%s': str, '%le': float}[unit] for unit in units]
+                _, *descriptions = line.split()
+                units = [{'%s': str, '%le': float}[description] for description in description]
                 continue
 
             values = line.split()
@@ -489,7 +490,7 @@ def read_tfs(file:str) -> tuple[dict, dict]:
 
 
 # Flatten a nested tuple
-def flatten(data:tuple) -> tuple:
+def flatten(data):
     """
     Flatten a nested tuple.
 
@@ -548,6 +549,7 @@ def mst(array):
 
 def main():
     pass
+
 
 if __name__ == '__main__':
     main()
