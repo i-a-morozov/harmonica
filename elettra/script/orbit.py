@@ -27,7 +27,7 @@ parser.add_argument('-r', '--rise', action='store_true', help='flag to use rise 
 parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 parser.add_argument('--median', action='store_true', help='flag to compute median instead of mean')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
@@ -42,9 +42,9 @@ if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'H:{name}:RISE' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -60,10 +60,10 @@ if not bpm:
   exit('error: BPM list is empty')
 
 # Set BPM positions
-position = numpy.array(epics.caget_many([f'H:{name}:TIME' for name in bpm]))
+position = numpy.array(epics.caget_many([f'{args.prefix}:{name}:TIME' for name in bpm]))
 
 # Generate PV names
-pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
+pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length

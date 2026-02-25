@@ -22,7 +22,7 @@ parser.add_argument('--unit', choices=('m', 'mm', 'mk'), help='amplitude units',
 parser.add_argument('--clean', action='store_true', help='flag to clean frequency data')
 parser.add_argument('--factor', type=float, help='threshold factor', default=5.0)
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
@@ -41,32 +41,32 @@ if device == 'cuda' and not torch.cuda.is_available():
 factor = {'m':1.0E+0, 'mm':1.0E-2, 'mk':1.0E-6}[args.unit]
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = torch.tensor(epics.caget_many([f'H:{name}:FLAG' for name in name]), dtype=torch.int64, device=device)
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name]), dtype=torch.int64, device=device)
 
 # Load x frequency data
-value_nux = torch.tensor(epics.caget('H:FREQUENCY:VALUE:X'), dtype=dtype, device=device)
-error_nux = torch.tensor(epics.caget('H:FREQUENCY:ERROR:X'), dtype=dtype, device=device)
+value_nux = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:VALUE:X'), dtype=dtype, device=device)
+error_nux = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:ERROR:X'), dtype=dtype, device=device)
 
 # Load y frequency data
-value_nuy = torch.tensor(epics.caget('H:FREQUENCY:VALUE:Y'), dtype=dtype, device=device)
-error_nuy = torch.tensor(epics.caget('H:FREQUENCY:ERROR:Y'), dtype=dtype, device=device)
+value_nuy = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:VALUE:Y'), dtype=dtype, device=device)
+error_nuy = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:ERROR:Y'), dtype=dtype, device=device)
 
 # Load x amplitude data
-value_ax = factor*torch.tensor(epics.caget_many([f'H:{name}:AMPLITUDE:VALUE:X' for name in name]), dtype=dtype, device=device)
-error_ax = factor*torch.tensor(epics.caget_many([f'H:{name}:AMPLITUDE:ERROR:X' for name in name]), dtype=dtype, device=device)
+value_ax = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:VALUE:X' for name in name]), dtype=dtype, device=device)
+error_ax = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:X' for name in name]), dtype=dtype, device=device)
 
 # Load y amplitude data
-value_ay = factor*torch.tensor(epics.caget_many([f'H:{name}:AMPLITUDE:VALUE:Y' for name in name]), dtype=dtype, device=device)
-error_ay = factor*torch.tensor(epics.caget_many([f'H:{name}:AMPLITUDE:ERROR:Y' for name in name]), dtype=dtype, device=device)
+value_ay = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:VALUE:Y' for name in name]), dtype=dtype, device=device)
+error_ay = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:Y' for name in name]), dtype=dtype, device=device)
 
 # Load x phase data
-value_fx = torch.tensor(epics.caget_many([f'H:{name}:PHASE:VALUE:X' for name in name]), dtype=dtype, device=device)
-error_fx = torch.tensor(epics.caget_many([f'H:{name}:PHASE:ERROR:X' for name in name]), dtype=dtype, device=device)
+value_fx = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:X' for name in name]), dtype=dtype, device=device)
+error_fx = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:ERROR:X' for name in name]), dtype=dtype, device=device)
 
 # Load y phase data
-value_fy = torch.tensor(epics.caget_many([f'H:{name}:PHASE:VALUE:Y' for name in name]), dtype=dtype, device=device)
-error_fy = torch.tensor(epics.caget_many([f'H:{name}:PHASE:ERROR:Y' for name in name]), dtype=dtype, device=device)
+value_fy = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:Y' for name in name]), dtype=dtype, device=device)
+error_fy = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:ERROR:Y' for name in name]), dtype=dtype, device=device)
 
 # Set model
 model_path = args.model
@@ -150,11 +150,11 @@ if args.plot:
 
 # Save to epics
 if args.update:
-  epics.caput('H:ACTION:LIST:VALUE:X', value_jx)
-  epics.caput('H:ACTION:LIST:ERROR:X', error_jx)
-  epics.caput('H:ACTION:VALUE:X', center_jx)
-  epics.caput('H:ACTION:ERROR:X', spread_jx)
-  epics.caput('H:ACTION:LIST:VALUE:Y', value_jy)
-  epics.caput('H:ACTION:LIST:ERROR:Y', error_jy)
-  epics.caput('H:ACTION:VALUE:Y', center_jy)
-  epics.caput('H:ACTION:ERROR:Y', spread_jy)
+  epics.caput(f'{args.prefix}:ACTION:LIST:VALUE:X', value_jx)
+  epics.caput(f'{args.prefix}:ACTION:LIST:ERROR:X', error_jx)
+  epics.caput(f'{args.prefix}:ACTION:VALUE:X', center_jx)
+  epics.caput(f'{args.prefix}:ACTION:ERROR:X', spread_jx)
+  epics.caput(f'{args.prefix}:ACTION:LIST:VALUE:Y', value_jy)
+  epics.caput(f'{args.prefix}:ACTION:LIST:ERROR:Y', error_jy)
+  epics.caput(f'{args.prefix}:ACTION:VALUE:Y', center_jy)
+  epics.caput(f'{args.prefix}:ACTION:ERROR:Y', spread_jy)

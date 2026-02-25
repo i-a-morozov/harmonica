@@ -53,7 +53,7 @@ parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--advance', action='store_true', help='flag to plot phase advance')
 parser.add_argument('--monotonic', action='store_true', help='flag to plot monotonic phase and integer tune estimate')
 parser.add_argument('--coupled', action='store_true', help='flag to compute coupled phase using opposite-plane frequency')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
@@ -73,13 +73,13 @@ plane = args.plane.upper()
 target = {'X':'Y', 'Y':'X'}[plane] if args.coupled else plane
 
 # Load frequency and frequency error
-value = epics.caget(f'H:FREQUENCY:VALUE:{target}')
-error = epics.caget(f'H:FREQUENCY:ERROR:{target}')
+value = epics.caget(f'{args.prefix}:FREQUENCY:VALUE:{target}')
+error = epics.caget(f'{args.prefix}:FREQUENCY:ERROR:{target}')
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'H:{name}:RISE' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -96,8 +96,8 @@ if not bpm:
 
 # Generate model advance
 if args.advance:
-  total = epics.caget(f'H:TAIL:MODEL:F{target}')
-  model = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{target}' for name in bpm]), dtype=dtype, device=device)
+  total = epics.caget(f'{args.prefix}:TAIL:MODEL:F{target}')
+  model = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:MODEL:F{target}' for name in bpm]), dtype=dtype, device=device)
   model, _ = Decomposition.phase_adjacent(total/(2.0*numpy.pi), model)
   model = model.cpu().numpy()
   name = [*bpm.keys()]
@@ -105,7 +105,7 @@ if args.advance:
   pair.append(f'{name[-1]}-{name[0]}')
 
 # Generate PV names
-pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
+pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length
@@ -234,7 +234,7 @@ if args.plot:
     plot.update_traces(mode='lines+markers', line={'width': 1.5}, marker={'size': 5})
     plot.show(config=config)
   if args.advance:
-    total = epics.caget(f'H:FREQUENCY:VALUE:{target}')
+    total = epics.caget(f'{args.prefix}:FREQUENCY:VALUE:{target}')
     phase, sigma = Decomposition.phase_adjacent(total, value, sigma_phase=error)
     phase = phase.cpu().numpy()
     sigma = sigma.cpu().numpy()
@@ -271,8 +271,8 @@ if args.update and args.coupled:
   exit('error: --update with --coupled is not supported for phase data')
 
 if args.update and not args.coupled:
-  epics.caput_many([f'H:{name}:PHASE:VALUE:{plane}' for name in bpm], value.cpu().numpy())
+  epics.caput_many([f'{args.prefix}:{name}:PHASE:VALUE:{plane}' for name in bpm], value.cpu().numpy())
   if error is not None:
-    epics.caput_many([f'H:{name}:PHASE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
+    epics.caput_many([f'{args.prefix}:{name}:PHASE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
   else:
-    epics.caput_many([f'H:{name}:PHASE:ERROR:{plane}' for name in bpm],  torch.zeros_like(value).cpu().numpy())
+    epics.caput_many([f'{args.prefix}:{name}:PHASE:ERROR:{plane}' for name in bpm],  torch.zeros_like(value).cpu().numpy())

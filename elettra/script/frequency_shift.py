@@ -53,7 +53,7 @@ parser.add_argument('--limit', type=int, help='number of columns to use for nois
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--noise', action='store_true', help='flag to plot noise data')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
@@ -83,9 +83,9 @@ if (f_min, f_max) != (0.0, 0.5) and args.pad != 0:
   exit('error: (f_min, f_max) should be used without padding')
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'H:{name}:RISE' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -101,7 +101,7 @@ if not bpm:
   exit('error: BPM list is empty')
 
 # Generate PV names
-pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
+pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Check length
@@ -278,7 +278,7 @@ if args.save:
 # Save to epics
 if args.update:
   plane = args.plane.upper()
-  epics.caput(f'H:FREQUENCY:VALUE:{plane}', center)
-  epics.caput(f'H:FREQUENCY:ERROR:{plane}', spread)
-  epics.caput_many([f'H:{name}:FREQUENCY:VALUE:{plane}' for name in bpm], signal_center)
-  epics.caput_many([f'H:{name}:FREQUENCY:ERROR:{plane}' for name in bpm], signal_spread)
+  epics.caput(f'{args.prefix}:FREQUENCY:VALUE:{plane}', center)
+  epics.caput(f'{args.prefix}:FREQUENCY:ERROR:{plane}', spread)
+  epics.caput_many([f'{args.prefix}:{name}:FREQUENCY:VALUE:{plane}' for name in bpm], signal_center)
+  epics.caput_many([f'{args.prefix}:{name}:FREQUENCY:ERROR:{plane}' for name in bpm], signal_spread)

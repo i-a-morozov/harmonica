@@ -47,7 +47,7 @@ parser.add_argument('--beta_max', type=float, help='max beta threshold value for
 parser.add_argument('--nufft', action='store_true', help='flag to compute spectum using TYPY-III NUFFT')
 parser.add_argument('--time', choices=('position', 'phase'), help='time type to use with NUFFT', default='phase')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
@@ -71,11 +71,11 @@ if f_max < f_min:
   exit(f'error: {f_max=} should be greater than {f_min=}')
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
-join = epics.caget_many([f'H:{name}:JOIN' for name in name])
-rise = epics.caget_many([f'H:{name}:RISE' for name in name])
-beta = epics.caget_many([f'H:{name}:MODEL:B{args.plane.upper()}' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+join = epics.caget_many([f'{args.prefix}:{name}:JOIN' for name in name])
+rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+beta = epics.caget_many([f'{args.prefix}:{name}:MODEL:B{args.plane.upper()}' for name in name])
 beta = {key: value for key, value in zip(name, beta)}
 
 # Set BPM data
@@ -105,17 +105,17 @@ if not bpm:
   exit('error: BPM list is empty')
 
 # Generate PV names
-pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
+pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
 pv_rise = [*bpm.values()]
 
 # Set BPM positions
 if args.nufft:
   if args.time == 'position':
-    position = epics.caget_many([f'H:{name}:TIME' for name in bpm])
+    position = epics.caget_many([f'{args.prefix}:{name}:TIME' for name in bpm])
     position = numpy.array(position)/LENGTH
   if args.time == 'phase':
-    total = epics.caget(f'H:TAIL:MODEL:F{args.plane.upper()}')
-    position = epics.caget_many([f'H:{name}:MODEL:F{args.plane.upper()}' for name in bpm])
+    total = epics.caget(f'{args.prefix}:TAIL:MODEL:F{args.plane.upper()}')
+    position = epics.caget_many([f'{args.prefix}:{name}:MODEL:F{args.plane.upper()}' for name in bpm])
     position = numpy.array(position)/total
 
 # Check length
@@ -238,5 +238,5 @@ if args.save:
 if args.update:
   plane = args.plane.upper()
   *_, frequency = frequency.T
-  epics.caput(f'H:FREQUENCY:VALUE:{plane}', frequency.mean())
-  epics.caput(f'H:FREQUENCY:ERROR:{plane}', frequency.std())
+  epics.caput(f'{args.prefix}:FREQUENCY:VALUE:{plane}', frequency.mean())
+  epics.caput(f'{args.prefix}:FREQUENCY:ERROR:{plane}', frequency.std())

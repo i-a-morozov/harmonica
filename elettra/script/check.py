@@ -38,7 +38,7 @@ parser.add_argument('-w', '--window', type=float, help='window order', default=0
 parser.add_argument('--factor', type=float, help='threshold factor', default=5.0)
 parser.add_argument('--load', action='store_true', help='flag to load phase from harmonica PVs instead of estimating from TbT data')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
-parser.add_argument('-H', '--harmonica', action='store_true', help='flag to use harmonica PV names for input')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 args = parser.parse_args(args=None if flag else ['--help'])
@@ -56,9 +56,9 @@ if device == 'cuda' and not torch.cuda.is_available():
 plane = args.plane.upper()
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'H:{name}:RISE' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -74,19 +74,19 @@ if not bpm:
   exit('error: BPM list is empty')
 
 # Set model phase
-PHASE = torch.tensor(epics.caget_many([f'H:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
+PHASE = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
 
 # Set tunes
-q = epics.caget(f'H:FREQUENCY:VALUE:{plane}')
-Q = epics.caget(f'H:FREQUENCY:MODEL:{plane}')
+q = epics.caget(f'{args.prefix}:FREQUENCY:VALUE:{plane}')
+Q = epics.caget(f'{args.prefix}:FREQUENCY:MODEL:{plane}')
 
 # Load phase
 if args.load:
-  phase = torch.tensor(epics.caget_many([f'H:{name}:PHASE:VALUE:{plane}' for name in bpm]), dtype=dtype, device=device)
+  phase = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:{plane}' for name in bpm]), dtype=dtype, device=device)
 
 if not args.load:
   # Generate PV names
-  pv_list = [pv_make(name, args.plane, args.harmonica) for name in bpm]
+  pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
   pv_rise = [*bpm.values()]
 
   # Check length

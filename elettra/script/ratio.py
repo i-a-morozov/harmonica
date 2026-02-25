@@ -20,14 +20,15 @@ select.add_argument('--only', metavar='PATTERN', nargs='+', help='space separate
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV ratio data')
+parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
 args = parser.parse_args(args=None if flag else ['--help'])
 
 # Time
 TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
 
 # Load monitor data
-name = epics.caget('H:MONITOR:LIST')[:epics.caget('H:MONITOR:COUNT')]
-flag = epics.caget_many([f'H:{name}:FLAG' for name in name])
+name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
+flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
 
 # Set BPM data
 bpm = {name: None for name, flag in zip(name, flag) if flag == 1}
@@ -46,15 +47,15 @@ if not bpm:
 bpm = [*bpm.keys()]
 
 # Load twiss data from PVs
-bx_a = numpy.array(epics.caget_many([f'H:{name}:AMPLITUDE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
-sx_a = numpy.array(epics.caget_many([f'H:{name}:AMPLITUDE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
-by_a = numpy.array(epics.caget_many([f'H:{name}:AMPLITUDE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
-sy_a = numpy.array(epics.caget_many([f'H:{name}:AMPLITUDE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
+bx_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
+sx_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
+by_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
+sy_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
 
-bx = numpy.array(epics.caget_many([f'H:{name}:PHASE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
-sx = numpy.array(epics.caget_many([f'H:{name}:PHASE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
-by = numpy.array(epics.caget_many([f'H:{name}:PHASE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
-sy = numpy.array(epics.caget_many([f'H:{name}:PHASE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
+bx = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
+sx = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
+by = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
+sy = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
 
 # Load current waveform data and compute per-BPM current mean/spread
 def current_stat(value):
@@ -66,7 +67,7 @@ def current_stat(value):
     return numpy.nan, numpy.nan
   return data.mean(), data.std()
 
-current = epics.caget_many([f'H:{name}:DATA:I' for name in bpm])
+current = epics.caget_many([f'{args.prefix}:{name}:DATA:I' for name in bpm])
 value_i, error_i = zip(*(current_stat(value) for value in current))
 value_i = numpy.array(value_i, dtype=numpy.float64)
 error_i = numpy.array(error_i, dtype=numpy.float64)
@@ -178,7 +179,7 @@ if args.save:
 
 # Save to epics
 if args.update:
-  epics.caput_many([f'H:{name}:RATIO:VALUE:X' for name in bpm], rx)
-  epics.caput_many([f'H:{name}:RATIO:ERROR:X' for name in bpm], sigma_rx)
-  epics.caput_many([f'H:{name}:RATIO:VALUE:Y' for name in bpm], ry)
-  epics.caput_many([f'H:{name}:RATIO:ERROR:Y' for name in bpm], sigma_ry)
+  epics.caput_many([f'{args.prefix}:{name}:RATIO:VALUE:X' for name in bpm], rx)
+  epics.caput_many([f'{args.prefix}:{name}:RATIO:ERROR:X' for name in bpm], sigma_rx)
+  epics.caput_many([f'{args.prefix}:{name}:RATIO:VALUE:Y' for name in bpm], ry)
+  epics.caput_many([f'{args.prefix}:{name}:RATIO:ERROR:Y' for name in bpm], sigma_ry)
