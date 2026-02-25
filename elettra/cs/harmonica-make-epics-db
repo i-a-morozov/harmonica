@@ -1,0 +1,75 @@
+#!/bin/env python
+
+"""
+Generate epics db file
+
+Example:
+  $ harmonica-make-epics-db -c lattice.yaml -o lattice.db
+  $ softIoc -d lattice.db
+
+"""
+
+# Import
+import argparse
+import yaml
+from pathlib import Path
+from harmonica.util import record_make
+
+def main():
+
+  # Parse arguments
+  parser = argparse.ArgumentParser(prog='harmonica-make-epics-db', description='Generate epics db file')
+  parser.add_argument('-c', '--configuration', type=str, help='lattice configuration file', default='lattice.yaml')
+  parser.add_argument('-p', '--prefix', type=str, help='PV prefix string', default='BPM')
+  parser.add_argument('-o', '--output', type=str, help='output file', default='epics.db')
+  args = parser.parse_args()
+
+  # Load configuration
+  with Path(args.configuration).open('r') as stream:
+    try:
+      config = yaml.safe_load(stream)
+    except yaml.YAMLError as exception:
+      exit(exception)
+
+  # Common block
+  common = f'''
+
+    # LOCATION
+    record(waveform, "{args.prefix}:LOCATION:COUNT")         {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{args.prefix}:LOCATION:LIST")          {{field(NELM, "1024") field(FTVL, "STRING")}}
+    record(waveform, "{args.prefix}:MONITOR:COUNT")          {{field(NELM, "1")    field(FTVL, "SHORT")}}
+    record(waveform, "{args.prefix}:MONITOR:LIST")           {{field(NELM, "1024") field(FTVL, "STRING")}}
+
+    # FREQUENCY
+    record(waveform, "{args.prefix}:FREQUENCY:MODEL:X")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:FREQUENCY:MODEL:Y")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:FREQUENCY:VALUE:X")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:FREQUENCY:VALUE:Y")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:FREQUENCY:ERROR:X")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:FREQUENCY:ERROR:Y")      {{field(NELM, "1")    field(FTVL, "DOUBLE")}}
+
+    # ACTION
+    record(waveform, "{args.prefix}:ACTION:LIST:VALUE:X")    {{field(NELM, "1024")  field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:LIST:ERROR:X")    {{field(NELM, "1024")  field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:VALUE:X")         {{field(NELM, "1")     field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:ERROR:X")         {{field(NELM, "1")     field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:LIST:VALUE:Y")    {{field(NELM, "1024")  field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:LIST:ERROR:Y")    {{field(NELM, "1024")  field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:VALUE:Y")         {{field(NELM, "1")     field(FTVL, "DOUBLE")}}
+    record(waveform, "{args.prefix}:ACTION:ERROR:Y")         {{field(NELM, "1")     field(FTVL, "DOUBLE")}}
+
+  '''
+
+  # Generate records
+  records = [record_make(name, prefix=args.prefix) for name in config]
+
+  # Generate file
+  with Path(f'{args.output}').open('w') as stream:
+    stream.write('# Start all PVs (attached to console)\n')
+    stream.write(f'# softIoc -d {args.output}\n')
+    stream.write(common)
+    for record in records:
+      stream.write(record)
+
+if __name__ == '__main__':
+  main()

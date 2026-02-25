@@ -1,0 +1,121 @@
+#!/bin/env python
+
+"""
+Load configuration data from yaml into epics process variables
+Optionally load test TbT data with optional noise
+
+Example:
+  $ harmonica-load-epics-db -c lattice.yaml -tf tbt.json.gz --nosie --sigma_x=0.00001 --sigma_y=0.00001
+
+"""
+
+# Parse arguments
+import argparse
+parser = argparse.ArgumentParser(prog='harmonica-load-epics-db', description='Load data into epics')
+parser.add_argument('-c', '--configuration', type=str, help='configuration file', default='lattice.yaml')
+parser.add_argument('-p', '--prefix', type=str, help='PV prefix string', default='BPM')
+parser.add_argument('-t', '--test', action='store_true', help='flag to load test TbT data')
+parser.add_argument('-f', '--file', type=str, help='data file', default='tbt.json.gz')
+parser.add_argument('-n', '--noise', action='store_true', help='flag to apply noise')
+parser.add_argument('--sigma_x', type=float, help='noise x sigma', default=50.0E-6)
+parser.add_argument('--sigma_y', type=float, help='noise y sigma', default=50.0E-6)
+parser.add_argument('--sigma_i', type=float, help='noise i sigma', default=10.0E-6)
+parser.add_argument('--dispersion', action='store_true', help='flag to load dispersion data')
+args = parser.parse_args()
+
+# Import
+import yaml
+import epics
+import numpy
+import json
+import gzip
+from tqdm import tqdm
+
+def main():
+
+  # Load configuration
+  with open(args.configuration, 'r') as stream:
+    try:
+      config = yaml.safe_load(stream)
+    except yaml.YAMLError as exception:
+      exit(exception)
+
+  # Sort locations by position
+  config = {key: config[key] for key in sorted(config.keys(), key=lambda name: config[name]['TIME'])}
+
+  # Check HEAD & TAIL
+  for name in ['HEAD', 'TAIL']:
+    if name not in config:
+      exit(f'error: {name} location is missing')
+
+  # Load model frequency
+  epics.caput(f'{args.prefix}:FREQUENCY:MODEL:X', config['TAIL']['FX']/(2.0*numpy.pi))
+  epics.caput(f'{args.prefix}:FREQUENCY:MODEL:Y', config['TAIL']['FY']/(2.0*numpy.pi))
+
+  # Load monitor & virtual
+  table = [*config.keys()]
+  epics.caput(f'{args.prefix}:LOCATION:COUNT', len(table))
+  epics.caput(f'{args.prefix}:LOCATION:LIST', table)
+
+  # Load monitor
+  table = [name for name, data in config.items() if data['TYPE'] == 'MONITOR']
+  epics.caput(f'{args.prefix}:MONITOR:COUNT', len(table))
+  epics.caput(f'{args.prefix}:MONITOR:LIST', table)
+
+  # Load test data
+  if args.test:
+    try:
+      if not args.file.endswith('.json.gz'):
+        exit('error: *json.gz input expected')
+      with gzip.open(args.file, 'rt', encoding='utf-8') as stream:
+        result = json.load(stream)
+      frame = {
+        'X': {},
+        'Y': {},
+        'I': {}
+      }
+      for name, data in result.items():
+        frame['X'][name] = numpy.asarray(data['X'], dtype=float)
+        frame['Y'][name] = numpy.asarray(data['Y'], dtype=float)
+        frame['I'][name] = numpy.asarray(data['I'], dtype=float)
+    except FileNotFoundError as exception:
+      exit(exception)
+
+  # Load data for each location
+  for name, data in tqdm(config.items(), unit='record'):
+    epics.caput(f'{args.prefix}:{name}:TYPE', data['TYPE'])
+    epics.caput(f'{args.prefix}:{name}:FLAG', data['FLAG'])
+    epics.caput(f'{args.prefix}:{name}:JOIN', data['JOIN'])
+    epics.caput(f'{args.prefix}:{name}:RISE', data['RISE'])
+    epics.caput(f'{args.prefix}:{name}:TIME', data['TIME'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:BX', data['BX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:AX', data['AX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:FX', data['FX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:BY', data['BY'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:AY', data['AY'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:FY', data['FY'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_BX', data['SIGMA_BX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_AX', data['SIGMA_AX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_FX', data['SIGMA_FX'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_BY', data['SIGMA_BY'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_AY', data['SIGMA_AY'])
+    epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_FY', data['SIGMA_FY'])
+    if args.dispersion:
+      epics.caput(f'{args.prefix}:{name}:MODEL:DX', data['DX'])
+      epics.caput(f'{args.prefix}:{name}:MODEL:DY', data['DY'])
+      epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_DX', data['SIGMA_DX'])
+      epics.caput(f'{args.prefix}:{name}:MODEL:SIGMA_DY', data['SIGMA_DY'])
+    if args.test and name in table:
+      x = frame['X'][name]
+      y = frame['Y'][name]
+      i = frame['I'][name]
+      if args.noise:
+        x += args.sigma_x*numpy.random.randn(*x.shape)
+        y += args.sigma_y*numpy.random.randn(*y.shape)
+        i += args.sigma_i*numpy.random.randn(*i.shape)
+      epics.caput(f'{args.prefix}:{name}:DATA:X', x)
+      epics.caput(f'{args.prefix}:{name}:DATA:Y', y)
+      epics.caput(f'{args.prefix}:{name}:DATA:I', i)
+
+if __name__ == '__main__':
+  main()

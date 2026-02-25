@@ -1,0 +1,200 @@
+#!/bin/env python
+
+"""
+Generate Tango DS configuration files
+
+Output:
+  - bpm.yaml
+  - device.yaml
+  - device.list
+
+Example:
+  $ harmonica-make-tango-ds -c lattice.yaml
+
+"""
+
+from __future__ import annotations
+
+from typing import Any
+from pathlib import Path
+import argparse
+import yaml
+
+
+def load(path: Path) -> dict[str, Any] | list[Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"lattice file not found: {path}")
+    with path.open("r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    if data is None:
+        raise ValueError(f"empty lattice file: {path}")
+    return data
+
+
+def dump(path: Path, data: dict[str, Any]) -> None:
+    with path.open("w", encoding="utf-8") as stream:
+        yaml.safe_dump(data, stream, sort_keys=False)
+
+
+def extract(configuration: dict[str, Any] | list[Any]) -> list[str]:
+    names: list[str] = []
+    if isinstance(configuration, list):
+        for item in configuration:
+            if isinstance(item, str) and item.strip():
+                names.append(item.strip().upper())
+        return names
+    for name, data in configuration.items():
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not isinstance(data, dict):
+            continue
+        names.append(name.strip().upper())
+    return names
+
+
+def scalar_attribute(pv: str, dtype: str, default: Any | None = None) -> dict[str, Any]:
+    template = {
+        "pv": pv,
+        "data_format": "SCALAR",
+        "dtype": dtype
+    }
+    if default is not None:
+        template["default"] = default
+    return template
+
+
+def vector_attribute(pv: str, dtype: str, length: int) -> dict[str, Any]:
+    return {
+        "pv": pv,
+        "data_format": "SPECTRUM",
+        "dtype": dtype,
+        "length": int(length),
+    }
+
+
+def build_local(length: int) -> dict[str, dict[str, Any]]:
+
+    attributes: dict[str, dict[str, Any]] = {
+        "flag"   : scalar_attribute("FLAG",   "DevBoolean", True),
+        "data_x" : vector_attribute("DATA:X", "DevDouble", length),
+        "data_y" : vector_attribute("DATA:Y", "DevDouble", length),
+        "data_i" : vector_attribute("DATA:I", "DevDouble", length),
+        "type"   : scalar_attribute("TYPE",   "DevString"),
+        "join"   : scalar_attribute("JOIN",   "DevShort"),
+        "rise"   : scalar_attribute("RISE",   "DevShort"),
+        "time"   : scalar_attribute("TIME",   "DevDouble")
+    }
+
+    for plane in ("x", "y"):
+        attributes[f"model_b{plane}"] = scalar_attribute(f"MODEL:B{plane.upper()}", "DevDouble")
+        attributes[f"model_a{plane}"] = scalar_attribute(f"MODEL:A{plane.upper()}", "DevDouble")
+        attributes[f"model_f{plane}"] = scalar_attribute(f"MODEL:F{plane.upper()}", "DevDouble")
+        attributes[f"model_d{plane}"] = scalar_attribute(f"MODEL:D{plane.upper()}", "DevDouble")
+        attributes[f"model_sigma_b{plane}"] = scalar_attribute(f"MODEL:SIGMA_B{plane.upper()}", "DevDouble")
+        attributes[f"model_sigma_a{plane}"] = scalar_attribute(f"MODEL:SIGMA_A{plane.upper()}", "DevDouble")
+        attributes[f"model_sigma_f{plane}"] = scalar_attribute(f"MODEL:SIGMA_F{plane.upper()}", "DevDouble")
+        attributes[f"model_sigma_d{plane}"] = scalar_attribute(f"MODEL:SIGMA_D{plane.upper()}", "DevDouble")
+        attributes[f"noise_{plane}"] = scalar_attribute(f"NOISE:{plane.upper()}", "DevDouble")
+        attributes[f"snr_{plane}"] = scalar_attribute(f"SNR:{plane.upper()}", "DevDouble")
+        attributes[f"frequency_value_{plane}"] = scalar_attribute(f"FREQUENCY:VALUE:{plane.upper()}", "DevDouble")
+        attributes[f"frequency_error_{plane}"] = scalar_attribute(f"FREQUENCY:ERROR:{plane.upper()}", "DevDouble")
+        attributes[f"amplitude_value_{plane}"] = scalar_attribute(f"AMPLITUDE:VALUE:{plane.upper()}", "DevDouble")
+        attributes[f"amplitude_error_{plane}"] = scalar_attribute(f"AMPLITUDE:ERROR:{plane.upper()}", "DevDouble")
+        attributes[f"phase_value_{plane}"] = scalar_attribute(f"PHASE:VALUE:{plane.upper()}", "DevDouble")
+        attributes[f"phase_error_{plane}"] = scalar_attribute(f"PHASE:ERROR:{plane.upper()}", "DevDouble")
+        attributes[f"ratio_value_{plane}"] = scalar_attribute(f"RATIO:VALUE:{plane.upper()}", "DevDouble")
+        attributes[f"ratio_error_{plane}"] = scalar_attribute(f"RATIO:ERROR:{plane.upper()}", "DevDouble")
+        attributes[f"amplitude_i{plane}_value"] = scalar_attribute(f"AMPLITUDE:I{plane.upper()}:VALUE", "DevDouble")
+        attributes[f"amplitude_i{plane}_error"] = scalar_attribute(f"AMPLITUDE:I{plane.upper()}:ERROR", "DevDouble")
+        attributes[f"amplitude_b{plane}_value"] = scalar_attribute(f"AMPLITUDE:B{plane.upper()}:VALUE", "DevDouble")
+        attributes[f"amplitude_b{plane}_error"] = scalar_attribute(f"AMPLITUDE:B{plane.upper()}:ERROR", "DevDouble")
+        attributes[f"phase_a{plane}_value"] = scalar_attribute(f"PHASE:A{plane.upper()}:VALUE", "DevDouble")
+        attributes[f"phase_b{plane}_value"] = scalar_attribute(f"PHASE:B{plane.upper()}:VALUE", "DevDouble")
+        attributes[f"phase_a{plane}_error"] = scalar_attribute(f"PHASE:A{plane.upper()}:ERROR", "DevDouble")
+        attributes[f"phase_b{plane}_error"] = scalar_attribute(f"PHASE:B{plane.upper()}:ERROR", "DevDouble")
+
+    attributes["value_dx"] = scalar_attribute("VALUE:DX", "DevDouble")
+    attributes["value_dy"] = scalar_attribute("VALUE:DY", "DevDouble")
+    attributes["error_dx"] = scalar_attribute("ERROR:DX", "DevDouble")
+    attributes["error_dy"] = scalar_attribute("ERROR:DY", "DevDouble")
+    attributes["anomaly"] = scalar_attribute("ANOMALY", "DevShort")
+
+    return attributes
+
+
+def build_global() -> dict[str, dict[str, Any]]:
+
+    attributes: dict[str, dict[str, Any]] = {
+        "location_count": scalar_attribute("LOCATION:COUNT", "DevShort", 0),
+        "location_list" : vector_attribute("LOCATION:LIST",  "DevString", 1024),
+        "monitor_count" : scalar_attribute("MONITOR:COUNT",  "DevShort", 0),
+        "monitor_list"  : vector_attribute("MONITOR:LIST",   "DevString", 1024),
+    }
+
+    for plane in ("x", "y"):
+        attributes[f"frequency_model_{plane}"] = scalar_attribute(f"FREQUENCY:MODEL:{plane.upper()}", "DevDouble", 0.0)
+        attributes[f"frequency_value_{plane}"] = scalar_attribute(f"FREQUENCY:VALUE:{plane.upper()}", "DevDouble", 0.0)
+        attributes[f"frequency_error_{plane}"] = scalar_attribute(f"FREQUENCY:ERROR:{plane.upper()}", "DevDouble", 0.0)
+        attributes[f"action_list_value_{plane}"] = vector_attribute(f"ACTION:LIST:VALUE:{plane.upper()}", "DevDouble", 1024)
+        attributes[f"action_list_error_{plane}"] = vector_attribute(f"ACTION:LIST:ERROR:{plane.upper()}", "DevDouble", 1024)
+        attributes[f"action_value_{plane}"] = scalar_attribute(f"ACTION:VALUE:{plane.upper()}", "DevDouble", 0.0)
+        attributes[f"action_error_{plane}"] = scalar_attribute(f"ACTION:ERROR:{plane.upper()}", "DevDouble", 0.0)
+
+    return attributes
+
+
+def main() -> None:
+
+    parser = argparse.ArgumentParser(prog="harmonica-make-tango-ds", description="Generate tango ds configuration files")
+    
+    parser.add_argument("-c", "--configuration", type=str, default="lattice.yaml", help="lattice configuration file")
+    parser.add_argument("-b", "--bpm", type=str, default="bpm.yaml", help="output bpm yaml")
+    parser.add_argument("-d", "--device", type=str, default="device.yaml", help="output device yaml")
+    parser.add_argument("-l", "--list", type=str, default="device.list", help="output device list")
+    parser.add_argument("--head", type=str, default="bpm", help="tango device head")
+    parser.add_argument("--tail", type=str, default="tbt", help="tango device tail")
+    parser.add_argument("--global-device", type=str, default="bpm/harmonica/global", help="global tango device name")
+    parser.add_argument("--length", type=int, default=8192, help="TbT waveform length")
+    parser.add_argument("--port", type=int, default=12345, help="tango no-db port")
+    parser.add_argument("--url", type=str, default="tango://127.0.0.1:12345/{device}#dbase=no", help="tango URL template")
+    args = parser.parse_args()
+
+    locations = extract(load(Path(args.configuration)))
+    if not locations:
+        raise ValueError("no locations found in lattice configuration")
+
+    bpm_cfg = {
+        "size": len(locations),
+        "length": int(args.length),
+        "list": locations,
+    }
+    dump(Path(args.bpm), bpm_cfg)
+
+    device_entries = []
+    device_list = [args.global_device]
+    for name in locations:
+        device = f"{args.head}/{name.lower()}/{args.tail}"
+        device_entries.append({"bpm": name, "name": device})
+        device_list.append(device)
+
+    device_cfg = {
+        "tango": {
+            "port": int(args.port),
+            "url": args.url,
+            "attrs": build_local(int(args.length)),
+            "global": {
+                "device": args.global_device,
+                "attrs": build_global(),
+            },
+            "devices": device_entries,
+        }
+    }
+    dump(Path(args.device), device_cfg)
+
+    with Path(args.list).open("w", encoding="utf-8") as stream:
+        stream.write("\n".join(device_list))
+        stream.write("\n")
+
+
+if __name__ == "__main__":
+    main()

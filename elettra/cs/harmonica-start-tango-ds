@@ -1,0 +1,254 @@
+#!/usr/bin/env python
+
+"""
+Tango no-DB device server
+
+Example:
+    $ PORT=12345
+    $ LIST=$(paste -sd, device.list)
+    $ harmonica-start-tango-ds TBT -nodb -dlist "${LIST}" -ORBendPoint "giop:tcp:0.0.0.0:${PORT}"
+
+"""
+from __future__ import annotations
+
+from typing import Any
+from typing import Union
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+import numpy
+from numpy.typing import NDArray
+
+import tango
+from tango.server import Device
+from tango.server import attribute
+from tango.server import run
+
+DIR = Path(__file__).resolve().parent
+BPM = DIR / "bpm.yaml"
+DEV = DIR / "device.yaml"
+MAX = 8192
+
+TABLE: dict[str, tuple[type, Any, type]] = {
+    "DevBoolean" : (bool,  numpy.bool_,   bool),
+    "DevDouble"  : (float, numpy.float64, float),
+    "DevFloat"   : (float, numpy.float32, float),
+    "DevShort"   : (int,   numpy.int16,   int),
+    "DevLong"    : (int,   numpy.int32,   int),
+    "DevLong64"  : (int,   numpy.int64,   int),
+    "DevUShort"  : (int,   numpy.uint16,  int),
+    "DevULong"   : (int,   numpy.uint32,  int),
+    "DevULong64" : (int,   numpy.uint64,  int),
+    "DevString"  : (str,   numpy.str_,    str),
+}
+
+
+@dataclass
+class DeviceAttribute:
+    name: str
+    format: str
+    scalar_type: type
+    value_type: Any
+    scalar: type
+    length: int
+    default: Union[bool, int, float, str, NDArray]
+
+
+@dataclass
+class DeviceRegistry:
+    bpm_attributes: dict[str, DeviceAttribute]
+    global_attributes: dict[str, DeviceAttribute]
+    global_devices: set[str]
+    bpm_mapping: dict[str, str]
+
+
+def load(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as stream:
+        return yaml.safe_load(stream) or {}
+
+
+def scalarize(scalar: object, scalar_type: type) -> bool | int | float | str:
+    scalar, *_ = numpy.asarray(scalar).reshape(-1)
+    if scalar_type is bool:
+        return bool(scalar)
+    if scalar_type is int:
+        return int(scalar)
+    if scalar_type is float:
+        return float(scalar)
+    return str(scalar)
+
+
+def normalize(name: str, format: str, scalar_type: type, value_type: Any, length: int, default: Any):
+    if format == "SPECTRUM":
+        if default is None:
+            return numpy.zeros((length, ), dtype=value_type)
+        value = numpy.asarray(default, dtype=value_type).reshape(-1)
+        if value.size > length:
+            raise ValueError(f"default length mismatch for {name}: {value.size} > {length}")
+        return value
+    if default is None:
+        if scalar_type is bool:
+            return name == "flag"
+        if scalar_type is int:
+            return 0
+        if scalar_type is float:
+            return 0.0
+        return ""
+    return scalarize(default, scalar_type)
+
+
+def resolve(spec: DeviceAttribute, value: object) -> Union[bool, int, float, str, NDArray]:
+    if spec.format == "SCALAR":
+        return scalarize(value, spec.scalar_type)
+    value = numpy.asarray(value, dtype=spec.value_type).reshape(-1)
+    if value.size > spec.length:
+        raise ValueError(f"{spec.name} length mismatch: {value.size} > {spec.length}")
+    return value
+
+
+def parse(attributes: dict, bpm_length: int, required: bool) -> dict[str, DeviceAttribute]:
+    result: dict[str, DeviceAttribute] = {}
+    for name, data in attributes.items():
+        kind = str(data.get("dtype", "")).strip()
+        if kind not in TABLE:
+            raise ValueError(f"unsupported dtype {kind!r} for attr {name}")
+        format = str(data.get("data_format", data.get("format", "SCALAR"))).upper()
+        if format not in {"SCALAR", "SPECTRUM"}:
+            raise ValueError(f"unsupported format {format!r} for attr {name}")
+        scalar_type, value_type, scalar = TABLE[kind]
+        length = int(data.get("length", 1))
+        if format == "SPECTRUM":
+            if name in {"data_x", "data_y", "data_i"} and length <= 0:
+                length = bpm_length
+            if length <= 0 or length > MAX:
+                raise ValueError(f"invalid length for {name}: {length}")
+        else:
+            length = 1
+        result[name] = DeviceAttribute(
+            name=name,
+            format=format,
+            scalar_type=scalar_type,
+            value_type=value_type,
+            scalar=scalar,
+            length=length,
+            default=normalize(name, format, scalar_type, value_type, length, data.get("default")),
+        )
+    if required:
+        for name in ("flag", "data_x", "data_y", "data_i"):
+            if name not in result:
+                raise ValueError(f"missing required attribute: {name}")
+        for name in ("data_x", "data_y", "data_i"):
+            if result[name].format != "SPECTRUM":
+                raise ValueError(f"{name} must be SPECTRUM")
+            if result[name].length != bpm_length:
+                raise ValueError(f"{name} length mismatch: {result[name].length} != {bpm_length}")
+    return result
+
+
+def build() -> DeviceRegistry:
+    cfg_bpm = load(BPM)
+    cfg_dev = load(DEV).get("tango", {})
+    cfg_global = cfg_dev.get("global", {})
+    bpm_list = [str(name).strip().upper() for name in cfg_bpm.get("list", [])]
+    if not bpm_list:
+        raise ValueError(f"bpm list is empty in {BPM}")
+    bpm_length = int(cfg_bpm.get("length", 0))
+    if bpm_length <= 0 or bpm_length > MAX:
+        raise ValueError(f"invalid bpm length in {BPM}: {bpm_length}")
+    bpm_attributes = parse(cfg_dev.get("attrs", {}), bpm_length, required=True)    
+    global_attributes = parse(cfg_global.get("attrs", {}), bpm_length, required=False) if cfg_global.get("attrs") else {}
+    global_devices: set[str] = set()
+    device = str(cfg_global.get("device", "")).strip().lower()
+    if device:
+        global_devices.add(device)
+    for item in cfg_global.get("devices", []):
+        if isinstance(item, str):
+            global_devices.add(item.strip().lower())
+        elif isinstance(item, dict):
+            name = str(item.get("name", "")).strip().lower()
+            if name:
+                global_devices.add(name)
+    bpm_mapping: dict[str, str] = {}
+    for item in cfg_dev.get("devices", []):
+        bpm = str(item.get("bpm", "")).strip().upper()
+        name = str(item.get("name", "")).strip().lower()
+        if bpm and name:
+            bpm_mapping[name] = bpm
+    if not bpm_mapping:
+        for bpm in bpm_list:
+            bpm_mapping[f"bpm/{bpm.lower()}/tbt"] = bpm
+    return DeviceRegistry(
+        bpm_attributes=bpm_attributes,
+        global_attributes=global_attributes,
+        global_devices=global_devices,
+        bpm_mapping=bpm_mapping
+    )
+
+
+def factory(registry: DeviceRegistry):
+    class TbT(Device):
+
+        def _read_dynamic_attribute(self, attr) -> None:
+            attr.set_value(self._values[attr.get_name()])
+
+
+        def _write_dynamic_attribute(self, attr) -> None:
+            name = attr.get_name()
+            self._values[name] = resolve(self._attrs[name], attr.get_write_value())
+
+
+        def _add_dynamic_attribute(self, specification: DeviceAttribute) -> None:
+            kwargs = {
+                "name": specification.name, 
+                "access": tango.AttrWriteType.READ_WRITE
+            }
+            if specification.format == "SPECTRUM":
+                kwargs["dtype"] = (specification.scalar, )
+                kwargs["max_dim_x"] = specification.length
+            else:
+                kwargs["dtype"] = specification.scalar
+            self.add_attribute(
+                attribute(**kwargs),
+                r_meth=self._read_dynamic_attribute,
+                w_meth=self._write_dynamic_attribute
+            )
+
+
+        def init_device(self) -> None:
+            super().init_device()
+            device_name = self.get_name()
+            key = device_name.lower()
+            bpm = registry.bpm_mapping.get(key)
+            if bpm is not None:
+                self._kind = "bpm"
+                self._entity = bpm
+                self._attrs = registry.bpm_attributes
+            elif key in registry.global_devices:
+                self._kind = "global"
+                self._entity = device_name
+                self._attrs = registry.global_attributes
+            else:
+                raise ValueError(f"device {device_name} is not declared in {DEV}")
+            self._values = {}
+            if not hasattr(self, "_dynamic_added"):
+                self._dynamic_added = set()
+            for name, spec in self._attrs.items():
+                self._values[name] = resolve(spec, spec.default)
+                if name not in self._dynamic_added:
+                    self._add_dynamic_attribute(spec)
+                    self._dynamic_added.add(name)
+            self.set_state(tango.DevState.ON)
+            self.set_status(f"ready. kind={self._kind}, id={self._entity}, attrs={len(self._attrs)}")
+            
+    return TbT
+
+
+def main() -> None:
+    registry = build()
+    run([factory(registry)])
+
+
+if __name__ == "__main__":
+    main()

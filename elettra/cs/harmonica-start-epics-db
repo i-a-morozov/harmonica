@@ -1,0 +1,2 @@
+#!/bin/env bash
+softIoc -d  $1

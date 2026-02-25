@@ -1,0 +1,186 @@
+#!/usr/bin/env python
+
+"""
+Load configuration data from yaml into tango device attributes
+Optionally load test TbT data with optional noise
+
+Example:
+  $ harmonica-load-tango-ds -c lattice.yaml -d device.yaml -tf tbt.json.gz -n --sigma_x=0.00001 --sigma_y=0.00001
+
+"""
+
+from __future__ import annotations
+
+from typing import Any
+from pathlib import Path
+import argparse
+import gzip
+import json
+import numpy
+import tango
+import yaml
+from tqdm import tqdm
+
+
+def parse() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="harmonica-load-tango-ds", description="Load data into tango")
+    parser.add_argument("-c", "--configuration", type=str, help="configuration file", default="lattice.yaml")
+    parser.add_argument("-d", "--device", type=str, help="tango device config file", default="device.yaml")
+    parser.add_argument("--url", type=str, help="tango URL template", default=None)
+    parser.add_argument("--global", dest="global_device", type=str, help="global tango device name", default=None)
+    parser.add_argument("-t", "--test", action="store_true", help="flag to load test TbT data")
+    parser.add_argument("-f", "--file", type=str, help="data file", default="tbt.json.gz")
+    parser.add_argument("-n", "--noise", action="store_true", help="flag to apply noise")
+    parser.add_argument("--sigma_x", type=float, help="noise x sigma", default=50.0E-6)
+    parser.add_argument("--sigma_y", type=float, help="noise y sigma", default=50.0E-6)
+    parser.add_argument("--sigma_i", type=float, help="noise i sigma", default=10.0E-6)
+    parser.add_argument("--dispersion", action="store_true", help="flag to load dispersion data")
+    return parser.parse_args()
+
+
+def load(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    return data
+
+
+def load_lattice(path: Path) -> dict[str, dict[str, Any]]:
+    config = load(path)
+    config = {key: config[key] for key in sorted(config.keys(), key=lambda name: config[name]["TIME"])}
+    for name in ("HEAD", "TAIL"):
+        if name not in config:
+            raise ValueError(f"{name} location is missing")
+    return config
+
+
+def load_device(path: Path) -> tuple[str, str, dict[str, str]]:
+    root = load(path)
+    tango = root.get("tango", {})
+    if not isinstance(tango, dict):
+        raise ValueError(f"invalid tango section: {path}")
+    url = str(tango.get("url", "")).strip()
+    if not url:
+        raise ValueError("empty tango url")
+    config = tango.get("global", {})
+    device = ""
+    if isinstance(config, dict):
+        device = str(config.get("device", "")).strip().lower()
+    mapping: dict[str, str] = {}
+    for item in tango.get("devices", []):
+        if not isinstance(item, dict):
+            continue
+        bpm = str(item.get("bpm", "")).strip().upper()
+        device_name = str(item.get("name", "")).strip().lower()
+        if bpm and device_name:
+            mapping[bpm] = device_name
+    return url, device, mapping
+
+
+def load_frame(path: Path) -> dict[str, dict[str, numpy.ndarray]]:
+    if not str(path).endswith(".json.gz"):
+        raise ValueError("*.json.gz input expected")
+    with gzip.open(path, "rt", encoding="utf-8") as stream:
+        result = json.load(stream)
+    frame = {
+    'X': {},
+    'Y': {},
+    'I': {}
+    }
+    for name, data in result.items():
+        if not isinstance(data, dict):
+            continue
+        key = str(name).strip().upper()
+        frame["X"][key] = numpy.asarray(data["X"], dtype=float)
+        frame["Y"][key] = numpy.asarray(data["Y"], dtype=float)
+        frame["I"][key] = numpy.asarray(data["I"], dtype=float)
+    return frame
+
+
+def write(proxy: tango.DeviceProxy, attribute: str, value: Any) -> None:
+    proxy.write_attribute(attribute, value)
+
+
+def main() -> None:
+    args = parse()
+
+    config = load_lattice(Path(args.configuration))
+
+    url, device, mapping = load_device(Path(args.device))
+
+    if args.url:
+        url = args.url
+
+    if args.global_device:
+        device = str(args.global_device).strip().lower()
+
+    if not device:
+        raise ValueError("global device is not configured")
+
+    def resolve(name: str) -> str:
+        return mapping.get(name, f"bpm/{name.lower()}/tbt")
+
+    proxies: dict[str, tango.DeviceProxy] = {}
+
+    def proxy(device: str) -> tango.DeviceProxy:
+        link = url.format(device=device)
+        if link not in proxies:
+            proxies[link] = tango.DeviceProxy(link)
+        return proxies[link]
+
+    table = [*config.keys()]
+    tail = config["TAIL"]
+
+    gp = proxy(device)
+    write(gp, "frequency_model_x", float(tail["FX"]) / (2.0 * numpy.pi))
+    write(gp, "frequency_model_y", float(tail["FY"]) / (2.0 * numpy.pi))
+    write(gp, "location_count", len(table))
+    write(gp, "location_list", table)
+
+    table = [name for name, data in config.items() if data.get("TYPE") == "MONITOR"]
+    write(gp, "monitor_count", len(table))
+    write(gp, "monitor_list", table)
+
+    frame_data = None
+    if args.test:
+        frame_data = load_frame(Path(args.file))
+
+    for name, data in tqdm(config.items(), unit="record"):
+        lp = proxy(resolve(name))
+        write(lp, "type", data["TYPE"])
+        write(lp, "flag", data["FLAG"])
+        write(lp, "join", data["JOIN"])
+        write(lp, "rise", data["RISE"])
+        write(lp, "time", data["TIME"])
+        write(lp, "model_bx", data["BX"])
+        write(lp, "model_ax", data["AX"])
+        write(lp, "model_fx", data["FX"])
+        write(lp, "model_by", data["BY"])
+        write(lp, "model_ay", data["AY"])
+        write(lp, "model_fy", data["FY"])
+        write(lp, "model_sigma_bx", data["SIGMA_BX"])
+        write(lp, "model_sigma_ax", data["SIGMA_AX"])
+        write(lp, "model_sigma_fx", data["SIGMA_FX"])
+        write(lp, "model_sigma_by", data["SIGMA_BY"])
+        write(lp, "model_sigma_ay", data["SIGMA_AY"])
+        write(lp, "model_sigma_fy", data["SIGMA_FY"])
+        if args.dispersion:
+            write(lp, "model_dx", data["DX"])
+            write(lp, "model_dy", data["DY"])
+            write(lp, "model_sigma_dx", data["SIGMA_DX"])
+            write(lp, "model_sigma_dy", data["SIGMA_DY"])
+        if args.test and name in table:
+            assert frame_data is not None
+            x = frame_data["X"][name].copy()
+            y = frame_data["Y"][name].copy()
+            i = frame_data["I"][name].copy()
+            if args.noise:
+                x += args.sigma_x * numpy.random.randn(*x.shape)
+                y += args.sigma_y * numpy.random.randn(*y.shape)
+                i += args.sigma_i * numpy.random.randn(*i.shape)
+            write(lp, "data_x", x)
+            write(lp, "data_y", y)
+            write(lp, "data_i", i)
+
+
+if __name__ == "__main__":
+    main()
