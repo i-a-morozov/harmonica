@@ -14,7 +14,7 @@ dependencies = [
     "botorch",
     "gpytorch",
     "joblib",
-    "nufft@git+https://github.com/i-a-morozov/nufft#egg=main",
+    "nufft@git+https://github.com/i-a-morozov/nufft#egg=main", 
     "numpy",
     "pandas",
     "pyepics",
@@ -26,17 +26,17 @@ dependencies = [
     "torch"
 ]
 
-[project.optional-dependencies]
-script = [
-    "jupyterlab",
-    "plotly"
-]
-
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+script = [
+    "jupyterlab",
+    "plotly"
 ]
 
 [tool.setuptools.packages.find]
