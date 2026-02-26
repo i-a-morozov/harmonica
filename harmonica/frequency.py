@@ -6,6 +6,8 @@ Compute amplitude spectrum and frequency estimation for joined data (frequency o
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy
 import torch
 import nufft
@@ -759,7 +761,7 @@ class Frequency():
                                  name:str='cosine_window',
                                  order:float=1.0,
                                  normalize:bool=True,
-                                 position:list=None,
+                                 position:Optional[list]=None,
                                  **kwargs) -> torch.Tensor:
         """
         Estimate frequency using joined data and given parameters.
