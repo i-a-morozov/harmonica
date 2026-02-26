@@ -934,7 +934,7 @@ class Twiss():
                      value:dict={'use': True, 'threshold': 00.25},
                      sigma:dict={'use': True, 'threshold': 00.25},
                      limit:dict={'use': True, 'threshold': 05.00}, 
-                     error:dict={'use': True, 'threshold': 05.00}) -> dict:
+                     error:dict={'use': True, 'threshold': 05.00}) -> torch.Tensor:
         """
         Filter twiss for given data plane and cleaning options.
 
@@ -1118,7 +1118,7 @@ class Twiss():
                       plane:str='x',
                       *,
                       weight:bool=True,
-                      mask:torch.Tensor=None) -> dict:
+                      mask:Optional[torch.Tensor]=None) -> dict:
         """
         Process uncoupled twiss data.
 

@@ -339,13 +339,11 @@ class Model():
 
             self.name = [*self.data_frame.columns]
             self.kind = [*self.data_frame.loc['TYPE'].values]
-            self.flag = [flag if kind == self._monitor else 0 for flag, kind in zip([*self.data_frame.loc['FLAG'].values], self.kind)]
             self.join = [*self.data_frame.loc['JOIN'].values]
             self.rise = [*self.data_frame.loc['RISE'].values]
-            self.time = [*self.data_frame.loc['TIME'].values]
 
-            self.flag = torch.tensor(self.flag, dtype=torch.int64, device=self.device)
-            self.time = torch.tensor(self.time, dtype=self.dtype, device=self.device)
+            self.flag = torch.tensor([flag if kind == self._monitor else 0 for flag, kind in zip([*self.data_frame.loc['FLAG'].values], self.kind)], dtype=torch.int64, device=self.device)
+            self.time = torch.tensor([*self.data_frame.loc['TIME'].values], dtype=self.dtype, device=self.device)
             *_, self.length = self.time
 
             self.monitor_index = [index for index, kind in enumerate(self.kind) if kind == self._monitor]
