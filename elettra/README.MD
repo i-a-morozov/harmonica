@@ -1,23 +1,17 @@
 Testing scripts locally:
 
-1. Install `harmonica` (for example, editable installation):
+1. Install `harmonica` (use a new virtual environment):
 
 ```bash
-$ pip install -e .
+$ conda create -n hs python=3.12 -c conda-forge --override-channels -y
+$ conda activate hs
+$ git clone https://github.com/i-a-morozov/harmonica.git
+$ cd harmonica
+$ pip install -e ".[script]"
 ```
 
-2. Launch a "fake" EPICS server in a separate terminal (requires `epics-base`):
+2. Navigate to `harmonica/elettra/script` and start `jupyter lab`.
 
-```bash
-$ cd elettra && softIoc -d harmonica.db
-```
+3. Follow instructions for setting up a fake EPICS or Tango environment.
 
-3. Load data into EPICS:
-```bash
-$ ./load.py -tn --sx=0.000025 --sy=0.000025 -f reference.pkl.gz
-```
-
-- `reference.pkl.gz` contains TbT data for lattice without errors
-- `tbt.pkl.gz` contains TbT data for lattice with errors (around 10-20% rms beta beating)
-
-4. Navigate to the `script` directory and open `test.ipynb`, or execute scripts separately.
+4. Run scripts directly in the directory or from `jupyter lab`.
