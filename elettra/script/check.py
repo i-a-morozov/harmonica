@@ -3,18 +3,18 @@
 # Import
 import sys
 import argparse
-import epics
-import pandas
+import numpy
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 from harmonica.decomposition import Decomposition
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='check', description='Check phase synchronization for selected BPMs and plane.')
@@ -39,12 +39,17 @@ parser.add_argument('--factor', type=float, help='threshold factor', default=5.0
 parser.add_argument('--load', action='store_true', help='flag to load phase from harmonica PVs instead of estimating from TbT data')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
@@ -52,13 +57,16 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+
 # Set data plane
 plane = args.plane.upper()
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -73,21 +81,31 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Set model phase
-PHASE = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:MODEL:F{plane}' for name in bpm]), dtype=dtype)
+PHASE = torch.tensor([cs.get(f'{args.prefix}:{name}:MODEL:F{plane}') for name in bpm], dtype=dtype, device=device)
 
 # Set tunes
-q = epics.caget(f'{args.prefix}:FREQUENCY:VALUE:{plane}')
-Q = epics.caget(f'{args.prefix}:FREQUENCY:MODEL:{plane}')
+q = cs.get(f'{args.prefix}:FREQUENCY:VALUE:{plane}')
+Q = cs.get(f'{args.prefix}:FREQUENCY:MODEL:{plane}')
 
 # Load phase
 if args.load:
-  phase = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:{plane}' for name in bpm]), dtype=dtype, device=device)
+  phase = torch.tensor([cs.get(f'{args.prefix}:{name}:PHASE:VALUE:{plane}') for name in bpm], dtype=dtype, device=device)
 
 if not args.load:
   # Generate PV names
-  pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+  prefix = args.prefix if not args.data else args.data
+  pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
   pv_rise = [*bpm.values()]
+  if args.verbose:
+    print('PV list:')
+    for pv in pv_list:
+      print(pv)
 
   # Check length
   length = args.length
@@ -102,25 +120,32 @@ if not args.load:
     exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
   # Check rise
+  shift = 0
   if args.rise:
-    rise = min(pv_rise)
-    if rise < 0:
+    shift = min(pv_rise)
+    if shift < 0:
       exit('error: rise values are expected to be positive')
-    rise = max(pv_rise)
-    if length + offset + rise > LIMIT:
-      exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-  else:
-    rise = 0
+    shift = max(pv_rise)
+    if length + offset + shift > LIMIT:
+      exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
   # Check window order
   if args.window < 0.0:
     exit(f'error: window order {args.window} should be greater or equal to zero')
 
   # Load TbT data
-  size = len(bpm)
-  count = length + offset + rise
+  count = length + offset + shift
   win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
-  tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+  matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+  data = torch.tensor(matrix, dtype=dtype, device=device)
+  data = torch.stack([signal[:count] for signal in data])
+  if args.rise:
+    data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+  else:
+    data = data[:, offset : offset + length]
+  tbt = Data.from_data(win, data)
+  if args.verbose:
+    print(f'TbT: {tbt}')
 
   # Remove mean
   if args.mean:
@@ -148,6 +173,9 @@ if not args.load:
   # Estimate phase
   dec = Decomposition(tbt)
   phase, _, _ = dec.harmonic_phase(q, length=args.length, order=args.window, factor=args.factor)
+  output = tbt.to_numpy()
+else:
+  output = phase.cpu().numpy()
 
 # Check
 check, table = Decomposition.phase_check(q, Q, phase, PHASE, factor=args.factor)
@@ -160,11 +188,13 @@ for marked in check:
 
 # Plot
 if args.plot:
+  from pandas import DataFrame
+  from pandas import concat
   from plotly.express import scatter
-  flag = [-1 if key not in check else check[key][0]/2 - 1 for key in range(len(bpm))]
-  df = pandas.DataFrame()
-  for case, data in zip(['PHASE', 'MODEL', 'CHECK', 'FLAG'], [table['phase'], table['model'], table['check'], flag]):
-      df = pandas.concat([df, pandas.DataFrame({'CASE':case, 'BPM':range(len(bpm)), 'ADVANCE':data})])
+  mark = [-1 if key not in check else check[key][0]/2 - 1 for key in range(len(bpm))]
+  df = DataFrame()
+  for case, data in zip(['PHASE', 'MODEL', 'CHECK', 'FLAG'], [table['phase'], table['model'], table['check'], mark]):
+      df = concat([df, DataFrame({'CASE':case, 'BPM':range(len(bpm)), 'ADVANCE':data})])
   plot = scatter(df, x='BPM', y='ADVANCE', color='CASE', title=f'{TIME}: ADVANCE ({plane})', opacity=0.75, color_discrete_sequence = ['red', 'green', 'blue', 'black'])
   plot.update_layout(xaxis = dict(tickmode = 'array', tickvals = list(range(len(bpm))), ticktext = list(bpm.keys())))
   plot.update_traces(marker={'size': 10})

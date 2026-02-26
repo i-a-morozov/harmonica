@@ -3,12 +3,11 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.statistics import weighted_mean, weighted_variance
 from harmonica.statistics import median, biweight_midvariance, standardize
 from harmonica.anomaly import threshold
@@ -18,7 +17,7 @@ from harmonica.filter import Filter
 from harmonica.frequency import Frequency
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='frequency', description='Save/plot frequency data for selected BPMs and plane.')
@@ -51,19 +50,27 @@ parser.add_argument('--limit', type=int, help='number of columns to use for nois
 parser.add_argument('--flip', action='store_true', help='flag to flip frequency around 1/2')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
 device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
+
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
 
 # Check and set frequency range & padding
 f_min = args.f_min
@@ -80,9 +87,9 @@ if (f_min, f_max) != (0.0, 0.5) and args.pad != 0:
   exit('error: (f_min, f_max) should be used without padding')
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -97,9 +104,19 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Check length
 length = args.length
@@ -114,25 +131,32 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Check window order
 if args.window < 0.0:
   exit(f'error: window order {args.window} should be greater or equal to zero')
 
 # Load TbT data
-size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -195,47 +219,49 @@ if args.process == 'noise':
   spread = weighted_variance(f.frequency, weight=weight, center=center).sqrt()
 
 # Convert to numpy
-frequency = f.frequency.cpu().numpy()
-center = center.cpu().numpy()
-spread = spread.cpu().numpy()
+output = f.frequency.cpu().numpy()
+center_numpy = center.cpu().numpy()
+spread_numpy = spread.cpu().numpy()
 
 # Flip
 if args.flip:
-  frequency = 1.0 - frequency
-  center = 1.0 - center
+  output = 1.0 - output
+  center_numpy = 1.0 - center_numpy
 
 # Plot
 if args.plot:
-  mask = mask.to(torch.bool).logical_not().cpu().numpy()
-  df = pandas.DataFrame()
-  df['BPM'] = [*bpm.keys()]
-  df['FREQUENCY'] = frequency
-  df['WEIGHT'] = (~mask).astype(numpy.float64) if args.process == 'none' else weight.cpu().numpy()
+  from pandas import DataFrame
   from plotly.express import scatter
-  title = f'{TIME}: FREQUENCY ({frequency.mean():12.9}, {frequency.std():12.9})<br>CENTER: {center:12.9}, SPREAD: {spread:12.9}'
+  mask_numpy = mask.to(torch.bool).logical_not().cpu().numpy()
+  df = DataFrame()
+  df['BPM'] = [*bpm.keys()]
+  df['FREQUENCY'] = output
+  df['WEIGHT'] = (~mask_numpy).astype(numpy.float64) if args.process == 'none' else weight.cpu().numpy()
+  title = f'{TIME}: FREQUENCY ({output.mean():12.9}, {output.std():12.9})<br>CENTER: {center_numpy:12.9}, SPREAD: {spread_numpy:12.9}'
   plot = scatter(df, x='BPM', y='FREQUENCY', title=title, opacity=0.75, marginal_y='box', color_discrete_sequence = ['blue'],  hover_data=['BPM', 'FREQUENCY', 'WEIGHT'], symbol_sequence=['circle'])
-  plot.add_hline(center - spread, line_color='black', line_dash="dash", line_width=1.0)
-  plot.add_hline(center, line_color='black', line_dash="dash", line_width=1.0)
-  plot.add_hline(center + spread, line_color='black', line_dash="dash", line_width=1.0)
+  plot.add_hline(center_numpy - spread_numpy, line_color='black', line_dash="dash", line_width=1.0)
+  plot.add_hline(center_numpy, line_color='black', line_dash="dash", line_width=1.0)
+  plot.add_hline(center_numpy + spread_numpy, line_color='black', line_dash="dash", line_width=1.0)
   plot.update_traces(marker={'size': 10})
-  if mask.sum() != 0:
-    mask = pandas.DataFrame({'BPM':df.BPM[mask], 'FREQUENCY':df.FREQUENCY[mask], 'WEIGHT':df.WEIGHT[mask]})
-    mask = scatter(mask, x='BPM', y='FREQUENCY', color_discrete_sequence = ['red'], hover_data=['BPM', 'FREQUENCY', 'WEIGHT'], symbol_sequence=['circle'])
-    mask.update_traces(marker={'size': 10})
-    mask, *_ = mask.data
-    plot.add_trace(mask)
+  if mask_numpy.sum() != 0:
+    df = DataFrame({'BPM':df.BPM[mask_numpy], 'FREQUENCY':df.FREQUENCY[mask_numpy], 'WEIGHT':df.WEIGHT[mask_numpy]})
+    trace = scatter(df, x='BPM', y='FREQUENCY', color_discrete_sequence = ['red'], hover_data=['BPM', 'FREQUENCY', 'WEIGHT'], symbol_sequence=['circle'])
+    trace.update_traces(marker={'size': 10})
+    flags, *_ = trace.data
+    plot.add_trace(flags)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Save to file
 if args.save:
-  filename = f'frequency_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, frequency)
+  filename = f'frequency_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
+  numpy.save(filename, output)
 
-# Save to epics
+# Save to cs
 if args.update:
   plane = args.plane.upper()
-  epics.caput(f'{args.prefix}:FREQUENCY:VALUE:{plane}', center)
-  epics.caput(f'{args.prefix}:FREQUENCY:ERROR:{plane}', spread)
-  epics.caput_many([f'{args.prefix}:{name}:FREQUENCY:VALUE:{plane}' for name in bpm], frequency)
-  epics.caput_many([f'{args.prefix}:{name}:FREQUENCY:ERROR:{plane}' for name in bpm], numpy.zeros(frequency.shape))
+  cs.set(f'{args.prefix}:FREQUENCY:VALUE:{plane}', center_numpy)
+  cs.set(f'{args.prefix}:FREQUENCY:ERROR:{plane}', spread_numpy)
+  for name, frequency in zip(bpm, output):
+    cs.set(f'{args.prefix}:{name}:FREQUENCY:VALUE:{plane}', frequency)
+    cs.set(f'{args.prefix}:{name}:FREQUENCY:ERROR:{plane}', 0.0)

@@ -3,19 +3,18 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
-from harmonica.util import LIMIT, LENGTH, pv_make, bpm_select
+from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 from harmonica.frequency import Frequency
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='spectrum_all', description='Compute/plot joined spectrum for selected BPMs and plane.')
@@ -45,18 +44,30 @@ parser.add_argument('--time', choices=('position', 'phase'), help='time type to 
 parser.add_argument('--log', action='store_true', help='flag to apply log10 to joined spectrum')
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+parser.add_argument('--circumference', type=float, help='lattice circumference', default=259.2)
+args = parser.parse_args(args=None if last else ['--help'])
+
+# Length
+LENGTH = args.circumference
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
 device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
+
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
 
 # Check and set joined frequency range
 if (args.f_min is None) ^ (args.f_max is None):
@@ -68,12 +79,11 @@ if args.f_max is not None and args.f_max < args.f_min:
 f_range = (None, None) if args.f_min is None else (args.f_min, args.f_max)
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-join = epics.caget_many([f'{args.prefix}:{name}:JOIN' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
-beta = epics.caget_many([f'{args.prefix}:{name}:MODEL:B{args.plane.upper()}' for name in name])
-beta = {key: value for key, value in zip(name, beta)}
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+join = numpy.asarray([cs.get(f'{args.prefix}:{name}:JOIN') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
+beta = {key: value for key, value in zip(name, numpy.asarray([cs.get(f'{args.prefix}:{name}:MODEL:B{args.plane.upper()}') for name in name]))}
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise, join in zip(name, flag, rise, join) if flag == 1 and join == 1}
@@ -101,18 +111,27 @@ for name in bpm.copy():
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Set BPM positions
 if args.nufft:
   if args.time == 'position':
-    position = epics.caget_many([f'{args.prefix}:{name}:TIME' for name in bpm])
-    position = numpy.array(position)/LENGTH
+    position = numpy.asarray([cs.get(f'{args.prefix}:{name}:TIME') for name in bpm])/LENGTH
   if args.time == 'phase':
-    total = epics.caget(f'{args.prefix}:TAIL:MODEL:F{args.plane.upper()}')
-    position = epics.caget_many([f'{args.prefix}:{name}:MODEL:F{args.plane.upper()}' for name in bpm])
+    total = cs.get(f'{args.prefix}:TAIL:MODEL:F{args.plane.upper()}')
+    position = [cs.get(f'{args.prefix}:{name}:MODEL:F{args.plane.upper()}') for name in bpm]
     position = numpy.array(position)/total
 else:
   position = None
@@ -130,25 +149,32 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Check window order
 if args.window < 0.0:
   exit(f'error: window order {args.window} should be greater or equal to zero')
 
 # Load TbT data
-size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -175,7 +201,7 @@ if args.filter == 'hankel':
 
 # Compute joined spectrum
 f = Frequency(tbt)
-grid, spectrum = f.compute_joined_spectrum(
+grid, output = f.compute_joined_spectrum(
   length=args.length,
   f_range=f_range,
   name='cosine_window',
@@ -186,13 +212,14 @@ grid, spectrum = f.compute_joined_spectrum(
 
 # Convert to numpy
 grid = grid.cpu().numpy()
-spectrum = spectrum.cpu().numpy()
+output = output.cpu().numpy()
 
 # Plot
 if args.plot:
-  df = pandas.DataFrame({'FREQUENCY': grid, f'DTFT({args.plane.upper()})': spectrum})
+  from pandas import DataFrame
   from plotly.express import line
-  title = f'{TIME}: JOINED SPECTRUM<br>LENGTH: {args.length}, BPM: {len(bpm)}'
+  df = DataFrame({'FREQUENCY': grid, f'DTFT({args.plane.upper()})': output})
+  title = f'{TIME}: COMBINED SPECTRUM<br>LENGTH: {args.length}, BPM: {len(bpm)}'
   plot = line(df, x='FREQUENCY', y=f'DTFT({args.plane.upper()})', title=title)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)

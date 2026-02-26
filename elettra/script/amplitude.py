@@ -3,12 +3,11 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
@@ -16,13 +15,13 @@ from harmonica.frequency import Frequency
 from harmonica.decomposition import Decomposition
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='amplitude', description='Estimate amplitude for selected BPMs and plane.')
 parser.add_argument('-p', '--plane', choices=('x', 'y'), help='data plane', default='x')
-parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=128)
-parser.add_argument('--load', type=int, help='total number of turns to load', default=256)
+parser.add_argument('-l', '--length', type=int, help='number of turns to use', default=32)
+parser.add_argument('--load', type=int, help='total number of turns to load', default=64)
 select = parser.add_mutually_exclusive_group()
 select.add_argument('--skip', metavar='PATTERN', nargs='+', help='space separated regex patterns for BPM names to skip')
 select.add_argument('--only', metavar='PATTERN', nargs='+', help='space separated regex patterns for BPM names to use')
@@ -53,13 +52,18 @@ parser.add_argument('--snr', action='store_true', help='flag to compute signal-t
 parser.add_argument('--lg', action='store_true', help='flag to compute SNR in dB: 20*log10(A/sigma)')
 parser.add_argument('--coupled', action='store_true', help='flag to compute coupled amplitude using opposite-plane frequency')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
@@ -67,18 +71,21 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+
 # Set data plane
 plane = args.plane.upper()
 target = {'X':'Y', 'Y':'X'}[plane] if args.coupled else plane
 
 # Load frequency and frequency error
-value = epics.caget(f'{args.prefix}:FREQUENCY:VALUE:{target}')
-error = epics.caget(f'{args.prefix}:FREQUENCY:ERROR:{target}')
+frequency_value = cs.get(f'{args.prefix}:FREQUENCY:VALUE:{target}')
+frequency_error = cs.get(f'{args.prefix}:FREQUENCY:ERROR:{target}')
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -93,9 +100,19 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Check length
 length = args.load
@@ -110,15 +127,14 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Check sample length
 if args.length > length:
@@ -133,9 +149,18 @@ if args.lg and not args.snr:
 
 # Load TbT data
 size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -164,12 +189,12 @@ if args.filter == 'hankel':
 if not args.dht:
   dec = Decomposition(tbt)
   value, error, table = dec.harmonic_amplitude(
-    value,
+    frequency_value,
     length=args.length,
     order=args.window,
     window='cosine_window',
     error=args.error,
-    sigma_frequency=error,
+    sigma_frequency=frequency_error,
     limit=args.limit,
     shift=args.shift,
     count=args.size,
@@ -184,9 +209,8 @@ else:
   error = table[:, +args.drop:-args.drop].std(-1)
 
 # Compute SNR
-snr = None
 if args.snr:
-  noise = numpy.array(epics.caget_many([f'{args.prefix}:{name}:NOISE:{plane}' for name in bpm]), dtype=numpy.float64)
+  noise = numpy.asarray([cs.get(f'{args.prefix}:{name}:NOISE:{plane}') for name in bpm], dtype=numpy.float64)
   amplitude = value.cpu().numpy()
   with numpy.errstate(divide='ignore', invalid='ignore'):
     if args.lg:
@@ -195,32 +219,35 @@ if args.snr:
     else:
       snr = (amplitude/noise)**2
 
+# Convert amplitude data to numpy
+output = value.cpu().numpy()
+error_output = error.cpu().numpy() if error is not None else torch.zeros_like(value).cpu().numpy()
+
 # Plot
 if args.plot:
+  from pandas import DataFrame
+  from pandas import concat
   from plotly.express import scatter
   mode = f'{plane}, FREQUENCY={target}' if args.coupled else f'{plane}'
   if table is not None:
     _, step = table.shape
-    df = pandas.DataFrame()
+    df = DataFrame()
     for i, name in enumerate(bpm):
-      df = pandas.concat([df, pandas.DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'AMPLITUDE':table[i].cpu().numpy()})])
+      df = concat([df, DataFrame({'STEP':range(1, step + 1), 'BPM':name, 'AMPLITUDE':table[i].cpu().numpy()})])
     plot = scatter(df, x='STEP', y='AMPLITUDE', color='BPM', title=f'{TIME}: AMPLITUDE ({mode})', opacity=0.75, marginal_y='box')
     config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
     plot.show(config=config)
-  df = pandas.DataFrame()
+  df = DataFrame()
   df['BPM'] = [*bpm.keys()]
-  df['AMPLITUDE'] = value.cpu().numpy()
-  if error is not None:
-    df['ERROR'] = error.cpu().numpy()
-  else:
-    df['ERROR'] = torch.zeros_like(value).cpu().numpy()
+  df['AMPLITUDE'] = output
+  df['ERROR'] = error_output
   title = f'{TIME}: AMPLITUDE ({mode})'
   plot = scatter(df, x='BPM', y='AMPLITUDE', title=title, opacity=0.75, error_y='ERROR', color_discrete_sequence = ['blue'], hover_data=['BPM', 'AMPLITUDE', 'ERROR'])
   plot.update_traces(mode='lines+markers', line={'width': 1.5}, marker={'size': 5})
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
   if args.snr:
-    df = pandas.DataFrame()
+    df = DataFrame()
     df['BPM'] = [*bpm.keys()]
     df['SNR'] = snr
     title = f'{TIME}: SNR {"[dB] " if args.lg else ""}({mode})'
@@ -231,22 +258,21 @@ if args.plot:
 
 # Save to file
 if args.save:
-  filename = f'{"amplitude_coupled" if args.coupled else "amplitude"}_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, value.cpu().numpy())
+  filename = f'{"amplitude_coupled" if args.coupled else "amplitude"}_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
+  numpy.save(filename, output)
   if args.snr:
     suffix = 'snr_lg' if args.lg else 'snr'
-    filename = f'{"%s_coupled" % suffix if args.coupled else suffix}_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
+    filename = f'{"%s_coupled" % suffix if args.coupled else suffix}_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
     numpy.save(filename, snr)
 
-# Save to epics
+# Save to cs
 if args.update and args.coupled:
   exit('error: --update with --coupled is not supported for amplitude data')
 
 if args.update and not args.coupled:
-  epics.caput_many([f'{args.prefix}:{name}:AMPLITUDE:VALUE:{plane}' for name in bpm], value.cpu().numpy())
-  if error is not None:
-    epics.caput_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], error.cpu().numpy())
-  else:
-    epics.caput_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:{plane}' for name in bpm], torch.zeros_like(value).cpu().numpy())
+  for name, amplitude, sigma in zip(bpm, output, error_output):
+    cs.set(f'{args.prefix}:{name}:AMPLITUDE:VALUE:{plane}', amplitude)
+    cs.set(f'{args.prefix}:{name}:AMPLITUDE:ERROR:{plane}', sigma)
   if args.snr:
-    epics.caput_many([f'{args.prefix}:{name}:SNR:{plane}' for name in bpm], snr)
+    for name, ratio in zip(bpm, snr):
+      cs.set(f'{args.prefix}:{name}:SNR:{plane}', ratio)

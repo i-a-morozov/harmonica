@@ -3,14 +3,13 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 from datetime import datetime
 from harmonica.util import bpm_select
+from harmonica.cs import factory
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='ratio', description='Compute/plot BX_A/BX and BY_A/BY ratios from twiss PV data.')
@@ -21,14 +20,23 @@ parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('-s', '--save', action='store_true', help='flag to save data as numpy array')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV ratio data')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
+
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+prefix = args.prefix if not args.data else args.data
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = [cs.get(f'{args.prefix}:{name}:FLAG') for name in name]
 
 # Set BPM data
 bpm = {name: None for name, flag in zip(name, flag) if flag == 1}
@@ -43,22 +51,35 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Keep BPM order
-bpm = [*bpm.keys()]
+names = [*bpm.keys()]
 
 # Load twiss data from PVs
-bx_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
-sx_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
-by_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
-sy_a = numpy.array(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
+pv_bx_a = [f'{prefix}:{name}:AMPLITUDE:BX:VALUE' for name in names]
+pv_sx_a = [f'{prefix}:{name}:AMPLITUDE:BX:ERROR' for name in names]
+pv_by_a = [f'{prefix}:{name}:AMPLITUDE:BY:VALUE' for name in names]
+pv_sy_a = [f'{prefix}:{name}:AMPLITUDE:BY:ERROR' for name in names]
+bx_a = numpy.array([cs.get(pv) for pv in pv_bx_a], dtype=numpy.float64)
+sx_a = numpy.array([cs.get(pv) for pv in pv_sx_a], dtype=numpy.float64)
+by_a = numpy.array([cs.get(pv) for pv in pv_by_a], dtype=numpy.float64)
+sy_a = numpy.array([cs.get(pv) for pv in pv_sy_a], dtype=numpy.float64)
 
-bx = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BX:VALUE' for name in bpm]), dtype=numpy.float64)
-sx = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BX:ERROR' for name in bpm]), dtype=numpy.float64)
-by = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BY:VALUE' for name in bpm]), dtype=numpy.float64)
-sy = numpy.array(epics.caget_many([f'{args.prefix}:{name}:PHASE:BY:ERROR' for name in bpm]), dtype=numpy.float64)
+pv_bx = [f'{prefix}:{name}:PHASE:BX:VALUE' for name in names]
+pv_sx = [f'{prefix}:{name}:PHASE:BX:ERROR' for name in names]
+pv_by = [f'{prefix}:{name}:PHASE:BY:VALUE' for name in names]
+pv_sy = [f'{prefix}:{name}:PHASE:BY:ERROR' for name in names]
+bx = numpy.array([cs.get(pv) for pv in pv_bx], dtype=numpy.float64)
+sx = numpy.array([cs.get(pv) for pv in pv_sx], dtype=numpy.float64)
+by = numpy.array([cs.get(pv) for pv in pv_by], dtype=numpy.float64)
+sy = numpy.array([cs.get(pv) for pv in pv_sy], dtype=numpy.float64)
 
 # Load current waveform data and compute per-BPM current mean/spread
-def current_stat(value):
+def current_statistics(value):
   if value is None:
     return numpy.nan, numpy.nan
   data = numpy.array(value, dtype=numpy.float64).reshape(-1)
@@ -67,10 +88,15 @@ def current_stat(value):
     return numpy.nan, numpy.nan
   return data.mean(), data.std()
 
-current = epics.caget_many([f'{args.prefix}:{name}:DATA:I' for name in bpm])
-value_i, error_i = zip(*(current_stat(value) for value in current))
-value_i = numpy.array(value_i, dtype=numpy.float64)
-error_i = numpy.array(error_i, dtype=numpy.float64)
+pv_i = [f'{prefix}:{name}:DATA:I' for name in bpm]
+current = [cs.get(pv) for pv in pv_i]
+value_i, error_i = zip(*(current_statistics(value) for value in current))
+value_i = numpy.asarray(value_i, dtype=numpy.float64)
+error_i = numpy.asarray(error_i, dtype=numpy.float64)
+if args.verbose:
+  print('PV list:')
+  for pv in [*pv_bx_a, *pv_sx_a, *pv_by_a, *pv_sy_a, *pv_bx, *pv_sx, *pv_by, *pv_sy, *pv_i]:
+    print(pv)
 
 # Compute robust mask and weighted center/spread for current
 valid_i = numpy.isfinite(value_i)
@@ -114,10 +140,11 @@ print(f'I:  center={center_i:12.9f}, spread={spread_i:12.9f}')
 
 # Plot
 if args.plot:
+  from pandas import DataFrame
   from plotly.subplots import make_subplots
   from plotly.express import scatter
-  df = pandas.DataFrame({
-    'BPM': bpm,
+  df = DataFrame({
+    'BPM': names,
     'I': value_i,
     'SIGMA_I': error_i,
     'MASK_I': mask_i,
@@ -148,10 +175,10 @@ if args.plot:
   plot.add_hline(center_i, line_color='black', line_dash='dash', line_width=1.0, row=1, col=1)
   plot.add_hline(center_i + spread_i, line_color='black', line_dash='dash', line_width=1.0, row=1, col=1)
   if mask_i.sum() != 0:
-    bad = pandas.DataFrame({'BPM': df.BPM[mask_i], 'I': df.I[mask_i], 'SIGMA_I': df.SIGMA_I[mask_i]})
-    bad = scatter(bad, x='BPM', y='I', error_y='SIGMA_I', color_discrete_sequence=['red'], hover_data=['BPM', 'I', 'SIGMA_I'])
-    bad.update_traces(mode='markers', marker={'size': 8})
-    bad, *_ = bad.data
+    bad = DataFrame({'BPM': df.BPM[mask_i], 'I': df.I[mask_i], 'SIGMA_I': df.SIGMA_I[mask_i]})
+    trace = scatter(bad, x='BPM', y='I', error_y='SIGMA_I', color_discrete_sequence=['red'], hover_data=['BPM', 'I', 'SIGMA_I'])
+    trace.update_traces(mode='markers', marker={'size': 8})
+    bad, *_ = trace.data
     plot.add_trace(bad, row=1, col=1)
 
   pltx = scatter(df, x='BPM', y='RX', error_y='SIGMA_RX', color_discrete_sequence=['blue'], hover_data=['BPM', 'RX', 'SIGMA_RX'])
@@ -174,12 +201,15 @@ if args.plot:
 
 # Save to file
 if args.save:
-  filename = f'ratio_time_{TIME}.npy'
-  numpy.save(filename, numpy.array([rx, sigma_rx, ry, sigma_ry]))
+  filename = f'ratio_time_({TIME}).npy'
+  output = numpy.array([rx, sigma_rx, ry, sigma_ry])
+  numpy.save(filename, output)
 
-# Save to epics
+# Save to cs
 if args.update:
-  epics.caput_many([f'{args.prefix}:{name}:RATIO:VALUE:X' for name in bpm], rx)
-  epics.caput_many([f'{args.prefix}:{name}:RATIO:ERROR:X' for name in bpm], sigma_rx)
-  epics.caput_many([f'{args.prefix}:{name}:RATIO:VALUE:Y' for name in bpm], ry)
-  epics.caput_many([f'{args.prefix}:{name}:RATIO:ERROR:Y' for name in bpm], sigma_ry)
+  for name, value, error in zip(names, rx, sigma_rx):
+    cs.set(f'{args.prefix}:{name}:RATIO:VALUE:X', value)
+    cs.set(f'{args.prefix}:{name}:RATIO:ERROR:X', error)
+  for name, value, error in zip(names, ry, sigma_ry):
+    cs.set(f'{args.prefix}:{name}:RATIO:VALUE:Y', value)
+    cs.set(f'{args.prefix}:{name}:RATIO:ERROR:Y', error)

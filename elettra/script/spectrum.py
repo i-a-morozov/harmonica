@@ -3,19 +3,18 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 from harmonica.frequency import Frequency
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='spectrum', description='Save/plot amplitude spectrum data for selected BPMs and plane.')
@@ -47,18 +46,26 @@ parser.add_argument('--map', action='store_true', help='flag to plot heat map')
 parser.add_argument('--average', action='store_true', help='flag to plot average spectrum')
 parser.add_argument('--peaks', type=int, help='number of peaks to find in average spectrum', default=1)
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
 device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
+
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
 
 # Check and set frequency range & padding
 f_min = args.f_min
@@ -75,9 +82,9 @@ if (f_min, f_max) != (0.0, 0.5) and args.pad != 0:
   exit('error: (f_min, f_max) should be used without padding')
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -92,9 +99,19 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Check length
 length = args.length
@@ -109,25 +126,32 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Check window order
 if args.window < 0.0:
   exit(f'error: window order {args.window} should be greater or equal to zero')
 
 # Load TbT data
-size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, 'cosine_window', args.window, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -163,7 +187,7 @@ if args.window > 0.0:
 # Compute FFT spectrum
 f.fft_get_spectrum()
 grid = f.fft_grid
-data = f.fft_spectrum
+output = f.fft_spectrum
 
 # Compute FFRFT spectrum
 if (f_min, f_max) != (0.0, 0.5):
@@ -171,11 +195,11 @@ if (f_min, f_max) != (0.0, 0.5):
   center = f_min + 0.5*span
   f.ffrft_get_spectrum(center=center, span=span)
   grid = f.ffrft_get_grid()
-  data = f.ffrft_spectrum
+  output = f.ffrft_spectrum
 
 # Convert to numpy
-grid = grid.detach().cpu().numpy()[1:]
-data = data.detach().cpu().numpy()[:, 1:]
+grid_numpy = grid.cpu().numpy()[1:]
+data_numpy = output.cpu().numpy()[:, 1:]
 
 # Mean spectrum
 if args.average:
@@ -186,15 +210,15 @@ if args.average:
 
 # Flip
 if args.flip:
-  grid = 1.0 - grid[::-1]
-  data = data[:, ::-1]
+  grid_numpy = 1.0 - grid_numpy[::-1]
+  data_numpy = data_numpy[:, ::-1]
   if args.average:
     mean_grid = 1.0 - mean_grid[::-1]
     mean_data = mean_data[::-1]
 
 # Scale
 if args.log:
-  data = numpy.log10(data + 1.0E-12)
+  data_numpy = numpy.log10(data_numpy + 1.0E-12)
 
 # Peaks
 if args.average and args.peaks > 0:
@@ -205,24 +229,26 @@ if args.average and args.peaks > 0:
 
 # Plot
 if args.plot:
+  from pandas import DataFrame
+  from pandas import concat
+  from plotly.express import scatter
   config = {
     'toImageButtonOptions': {'height':None, 'width':None},
     'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
     'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'],
     'scrollZoom': True}
-  df = pandas.DataFrame()
+  df = DataFrame()
   for i, name in enumerate(bpm):
-    df = pandas.concat([df, pandas.DataFrame({'FREQUENCY':grid, 'BPM':name, f'DTFT({args.plane.upper()})':data[i]})])
-  from plotly.express import scatter
+    df = concat([df, DataFrame({'FREQUENCY':grid_numpy, 'BPM':name, f'DTFT({args.plane.upper()})':data_numpy[i]})])
   plot = scatter(df, x='FREQUENCY', y=f'DTFT({args.plane.upper()})', color='BPM', title=f'{TIME}: SPECTRUM', opacity=0.75)
   plot.show(config=config)
   if args.map:
     from plotly.express import imshow
-    plot = imshow(data, labels=dict(x='FREQUENCY', y='BPM', color=f'DTFT({args.plane.upper()})'), x=grid, y=[*bpm.keys()], aspect=0.5, title=f'{TIME}: SPECTRUM (MAP)')
+    plot = imshow(data_numpy, labels=dict(x='FREQUENCY', y='BPM', color=f'DTFT({args.plane.upper()})'), x=grid_numpy, y=[*bpm.keys()], aspect=0.5, title=f'{TIME}: SPECTRUM (MAP)')
     plot.update_layout(dragmode='zoom')
     plot.show(config=config)
   if args.average:
-    df = pandas.DataFrame()
+    df = DataFrame()
     df['FREQUENCY'] = mean_grid
     df[f'DTFT({args.plane.upper()})'] = mean_data
     plot = scatter(df, x='FREQUENCY', y=f'DTFT({args.plane.upper()})', title=f'{TIME}: SPECTRUM (AVERAGE)')
@@ -232,5 +258,5 @@ if args.plot:
 
 # Save to file
 if args.save:
-  filename = f'spectrum_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, data)
+  filename = f'spectrum_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
+  numpy.save(filename, data_numpy)

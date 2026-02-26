@@ -4,17 +4,16 @@
 import sys
 import argparse
 import os
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
+from harmonica.cs import factory
 from harmonica.model import Model
 from harmonica.table import Table
 from harmonica.twiss import Twiss
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='twiss_phase', description='Compute and plot twiss from phase for x and y planes')
@@ -28,13 +27,18 @@ parser.add_argument('--amplitude', action='store_true', help='flag to plot twiss
 parser.add_argument('--phase', action='store_true', help='flag to plot phase advance data')
 parser.add_argument('--position', action='store_true', help='flag to use BPM position on x-axis')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
 parser.add_argument('-u', '--update', action='store_true', help='flag to update harmonica PV')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
@@ -42,37 +46,58 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+
 # Amplitude factor
 factor = {'m':1.0E+0, 'mm':1.0E-2, 'mk':1.0E-6}[args.unit]
+prefix = args.prefix if not args.data else args.data
 
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name]), dtype=torch.int64, device=device)
-position = numpy.array(epics.caget_many([f'{args.prefix}:{name}:TIME' for name in name]), dtype=numpy.float64)
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = torch.tensor([cs.get(f'{args.prefix}:{name}:FLAG') for name in name], dtype=torch.int64, device=device)
+position = numpy.array([cs.get(f'{args.prefix}:{name}:TIME') for name in name], dtype=numpy.float64)
+selected = {bpm: int(mark) for bpm, mark in zip(name, flag.cpu().numpy()) if mark == 1}
+if args.verbose:
+  print('Monitor list:')
+  for key, value in selected.items():
+    print(f'{key}: {value}')
 
 # Load x frequency data
-value_nux = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:VALUE:X'), dtype=dtype, device=device)
-error_nux = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:ERROR:X'), dtype=dtype, device=device)
+value_nux = torch.tensor(cs.get(f'{prefix}:FREQUENCY:VALUE:X'), dtype=dtype, device=device)
+error_nux = torch.tensor(cs.get(f'{prefix}:FREQUENCY:ERROR:X'), dtype=dtype, device=device)
 
 # Load y frequency data
-value_nuy = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:VALUE:Y'), dtype=dtype, device=device)
-error_nuy = torch.tensor(epics.caget(f'{args.prefix}:FREQUENCY:ERROR:Y'), dtype=dtype, device=device)
+value_nuy = torch.tensor(cs.get(f'{prefix}:FREQUENCY:VALUE:Y'), dtype=dtype, device=device)
+error_nuy = torch.tensor(cs.get(f'{prefix}:FREQUENCY:ERROR:Y'), dtype=dtype, device=device)
 
 # Load x amplitude data
-value_ax = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:VALUE:X' for name in name]), dtype=dtype, device=device)
-error_ax = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:X' for name in name]), dtype=dtype, device=device)
+pv_value_ax = [f'{prefix}:{name}:AMPLITUDE:VALUE:X' for name in name]
+pv_error_ax = [f'{prefix}:{name}:AMPLITUDE:ERROR:X' for name in name]
+value_ax = factor*torch.tensor([cs.get(pv) for pv in pv_value_ax], dtype=dtype, device=device)
+error_ax = factor*torch.tensor([cs.get(pv) for pv in pv_error_ax], dtype=dtype, device=device)
 
 # Load y amplitude data
-value_ay = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:VALUE:Y' for name in name]), dtype=dtype, device=device)
-error_ay = factor*torch.tensor(epics.caget_many([f'{args.prefix}:{name}:AMPLITUDE:ERROR:Y' for name in name]), dtype=dtype, device=device)
+pv_value_ay = [f'{prefix}:{name}:AMPLITUDE:VALUE:Y' for name in name]
+pv_error_ay = [f'{prefix}:{name}:AMPLITUDE:ERROR:Y' for name in name]
+value_ay = factor*torch.tensor([cs.get(pv) for pv in pv_value_ay], dtype=dtype, device=device)
+error_ay = factor*torch.tensor([cs.get(pv) for pv in pv_error_ay], dtype=dtype, device=device)
 
 # Load x phase data
-value_fx = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:X' for name in name]), dtype=dtype, device=device)
-error_fx = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:ERROR:X' for name in name]), dtype=dtype, device=device)
+pv_value_fx = [f'{prefix}:{name}:PHASE:VALUE:X' for name in name]
+pv_error_fx = [f'{prefix}:{name}:PHASE:ERROR:X' for name in name]
+value_fx = torch.tensor([cs.get(pv) for pv in pv_value_fx], dtype=dtype, device=device)
+error_fx = torch.tensor([cs.get(pv) for pv in pv_error_fx], dtype=dtype, device=device)
 
 # Load y phase data
-value_fy = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:VALUE:Y' for name in name]), dtype=dtype, device=device)
-error_fy = torch.tensor(epics.caget_many([f'{args.prefix}:{name}:PHASE:ERROR:Y' for name in name]), dtype=dtype, device=device)
+pv_value_fy = [f'{prefix}:{name}:PHASE:VALUE:Y' for name in name]
+pv_error_fy = [f'{prefix}:{name}:PHASE:ERROR:Y' for name in name]
+value_fy = torch.tensor([cs.get(pv) for pv in pv_value_fy], dtype=dtype, device=device)
+error_fy = torch.tensor([cs.get(pv) for pv in pv_error_fy], dtype=dtype, device=device)
+if args.verbose:
+  print('PV list:')
+  for pv in [*pv_value_ax, *pv_error_ax, *pv_value_ay, *pv_error_ay, *pv_value_fx, *pv_error_fx, *pv_value_fy, *pv_error_fy]:
+    print(pv)
 
 # Set model
 model_path = args.model
@@ -93,6 +118,8 @@ table = Table(name, value_nux, value_nuy, value_ax, value_ay, value_fx, value_fy
 
 # Set twiss
 twiss = Twiss(model, table, limit=args.limit)
+if args.verbose:
+  print(f'Twiss: {twiss}')
 
 # Compute actions
 twiss.get_action(dict_threshold={'use': args.clean, 'factor': args.factor})
@@ -138,13 +165,14 @@ by, sigma_by = twiss.by[1:-1].cpu().numpy(), twiss.sigma_by[1:-1].cpu().numpy()
 
 # Plot
 if args.plot:
+  from pandas import DataFrame
   from plotly.subplots import make_subplots
   from plotly.express import scatter
   from plotly.express import line
   x_axis = 'POSITION' if args.position else 'BPM'
   x_label = 'POSITION' if args.position else 'BPM'
   if args.phase:
-    df = pandas.DataFrame()
+    df = DataFrame()
     df['BPM'] = name
     df['POSITION'] = position
     df['FX'] = fx
@@ -192,7 +220,7 @@ if args.plot:
     config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
     plot.show(config=config)
 
-  df = pandas.DataFrame()
+  df = DataFrame()
   df['BPM'] = twiss.model.name[1:-1]
   df['POSITION'] = model_position
   df['AX'] = ax
@@ -263,56 +291,56 @@ if args.plot:
   plot.update_yaxes(title_text='(BY_M-BY)/BY_M', row=2, col=2)
   if virtual_index.size != 0:
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='BX', error_y='SIGMA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='BX (VIRTUAL)', legendgroup='virtual', showlegend=True)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='BX', error_y='SIGMA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='BX (VIRTUAL)', legendgroup='virtual', showlegend=True)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=1, col=1)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='BY', error_y='SIGMA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'BY', 'SIGMA_BY'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='BY (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='BY', error_y='SIGMA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'BY', 'SIGMA_BY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='BY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=1, col=2)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='ERROR_BX', error_y='DELTA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BX', 'DELTA_BX'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='(BX_M-BX)/BX_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='ERROR_BX', error_y='DELTA_BX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BX', 'DELTA_BX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='(BX_M-BX)/BX_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=2, col=1)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='ERROR_BY', error_y='DELTA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BY', 'DELTA_BY'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='(BY_M-BY)/BY_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    virtuatracel = scatter(virtual, x=x_axis, y='ERROR_BY', error_y='DELTA_BY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_BY', 'DELTA_BY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='(BY_M-BY)/BY_M (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=2, col=2)
   if args.amplitude:
-    mask = pandas.DataFrame({'BPM':name, 'POSITION':position, 'BX':bx_a, 'SIGMA_BX':sigma_bx_a})
-    mask = scatter(mask, x=x_axis, y='BX', error_y='SIGMA_BX', color_discrete_sequence=['red'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
-    mask.update_traces(marker={'size': 10})
-    mask.update_traces(name='BX_A', legendgroup='7', showlegend=True)
-    mask, *_ = mask.data
+    mask = DataFrame({'BPM':name, 'POSITION':position, 'BX':bx_a, 'SIGMA_BX':sigma_bx_a})
+    trace = scatter(mask, x=x_axis, y='BX', error_y='SIGMA_BX', color_discrete_sequence=['red'], hover_data=['BPM', 'BX', 'SIGMA_BX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='BX_A', legendgroup='7', showlegend=True)
+    mask, *_ = trace.data
     plot.add_trace(mask, row=1, col=1)
-    mask = pandas.DataFrame({'BPM':name, 'POSITION':position, 'BY':by_a, 'SIGMA_BY':sigma_by_a})
-    mask = scatter(mask, x=x_axis, y='BY', error_y='SIGMA_BY', color_discrete_sequence=['red'], hover_data=['BPM', 'BY', 'SIGMA_BY'], symbol_sequence=['circle-open'])
-    mask.update_traces(marker={'size': 10})
-    mask.update_traces(name='BY_A', legendgroup='8', showlegend=True)
-    mask, *_ = mask.data
+    mask = DataFrame({'BPM':name, 'POSITION':position, 'BY':by_a, 'SIGMA_BY':sigma_by_a})
+    trace = scatter(mask, x=x_axis, y='BY', error_y='SIGMA_BY', color_discrete_sequence=['red'], hover_data=['BPM', 'BY', 'SIGMA_BY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='BY_A', legendgroup='8', showlegend=True)
+    mask, *_ = trace.data
     plot.add_trace(mask, row=1, col=2)
-    mask = pandas.DataFrame({'BPM':name, 'POSITION':position, 'ERROR_BX':((bx_m_a) - bx_a)/(bx_m_a), 'DELTA_BX':sigma_bx_a/(bx_m_a)})
-    mask = scatter(mask, x=x_axis, y='ERROR_BX', error_y='DELTA_BX', color_discrete_sequence=['red'], hover_data=['BPM', 'ERROR_BX', 'DELTA_BX'], symbol_sequence=['circle-open'])
-    mask.update_traces(marker={'size': 10})
-    mask.update_traces(name='(BX_M-BX_A)/BX_M', legendgroup='9', showlegend=True)
-    mask, *_ = mask.data
+    mask = DataFrame({'BPM':name, 'POSITION':position, 'ERROR_BX':((bx_m_a) - bx_a)/(bx_m_a), 'DELTA_BX':sigma_bx_a/(bx_m_a)})
+    trace = scatter(mask, x=x_axis, y='ERROR_BX', error_y='DELTA_BX', color_discrete_sequence=['red'], hover_data=['BPM', 'ERROR_BX', 'DELTA_BX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='(BX_M-BX_A)/BX_M', legendgroup='9', showlegend=True)
+    mask, *_ = trace.data
     plot.add_trace(mask, row=2, col=1)
-    mask = pandas.DataFrame({'BPM':name, 'POSITION':position, 'ERROR_BY':((by_m_a) - by_a)/(by_m_a), 'DELTA_BY':sigma_by_a/(by_m_a)})
-    mask = scatter(mask, x=x_axis, y='ERROR_BY', error_y='DELTA_BY', color_discrete_sequence=['red'], hover_data=['BPM', 'ERROR_BY', 'DELTA_BY'], symbol_sequence=['circle-open'])
-    mask.update_traces(marker={'size': 10})
-    mask.update_traces(name='(BY_M-BY_A)/BY_M', legendgroup='10', showlegend=True)
-    mask, *_ = mask.data
+    mask = DataFrame({'BPM':name, 'POSITION':position, 'ERROR_BY':((by_m_a) - by_a)/(by_m_a), 'DELTA_BY':sigma_by_a/(by_m_a)})
+    trace = scatter(mask, x=x_axis, y='ERROR_BY', error_y='DELTA_BY', color_discrete_sequence=['red'], hover_data=['BPM', 'ERROR_BY', 'DELTA_BY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='(BY_M-BY_A)/BY_M', legendgroup='10', showlegend=True)
+    mask, *_ = trace.data
     plot.add_trace(mask, row=2, col=2)
   plot.update_layout(legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5))
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
@@ -358,47 +386,53 @@ if args.plot:
   plot.update_yaxes(title_text='AY_M-AY', row=2, col=2)
   if virtual_index.size != 0:
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='AX (VIRTUAL)', legendgroup='virtual', showlegend=True)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='AX (VIRTUAL)', legendgroup='virtual', showlegend=True)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=1, col=1)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=1, col=2)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='ERROR_AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='AX_M-AX (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='ERROR_AX', error_y='SIGMA_AX', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AX', 'SIGMA_AX'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='AX_M-AX (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=2, col=1)
 
     virtual = df.iloc[virtual_index]
-    virtual = scatter(virtual, x=x_axis, y='ERROR_AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
-    virtual.update_traces(marker={'size': 10})
-    virtual.update_traces(name='AY_M-AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
-    virtual, *_ = virtual.data
+    trace = scatter(virtual, x=x_axis, y='ERROR_AY', error_y='SIGMA_AY', color_discrete_sequence=['green'], hover_data=['BPM', 'ERROR_AY', 'SIGMA_AY'], symbol_sequence=['circle-open'])
+    trace.update_traces(marker={'size': 10})
+    trace.update_traces(name='AY_M-AY (VIRTUAL)', legendgroup='virtual', showlegend=False)
+    virtual, *_ = trace.data
     plot.add_trace(virtual, row=2, col=2)
   plot.update_layout(legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5))
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
-# Save to epics
+# Save to cs
 if args.update:
-  epics.caput_many([f'{args.prefix}:{bpm}:AMPLITUDE:BX:VALUE' for bpm in name], bx_a)
-  epics.caput_many([f'{args.prefix}:{bpm}:AMPLITUDE:BX:ERROR' for bpm in name], sigma_bx_a)
-  epics.caput_many([f'{args.prefix}:{bpm}:AMPLITUDE:BY:VALUE' for bpm in name], by_a)
-  epics.caput_many([f'{args.prefix}:{bpm}:AMPLITUDE:BY:ERROR' for bpm in name], sigma_by_a)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:BX:VALUE' for bpm in model.name[1:-1]], bx)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:BX:ERROR' for bpm in model.name[1:-1]], sigma_bx)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:BY:VALUE' for bpm in model.name[1:-1]], by)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:BY:ERROR' for bpm in model.name[1:-1]], sigma_by)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:AX:VALUE' for bpm in model.name[1:-1]], ax)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:AX:ERROR' for bpm in model.name[1:-1]], sigma_ax)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:AY:VALUE' for bpm in model.name[1:-1]], ay)
-  epics.caput_many([f'{args.prefix}:{bpm}:PHASE:AY:ERROR' for bpm in model.name[1:-1]], sigma_ay)
+  for bpm, value, error in zip(name, bx_a, sigma_bx_a):
+    cs.set(f'{args.prefix}:{bpm}:AMPLITUDE:BX:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:AMPLITUDE:BX:ERROR', error)
+  for bpm, value, error in zip(name, by_a, sigma_by_a):
+    cs.set(f'{args.prefix}:{bpm}:AMPLITUDE:BY:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:AMPLITUDE:BY:ERROR', error)
+  for bpm, value, error in zip(model.name[1:-1], bx, sigma_bx):
+    cs.set(f'{args.prefix}:{bpm}:PHASE:BX:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:PHASE:BX:ERROR', error)
+  for bpm, value, error in zip(model.name[1:-1], by, sigma_by):
+    cs.set(f'{args.prefix}:{bpm}:PHASE:BY:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:PHASE:BY:ERROR', error)
+  for bpm, value, error in zip(model.name[1:-1], ax, sigma_ax):
+    cs.set(f'{args.prefix}:{bpm}:PHASE:AX:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:PHASE:AX:ERROR', error)
+  for bpm, value, error in zip(model.name[1:-1], ay, sigma_ay):
+    cs.set(f'{args.prefix}:{bpm}:PHASE:AY:VALUE', value)
+    cs.set(f'{args.prefix}:{bpm}:PHASE:AY:ERROR', error)

@@ -3,18 +3,17 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='trajectory', description='Save/plot trajectory TbT data for selected BPMs and plane.')
@@ -41,15 +40,22 @@ parser.add_argument('--count', type=int, help='number of iterations to use for r
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--difference', action='store_true', help='flag to plot pairwise BPM differences (bpm1-bpm2, bpm3-bpm4, ...)')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+parser.add_argument('--circumference', type=float, help='lattice circumference', default=259.2)
+
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Length
-LENGTH = 259.2
+LENGTH = args.circumference
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
@@ -57,10 +63,13 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -75,12 +84,22 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Set BPM positions
-position = numpy.array(epics.caget_many([f'{args.prefix}:{name}:TIME' for name in bpm]))
+position = numpy.asarray([cs.get(f'{args.prefix}:{name}:TIME') for name in bpm])
 
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Check load length
 length = args.load
@@ -95,21 +114,29 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Load TbT data
 size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -125,20 +152,20 @@ if args.normalize:
 
 # Filter (none)
 if args.filter == 'none':
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Filter (svd)
 if args.filter == 'svd':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Filter (hankel)
 if args.filter == 'hankel':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Check mixed length
 if args.length < 0 or args.length > args.load:
@@ -148,15 +175,16 @@ if args.length < 0 or args.length > args.load:
 data = tbt.make_signal(args.length, tbt.work)
 
 # Convert to numpy
-data = data.cpu().numpy()
-trajectory = data.reshape(args.length, size)
+trajectory = data.cpu().numpy().reshape(args.length, size)
 bpm_name = [name for name in bpm]
-name = bpm_name * args.length
+name = bpm_name*args.length
 turn = numpy.array([numpy.zeros(len(bpm), dtype=numpy.int32) + i for i in range(args.length)]).flatten()
 time = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
 
 # Compare with saved trajectory
-if args.compare:
+if args.plot and args.compare:
+  from pandas import DataFrame
+  from plotly.express import line
   try:
     reference = numpy.load('trajectory.npy')
   except FileNotFoundError:
@@ -165,18 +193,18 @@ if args.compare:
     exit(f'error: failed to load trajectory.npy: {exception}')
   reference = numpy.asarray(reference)
   difference = trajectory[:args.length] - reference[:args.length]
-  df = pandas.DataFrame()
+  df = DataFrame()
   df['BPM'] = bpm_name * args.length
   df['TURN'] = numpy.array([numpy.zeros(size, dtype=numpy.int32) + i for i in range(args.length)]).flatten().astype(str)
   df['TIME'] = 1/LENGTH*numpy.array([position + LENGTH * i for i in range(args.length)]).flatten()
   df['DIFF'] = difference.flatten()
-  from plotly.express import line
   plot = line(df, x='TIME', y='DIFF', color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY DIFF)', markers=True)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Plot
 if args.plot:
+  from pandas import DataFrame
   from plotly.express import line
   if args.difference:
     pair_size = size//2
@@ -187,26 +215,26 @@ if args.plot:
     pair_position = 0.5*(position[0:2*pair_size:2] + position[1:2*pair_size:2])
     pair_turn = numpy.array([numpy.zeros(pair_size, dtype=numpy.int32) + i for i in range(args.length)]).flatten()
     pair_time = 1/LENGTH*numpy.array([pair_position + LENGTH * i for i in range(args.length)]).flatten()
-    df = pandas.DataFrame()
+    df = DataFrame()
     df['BPM'] = pair_name * args.length
     df['TURN'] = pair_turn.astype(str)
     df['TIME'] = pair_time
     df['DIFF'] = trajectory_diff.flatten()
     plot = line(df, x='TIME', y='DIFF', color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY PAIR DIFF)', markers=True)
   else:
-    df = pandas.DataFrame()
+    df = DataFrame()
     df['BPM'] = name
     df['TURN'] = turn.astype(str)
     df['TIME'] = time
-    df[args.plane.upper()] = data
+    df[args.plane.upper()] = data.cpu().numpy()
     plot = line(df, x='TIME', y=args.plane.upper(), color='TURN', hover_data=['TURN', 'BPM'], title=f'{TIME}: TbT (TRAJECTORY)', markers=True)
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
 
 # Save to file
 if args.save:
-  filename = f'tbt_trajectory_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, numpy.array([time, data]))
+  filename = f'tbt_trajectory_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
+  numpy.save(filename, numpy.array([time, data.cpu().numpy()]))
 
 # Save trajectory matrix to file
 if args.trajectory:

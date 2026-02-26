@@ -3,18 +3,17 @@
 # Import
 import sys
 import argparse
-import epics
 import numpy
-import pandas
 import torch
 from datetime import datetime
 from harmonica.util import LIMIT, pv_make, bpm_select
+from harmonica.cs import factory
 from harmonica.window import Window
 from harmonica.data import Data
 from harmonica.filter import Filter
 
 # Input arguments flag
-_, *flag = sys.argv
+_, *last = sys.argv
 
 # Parse arguments
 parser = argparse.ArgumentParser(prog='tbt', description='Save/plot TbT data for selected BPMs and plane.')
@@ -38,12 +37,17 @@ parser.add_argument('--count', type=int, help='number of iterations to use for r
 parser.add_argument('--plot', action='store_true', help='flag to plot data')
 parser.add_argument('--box', action='store_true', help='flag to show box plot')
 parser.add_argument('--prefix', type=str, help='PV prefix', default='BPM')
+parser.add_argument('--data', type=str, help='PV data prefix', default='')
+parser.add_argument('--tango', action='store_true', help='flag to use tango CS')
 parser.add_argument('--device', choices=('cpu', 'cuda'), help='data device', default='cpu')
 parser.add_argument('--dtype', choices=('float32', 'float64'), help='data type', default='float64')
-args = parser.parse_args(args=None if flag else ['--help'])
+parser.add_argument('--verbose', action='store_true', help='verbose flag')
+args = parser.parse_args(args=None if last else ['--help'])
 
 # Time
-TIME = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+TIME = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+if args.verbose:
+  print(f'Time: {TIME}')
 
 # Check and set device & data type
 dtype = {'float32': torch.float32, 'float64': torch.float64}[args.dtype]
@@ -51,10 +55,13 @@ device = args.device
 if device == 'cuda' and not torch.cuda.is_available():
   exit('error: CUDA is not available')
 
+# CS
+cs = factory(target=('tango' if args.tango else 'epics'))
+
 # Load monitor data
-name = epics.caget(f'{args.prefix}:MONITOR:LIST')[:epics.caget(f'{args.prefix}:MONITOR:COUNT')]
-flag = epics.caget_many([f'{args.prefix}:{name}:FLAG' for name in name])
-rise = epics.caget_many([f'{args.prefix}:{name}:RISE' for name in name])
+name = cs.get(f'{args.prefix}:MONITOR:LIST')[:cs.get(f'{args.prefix}:MONITOR:COUNT')]
+flag = numpy.asarray([cs.get(f'{args.prefix}:{name}:FLAG') for name in name])
+rise = numpy.asarray([cs.get(f'{args.prefix}:{name}:RISE') for name in name])
 
 # Set BPM data
 bpm = {name: rise for name, flag, rise in zip(name, flag, rise) if flag == 1}
@@ -69,9 +76,19 @@ except ValueError as exception:
 if not bpm:
   exit('error: BPM list is empty')
 
+if args.verbose:
+  print('Monitor list:')
+  for key, value in bpm.items():
+    print(f'{key}: {value}')
+
 # Generate PV names
-pv_list = [pv_make(name, args.plane, prefix=args.prefix) for name in bpm]
+prefix = args.prefix if not args.data else args.data
+pv_list = [pv_make(name, args.plane, prefix=prefix) for name in bpm]
 pv_rise = [*bpm.values()]
+if args.verbose:
+  print('PV list:')
+  for pv in pv_list:
+    print(pv)
 
 # Check length
 length = args.length
@@ -86,21 +103,29 @@ if length + offset > LIMIT:
   exit(f'error: sum of {length=} and {offset=}, expected to be less than {LIMIT=}')
 
 # Check rise
+shift = 0
 if args.rise:
-  rise = min(pv_rise)
-  if rise < 0:
+  shift = min(pv_rise)
+  if shift < 0:
     exit('error: rise values are expected to be positive')
-  rise = max(pv_rise)
-  if length + offset + rise > LIMIT:
-    exit(f'error: sum of {length=}, {offset=} and max {rise=}, expected to be less than {LIMIT=}')
-else:
-  rise = 0
+  shift = max(pv_rise)
+  if length + offset + shift > LIMIT:
+    exit(f'error: sum of {length=}, {offset=} and max {shift=}, expected to be less than {LIMIT=}')
 
 # Load TbT data
 size = len(bpm)
-count = length + offset + rise
+count = length + offset + shift
 win = Window(length, dtype=dtype, device=device)
-tbt = Data.from_epics(win, pv_list, pv_rise=(pv_rise if args.rise else None), shift=offset, count=count)
+matrix = numpy.asarray([cs.get(pv) for pv in pv_list])
+data = torch.tensor(matrix, dtype=dtype, device=device)
+data = torch.stack([signal[:count] for signal in data])
+if args.rise:
+  data = torch.stack([signal[offset + rise : offset + rise + length] for signal, rise in zip(data, pv_rise)])
+else:
+  data = data[:, offset : offset + length]
+tbt = Data.from_data(win, data)
+if args.verbose:
+  print(f'TbT: {tbt}')
 
 # Remove mean
 if args.mean:
@@ -116,30 +141,32 @@ if args.normalize:
 
 # Filter (none)
 if args.filter == 'none':
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Filter (svd)
 if args.filter == 'svd':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Filter (hankel)
 if args.filter == 'hankel':
   flt = Filter(tbt)
   flt.filter_svd(rank=args.rank)
   flt.filter_hankel(rank=args.rank, random=args.type == 'randomized', buffer=args.buffer, count=args.count)
-  data = tbt.to_numpy()
+  output = tbt.to_numpy()
 
 # Set turns
 turn = numpy.linspace(0, length - 1, length, dtype=numpy.int32)
 
 # Plot
 if args.plot:
-  df = pandas.DataFrame()
-  for i, name in enumerate(bpm):
-    df = pandas.concat([df, pandas.DataFrame({'TURN':turn, 'BPM':name, args.plane.upper():data[i]})])
+  from pandas import DataFrame
+  from pandas import concat
   from plotly.express import scatter
+  df = DataFrame()
+  for i, name in enumerate(bpm):
+    df = concat([df, DataFrame({'TURN':turn, 'BPM':name, args.plane.upper():output[i]})])
   plot = scatter(df, x='TURN', y=args.plane.upper(), color='BPM', title=f'{TIME}: TbT (DATA)', opacity=0.75, marginal_y='box')
   config = {'toImageButtonOptions': {'height':None, 'width':None}, 'modeBarButtonsToRemove': ['lasso2d', 'select2d'], 'modeBarButtonsToAdd':['drawopenpath', 'eraseshape'], 'scrollZoom': True}
   plot.show(config=config)
@@ -151,5 +178,5 @@ if args.plot:
 
 # Save to file
 if args.save:
-  filename = f'tbt_plane_{args.plane}_length_{args.length}_time_{TIME}.npy'
-  numpy.save(filename, data)
+  filename = f'tbt_plane_{args.plane}_length_{args.length}_time_({TIME}).npy'
+  numpy.save(filename, output)
