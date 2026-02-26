@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "harmonica"
-version = "0.1.1"
+version = "0.1.2"
 description = "TbT data processing, frequency and parameters estimation, twiss parameters from amplitude and phase (combinations)"
 readme = "README.MD"
 requires-python = ">=3.12"
