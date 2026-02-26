@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "harmonica"
-version = "0.0.2"
+version = "0.1.1"
 description = "TbT data processing, frequency and parameters estimation, twiss parameters from amplitude and phase (combinations)"
 readme = "README.MD"
 requires-python = ">=3.12"
@@ -24,6 +24,12 @@ dependencies = [
     "scipy",
     "statsmodels",
     "torch"
+]
+
+[project.optional-dependencies]
+script = [
+    "jupyterlab",
+    "plotly"
 ]
 
 classifiers = [
