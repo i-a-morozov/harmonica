@@ -620,7 +620,6 @@ class Twiss():
 
         """
         if method == 'model':
-
             self.virtual_x, self.virtual_y = {}, {}
 
             limit = max(self.limit) if limit is None else limit

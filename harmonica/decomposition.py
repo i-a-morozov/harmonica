@@ -1108,7 +1108,6 @@ class Decomposition():
         advance, advance_error = cls.phase_advance(probe, other, frequency_model, phase_model,
                                                    error=error, sigma_frequency=sigma_frequency_model, sigma_phase=sigma_phase_model, model=True)
         virtual, virtual_error = mod(correct - advance, 2.0*numpy.pi, -numpy.pi), (correct_error**2 + advance_error**2).sqrt()
-
         if nearest:
             select = torch.argmin(advance.abs())
             advance, advance_error = advance[select].unsqueeze(0), advance_error[select].unsqueeze(0)
@@ -1133,7 +1132,7 @@ class Decomposition():
         result['clean'] = mask
 
         if len(virtual) != 1:
-            weight = mask.to(virtual_error.dtype) if torch.allclose(virtual_error, torch.zeros_like(virtual_error)) else mask/virtual_error**2
+            weight = mask.to(virtual_error.dtype) if torch.allclose(virtual_error, torch.zeros_like(virtual_error), atol=0.001, rtol=0.001) else mask/virtual_error**2
             center = weighted_mean(virtual, weight=weight)
             spread = weighted_variance(virtual, weight=weight, center=center).sqrt()
         else:
