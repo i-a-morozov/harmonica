@@ -1,0 +1,483 @@
+global:
+  prefix: BPM
+  control_system: tango
+  device: cpu
+  dtype: float64
+
+tbt:
+  length: 1024
+  offset: 0
+  use_rise_data: false
+  save_npy_output: false
+  bpm_filter_mode: all
+  transform: none
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_scatter_plot: true
+  show_box_plot: true 
+  pv_data_prefix_override: ""
+  verbose_output: false
+  i:
+    enabled: false
+  x:
+    enabled: true
+  y:
+    enabled: true
+
+trajectory:
+  length: 4
+  load: 128
+  offset: 0
+  use_rise_data: false
+  bpm_filter_mode: all
+  transform: none
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: full
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_trajectory_plot: true
+  show_pairwise_bpm_difference: false
+  compare_with_trajectory_npy: false
+  save_trajectory_output: false
+  save_trajectory_matrix_as_trajectory_npy: false
+  pv_data_prefix_override: ""
+  circumference: 259.2
+  verbose_output: false
+  i:
+    enabled: true
+  x:
+    enabled: true
+  y:
+    enabled: true
+
+orbit:
+  length: 256
+  offset: 0
+  use_rise_data: false
+  bpm_filter_mode: all
+  use_median: false
+  show_orbit_plot: true
+  save_npy_output: false
+  pv_data_prefix_override: ""
+  verbose_output: false
+  i:
+    enabled: false
+  x:
+    enabled: true
+  y:
+    enabled: true
+
+noise:
+  length: 512
+  offset: 0
+  use_rise_data: false
+  bpm_filter_mode: all
+  transform: mean 
+  noise_estimation_limit: 16
+  estimate_noise_with_std: false
+  show_noise_plot: true
+  show_autocorrelation: false
+  save_npy_output: false 
+  update_noise_pvs: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  i:
+    enabled: false
+  x:
+    enabled: true
+  y:
+    enabled: true
+
+spectrum:
+  length: 512
+  offset: 0
+  use_rise_data: false
+  bpm_filter_mode: all
+  transform: normalize
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  window_order: 0.0
+  zero_padding: 0
+  f_min: 0.0
+  f_max: 0.5
+  apply_log10_scale: false
+  flip_around_0_5: false
+  show_spectrum_plot: true
+  show_heat_map: true
+  show_average_spectrum: false
+  average_peaks: 1
+  save_npy_output: false
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+  y:
+    enabled: true
+
+spectrum_all:
+  circumference: 259.2
+  bpm_filter_mode: all
+  transform: none
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_joined_spectrum_plots: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    length: 32
+    offset: 0
+    use_rise_data: false
+    window_order: 0.0
+    use_custom_frequency_range: true
+    f_min: 30.0
+    f_max: 35.0
+    beta_min: 0.0
+    beta_max: 1000.0
+    use_nufft: true
+    nufft_time_mode: phase
+    apply_log10: false
+  y:
+    enabled: true
+    length: 32
+    offset: 0
+    use_rise_data: false
+    window_order: 0.0
+    use_custom_frequency_range: true
+    f_min: 6.0
+    f_max: 12.0
+    beta_min: 0.0
+    beta_max: 1000.0
+    use_nufft: true
+    nufft_time_mode: phase
+    apply_log10: false
+
+frequency:
+  bpm_filter_mode: all
+  transform: normalize
+  filter: svd
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_frequency_plots: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    length: 256
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    zero_padding: 0
+    f_min: 0.0
+    f_max: 0.5
+    method: parabola
+    clean_frequencies: true
+    clean_factor: 5.0
+    process: noise
+    noise_limit: 32
+    flip_around_0_5: false
+  y:
+    enabled: true
+    length: 256
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    zero_padding: 0
+    f_min: 0.0
+    f_max: 0.5
+    method: parabola
+    clean_frequencies: true
+    clean_factor: 5.0
+    process: noise
+    noise_limit: 32
+    flip_around_0_5: false
+
+frequency_shift:
+  bpm_filter_mode: all
+  transform: normalize
+  filter: svd
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_frequency_plots: true
+  show_shifted_noise_plots: false
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    sample_length: 128
+    load_length: 256
+    shift_step: 4
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    zero_padding: 0
+    f_min: 0.0
+    f_max: 0.5
+    method: parabola
+    clean_frequencies: true
+    clean_factor: 5.0
+    process: noise
+    noise_limit: 32
+    flip_around_0_5: false
+  y:
+    enabled: true
+    sample_length: 128
+    load_length: 256
+    shift_step: 4
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    zero_padding: 0
+    f_min: 0.0
+    f_max: 0.5
+    method: parabola
+    clean_frequencies: true
+    clean_factor: 5.0
+    process: none
+    noise_limit: 32
+    flip_around_0_5: false
+
+frequency_all:
+  circumference: 259.2
+  bpm_filter_mode: all
+  transform: normalize
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_frequency_all_plot: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    sample_length: 16
+    load_length: 32
+    shift_step: 1
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: false
+    window_order: 0.0
+    f_min: 30.0
+    f_max: 35.0
+    beta_min: 0.0
+    beta_max: 1000.0
+    use_nufft: true
+    nufft_time_mode: phase
+  y:
+    enabled: true
+    sample_length: 16
+    load_length: 32
+    shift_step: 1
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: false
+    window_order: 0.0
+    f_min: 6.0
+    f_max: 12.0
+    beta_min: 0.0
+    beta_max: 1000.0
+    use_nufft: true
+    nufft_time_mode: phase
+
+amplitude:
+  bpm_filter_mode: all
+  transform: mean
+  filter: svd
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_amplitude_plots: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    sample_length: 32
+    load_length: 64
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    noise_limit: 32
+    propagate_frequency_error: false
+    use_shifted_samples: true
+    shift_sample_count: 64
+    shift_sample_step: 1
+    shifted_method: noise
+    use_dht_estimator: false
+    dht_drop: 32
+    compute_snr: true
+    compute_snr_in_db: true
+    use_coupled_frequency: false
+  y:
+    enabled: true
+    sample_length: 32
+    load_length: 64
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    noise_limit: 32
+    propagate_frequency_error: false
+    use_shifted_samples: true
+    shift_sample_count: 64
+    shift_sample_step: 1
+    shifted_method: noise
+    use_dht_estimator: false
+    dht_drop: 32
+    compute_snr: true
+    compute_snr_in_db: true
+    use_coupled_frequency: false
+
+phase:
+  bpm_filter_mode: all
+  transform: normalize
+  filter: svd
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_phase_plots: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    sample_length: 128
+    load_length: 256
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    noise_limit: 32
+    propagate_frequency_error: false
+    use_shifted_samples: true
+    shift_sample_count: 256
+    shift_sample_step: 1
+    shifted_method: noise
+    use_dht_estimator: false
+    dht_drop: 32
+    plot_monotonic_phase: true
+    plot_adjacent_advance: true
+    use_coupled_frequency: false
+  y:
+    enabled: true
+    sample_length: 128
+    load_length: 256
+    offset: 0
+    use_rise_data: false
+    save_output: false
+    update_pvs: true
+    window_order: 1.0
+    noise_limit: 32
+    propagate_frequency_error: false
+    use_shifted_samples: false
+    shift_sample_count: 256
+    shift_sample_step: 1
+    shifted_method: noise
+    use_dht_estimator: false
+    dht_drop: 32
+    plot_monotonic_phase: true
+    plot_adjacent_advance: true
+    use_coupled_frequency: false
+
+check:
+  bpm_filter_mode: all
+  transform: none
+  filter: none
+  filter_rank: 8
+  hankel_svd_type: randomized
+  hankel_randomized_buffer: 16
+  hankel_randomized_iterations: 16
+  show_check_plot: true
+  pv_data_prefix_override: ""
+  verbose_output: false
+  x:
+    enabled: true
+    sample_length: 256
+    load_length: 512
+    offset: 0
+    use_rise_data: false
+    window_order: 0.0
+    threshold_factor: 5.0
+    load_phase_from_pv: false
+  y:
+    enabled: true
+    sample_length: 256
+    load_length: 512
+    offset: 0
+    use_rise_data: false
+    window_order: 0.0
+    threshold_factor: 5.0
+    load_phase_from_pv: false
+
+action:
+  model_path: ../lattice/elettra.yaml
+  amplitude_unit: m
+  clean_action_outliers: true
+  threshold_factor: 5.0
+  show_action_plots: true
+  pv_data_prefix_override: ""
+  update_pvs: true
+  verbose_output: false
+
+ratio:
+  bpm_filter_mode: all
+  show_ratio_plots: true
+  save_output: false
+  pv_data_prefix_override: ""
+  update_pvs: true
+  verbose_output: false
+
+twiss_amplitude:
+  model_path: ../lattice/elettra.yaml
+  amplitude_unit: m
+  clean_action_outliers: true
+  threshold_factor: 5.0
+  show_plots: true
+  show_action_plots: false
+  use_bpm_position_on_x_axis: true
+  pv_data_prefix_override: ""
+  update_pvs: true
+  verbose_output: false
+
+twiss_phase:
+  model_path: ../lattice/elettra.yaml
+  range_limit: 4
+  amplitude_unit: m
+  clean_action_outliers: true
+  threshold_factor: 5.0
+  show_plots: true
+  show_phase_advance_plots: false
+  overlay_amplitude_twiss: false
+  use_bpm_position_on_x_axis: false
+  pv_data_prefix_override: ""
+  update_pvs: true
+  verbose_output: false
