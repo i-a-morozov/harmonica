@@ -918,8 +918,8 @@ class Twiss():
         self.data_phase['fx_ij'], self.data_phase['sigma_fx_ij'], self.data_phase['fx_m_ij'], self.data_phase['sigma_fx_m_ij'] = fx_ij.T, sx_ij.T, fx_m_ij.T, sx_m_ij.T
         self.data_phase['fx_ik'], self.data_phase['sigma_fx_ik'], self.data_phase['fx_m_ik'], self.data_phase['sigma_fx_m_ik'] = fx_ik.T, sx_ik.T, fx_m_ik.T, sx_m_ik.T
 
-        self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij'] = fy_ij.T, sy_ij.T, fy_ij.T, sy_m_ij.T
-        self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik'] = fy_ik.T, sy_ik.T, fy_ik.T, sy_m_ik.T
+        self.data_phase['fy_ij'], self.data_phase['sigma_fy_ij'], self.data_phase['fy_m_ij'], self.data_phase['sigma_fy_m_ij'] = fy_ij.T, sy_ij.T, fy_m_ij.T, sy_m_ij.T
+        self.data_phase['fy_ik'], self.data_phase['sigma_fy_ik'], self.data_phase['fy_m_ik'], self.data_phase['sigma_fy_m_ik'] = fy_ik.T, sy_ik.T, fy_m_ik.T, sy_m_ik.T
 
         self.data_phase['ax'], self.data_phase['sigma_ax'] = ax.T.nan_to_num(), sigma_ax.T.nan_to_num()
         self.data_phase['bx'], self.data_phase['sigma_bx'] = bx.T.nan_to_num(), sigma_bx.T.nan_to_num()
@@ -930,11 +930,11 @@ class Twiss():
     def filter_twiss(self,
                      plane:str = 'x', *,
                      phase:dict={'use': True, 'threshold': 10.00},
-                     model:dict={'use': True, 'threshold': 00.50},
-                     value:dict={'use': True, 'threshold': 00.25},
-                     sigma:dict={'use': True, 'threshold': 00.25},
+                     model:dict={'use': False, 'threshold': 00.50},
+                     value:dict={'use': False, 'threshold': 00.25},
+                     sigma:dict={'use': False, 'threshold': 00.25},
                      limit:dict={'use': True, 'threshold': 05.00}, 
-                     error:dict={'use': True, 'threshold': 05.00}) -> torch.Tensor:
+                     error:dict={'use': False, 'threshold': 05.00}) -> torch.Tensor:
         """
         Filter twiss for given data plane and cleaning options.
 
@@ -990,7 +990,7 @@ class Twiss():
 
         if phase['use']:
             cot_ij, cot_m_ij = torch.abs(1.0/torch.tan(f_ij)), torch.abs(1.0/torch.tan(f_m_ij))
-            cot_ik, cot_m_ik = torch.abs(1.0/torch.tan(f_ij)), torch.abs(1.0/torch.tan(f_m_ij))
+            cot_ik, cot_m_ik = torch.abs(1.0/torch.tan(f_ik)), torch.abs(1.0/torch.tan(f_m_ik))
             mask *= phase['threshold'] > cot_ij
             mask *= phase['threshold'] > cot_m_ij
             mask *= phase['threshold'] > cot_ik
