@@ -369,8 +369,8 @@ phase:
   verbose_output: false
   x:
     enabled: true
-    sample_length: 128
-    load_length: 256
+    sample_length: 256
+    load_length: 512
     offset: 0
     use_rise_data: false
     save_output: false
@@ -389,8 +389,8 @@ phase:
     use_coupled_frequency: false
   y:
     enabled: true
-    sample_length: 128
-    load_length: 256
+    sample_length: 256
+    load_length: 512
     offset: 0
     use_rise_data: false
     save_output: false
