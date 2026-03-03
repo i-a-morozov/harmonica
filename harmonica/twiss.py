@@ -180,8 +180,12 @@ class Twiss():
         Estimate free normalization matrix elements at (virtual) location.
     phase_objective(beta:torch.Tensor, mux:torch.Tensor, muy:torch.Tensor, matrix:torch.Tensor) -> torch.Tensor
         Evaluate phase objective.
-    get_twiss_from_phase_fit(self, matrix: Callable[[int, int], torch.Tensor], *, limit:int=10, count:int=64, verbose:bool=False, **kwargs) -> torch.Tensor
+    get_twiss_from_phase_fit(self, matrix: Callable[[int, int], torch.Tensor], *, limit:int=10, count:int=64, mc_phase:bool=False, log_cosh:bool=False, log_cosh_scale:float=1.0, phase_filter:bool=False, phase_threshold:float=10.0, model_threshold:float=0.5, verbose:bool=False, **kwargs) -> torch.Tensor
         Estimate twiss from phase fit.
+    phase_objective_global(beta:torch.Tensor, probe:torch.Tensor, other:torch.Tensor, mux:torch.Tensor, muy:torch.Tensor, matrix:torch.Tensor, *, dtype:torch.dtype=torch.float64, device:torch.device=torch.device('cpu')) -> torch.Tensor
+        Evaluate global phase objective.
+    get_twiss_from_phase_fit_global(self, matrix: Callable[[int, int], torch.Tensor], *, limit:int=10, count:int=64, mc_phase:bool=False, log_cosh:bool=False, log_cosh_scale:float=1.0, phase_filter:bool=False, phase_threshold:float=10.0, model_threshold:float=0.5, verbose:bool=False, **kwargs) -> torch.Tensor
+        Estimate twiss from global phase fit.
     process(self, value:torch.Tensor, error:torch.Tensor, *, mask:torch.Tensor=None, cut:float=5.0, use_error:bool=True, center_estimator:Callable[[torch.Tensor], torch.Tensor]=median, spread_estimator:Callable[[torch.Tensor], torch.Tensor]=biweight_midvariance) -> tuple
         Process data for single parameter for all locations with optional mask.
     save_model(self, file:str, **kwargs) -> None:
@@ -2923,11 +2927,71 @@ class Twiss():
         return (x_sum**2 * y_sum**2).sqrt()
 
 
+    @staticmethod
+    def phase_filter_mask(mux:torch.Tensor,
+                          muy:torch.Tensor,
+                          mux_model:torch.Tensor,
+                          muy_model:torch.Tensor,
+                          *,
+                          phase_threshold:float=10.0,
+                          model_threshold:float=0.5,
+                          epsilon:float=1.0E-12) -> torch.Tensor:
+        """
+        Compute phase pre-filter mask for sampled pairs.
+
+        The logic follows filter_twiss phase/model filters and is applied to
+        both x and y phase advances.
+        """
+        mask = torch.ones_like(mux, dtype=torch.bool)
+
+        if phase_threshold is not None:
+            threshold = torch.tensor(phase_threshold, dtype=mux.dtype, device=mux.device)
+            cot_mux = torch.abs(1.0/torch.tan(mux))
+            cot_muy = torch.abs(1.0/torch.tan(muy))
+            cot_mux_model = torch.abs(1.0/torch.tan(mux_model))
+            cot_muy_model = torch.abs(1.0/torch.tan(muy_model))
+
+            mask &= threshold > cot_mux
+            mask &= threshold > cot_muy
+            mask &= threshold > cot_mux_model
+            mask &= threshold > cot_muy_model
+
+        if model_threshold is not None:
+            threshold = torch.tensor(model_threshold, dtype=mux.dtype, device=mux.device)
+            ratio_mux = ((mux - mux_model)/(mux_model + epsilon)).abs().nan_to_num(posinf=1.0E+12)
+            ratio_muy = ((muy - muy_model)/(muy_model + epsilon)).abs().nan_to_num(posinf=1.0E+12)
+            mask &= threshold > ratio_mux
+            mask &= threshold > ratio_muy
+
+        return mask
+
+
+    @staticmethod
+    def log_cosh_residual(residual:torch.Tensor,
+                          *,
+                          scale:float=1.0) -> torch.Tensor:
+        """
+        Map residuals to sqrt(log-cosh)-equivalent least-squares residuals.
+        """
+        scale = torch.tensor(scale, dtype=residual.dtype, device=residual.device).abs()
+        scale = torch.clamp(scale, min=1.0E-12)
+        x = residual/scale
+        ax = torch.abs(x)
+        loss = ax + torch.log1p(torch.exp(-2.0*ax)) - numpy.log(2.0)
+        return torch.sqrt(2.0*scale**2*loss.clamp(min=0.0))
+
+
     def get_twiss_from_phase_fit(self,
                                  matrix: Callable[[int, int], torch.Tensor],
                                  *,
                                  limit:int=10,
                                  count:int=64,
+                                 mc_phase:bool=False,
+                                 log_cosh:bool=False,
+                                 log_cosh_scale:float=1.0,
+                                 phase_filter:bool=False,
+                                 phase_threshold:float=10.0,
+                                 model_threshold:float=0.5,
                                  verbose:bool=False,
                                  **kwargs) -> torch.Tensor:
         """
@@ -2946,6 +3010,19 @@ class Twiss():
             range limit
         count: int
             number of samples
+        mc_phase: bool
+            if True, sample phase values using self.sigma_fx/self.sigma_fy
+            for each fit sample and recompute phase advances
+        log_cosh: bool
+            if True, use log-cosh robust loss equivalent residuals
+        log_cosh_scale: float
+            log-cosh scale parameter
+        phase_filter: bool
+            if True, apply pre-filtering using phase/model criteria
+        phase_threshold: float
+            threshold for phase cotangent pre-filtering
+        model_threshold: float
+            threshold for relative deviation from model phase advances
         verbose: bool
             verbose flag
         **kwargs:
@@ -2958,7 +3035,10 @@ class Twiss():
         """
         def objective(beta, mux, muy, matrix):
             beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
-            return self.phase_objective(beta, mux, muy, matrix).cpu().numpy()
+            value = self.phase_objective(beta, mux, muy, matrix)
+            if log_cosh:
+                value = self.log_cosh_residual(value, scale=log_cosh_scale)
+            return value.cpu().numpy()
 
         result = []
         for location in range(self.model.monitor_count):
@@ -2983,19 +3063,293 @@ class Twiss():
             index_probe = index_probe*torch.ones_like(index_other)
 
             transport = matrix(index_probe, index_other)
+            mux_nominal, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, self.fx)
+            muy_nominal, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, self.fy)
 
-            mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, self.fx)
-            muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, self.fy)
+            if not mc_phase:
+                mux, muy = mux_nominal, muy_nominal
 
-            index = torch.randint(2*limit, (count, 2*limit), dtype=torch.int64, device=self.device)
+            mux_model, *_ = Decomposition.phase_advance(index_probe, index_other, self.model.nux, self.model.fx)
+            muy_model, *_ = Decomposition.phase_advance(index_probe, index_other, self.model.nuy, self.model.fy)
+
+            select = torch.arange(2*limit, dtype=torch.int64, device=self.device)
+            if phase_filter:
+                mask = self.phase_filter_mask(mux_nominal, muy_nominal, mux_model, muy_model,
+                                              phase_threshold=phase_threshold,
+                                              model_threshold=model_threshold)
+                pool = select[mask]
+                if len(pool):
+                    select = pool
+
+            index = select[torch.randint(len(select), (count, 2*limit), dtype=torch.int64, device=self.device)]
             table = []
             for i in index:
-                fit, *_ = leastsq(objective, beta, args=(mux[i], muy[i], transport[i]), full_output=1, **kwargs)
+                if mc_phase:
+                    fx = mod(self.fx + self.sigma_fx*torch.randn_like(self.fx), 2.0*numpy.pi, -numpy.pi)
+                    fy = mod(self.fy + self.sigma_fy*torch.randn_like(self.fy), 2.0*numpy.pi, -numpy.pi)
+                    mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, fx)
+                    muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, fy)
+
+                fit_index = i
+                if phase_filter and mc_phase:
+                    mask = self.phase_filter_mask(mux[i], muy[i], mux_model[i], muy_model[i],
+                                                  phase_threshold=phase_threshold,
+                                                  model_threshold=model_threshold)
+                    if mask.sum() >= 8:
+                        fit_index = i[mask]
+
+                fit, *_ = leastsq(objective, beta, args=(mux[fit_index], muy[fit_index], transport[fit_index]), full_output=1, **kwargs)
                 table.append(fit)
             table = torch.tensor(numpy.array(table), dtype=self.dtype, device=self.device).T
             result.append(table)
 
         return torch.stack(result)
+
+
+    @staticmethod
+    def phase_objective_global(beta:torch.Tensor,
+                               probe:torch.Tensor,
+                               other:torch.Tensor,
+                               mux:torch.Tensor,
+                               muy:torch.Tensor,
+                               matrix:torch.Tensor,
+                               *,
+                               dtype:torch.dtype=torch.float64,
+                               device:torch.device=torch.device('cpu')) -> torch.Tensor:
+        """
+        Evaluate global phase objective.
+
+        Parameters
+        ----------
+        beta: torch.Tensor
+            flattened monitor parameters [n11, n33, n21, n43, n13, n31, n14, n41] for all monitor locations
+        probe: torch.Tensor
+            probe monitor location indices for each sampled pair
+        other: torch.Tensor
+            other monitor location indices for each sampled pair
+        mux & muy: torch.Tensor
+            x & y phase advances for each sampled pair
+        matrix: torch.Tensor
+            transport matrices for sampled pairs
+        dtype: torch.dtype
+            data type
+        device: torch.device
+            data device
+
+        Returns
+        -------
+        flattened residual vector (torch.Tensor)
+
+        """
+        beta = beta.reshape(-1, 8)
+
+        normal = [parametric_normal(*value, dtype=dtype, device=device) for value in beta]
+        normal = torch.stack(normal)
+        try:
+            inverse = torch.linalg.inv(normal)
+        except RuntimeError:
+            return torch.full((matrix.numel(),), 1.0E+12, dtype=dtype, device=device)
+
+        count = len(mux)
+
+        rotation = torch.zeros((count, 4, 4), dtype=dtype, device=device)
+
+        cos_mux, sin_mux = torch.cos(mux), torch.sin(mux)
+        cos_muy, sin_muy = torch.cos(muy), torch.sin(muy)
+
+        rotation[:, 0, 0] = cos_mux
+        rotation[:, 0, 1] = sin_mux
+        rotation[:, 1, 0] = -sin_mux
+        rotation[:, 1, 1] = cos_mux
+
+        rotation[:, 2, 2] = cos_muy
+        rotation[:, 2, 3] = sin_muy
+        rotation[:, 3, 2] = -sin_muy
+        rotation[:, 3, 3] = cos_muy
+
+        estimate = normal[other] @ rotation @ inverse[probe]
+        residual = (matrix - estimate).reshape(-1)
+
+        return residual
+
+
+    def get_twiss_from_phase_fit_global(self,
+                                        matrix: Callable[[int, int], torch.Tensor],
+                                        *,
+                                        limit:int=10,
+                                        count:int=64,
+                                        mc_phase:bool=False,
+                                        log_cosh:bool=False,
+                                        log_cosh_scale:float=1.0,
+                                        phase_filter:bool=False,
+                                        phase_threshold:float=10.0,
+                                        model_threshold:float=0.5,
+                                        verbose:bool=False,
+                                        **kwargs) -> torch.Tensor:
+        """
+        Estimate twiss from global phase fit.
+
+        Parameters
+        ----------
+        matrix: Callable[[int, int], torch.Tensor]
+            transport matrix generator between locations
+            self.model.matrix
+            self.matrix
+            self.matrix_virtual
+        limit: int
+            range limit
+        count: int
+            number of global samples
+        mc_phase: bool
+            if True, sample phase values using self.sigma_fx/self.sigma_fy
+            for each global sample and recompute phase advances
+        log_cosh: bool
+            if True, use log-cosh robust loss equivalent residuals
+        log_cosh_scale: float
+            log-cosh scale parameter
+        phase_filter: bool
+            if True, apply pre-filtering using phase/model criteria
+        phase_threshold: float
+            threshold for phase cotangent pre-filtering
+        model_threshold: float
+            threshold for relative deviation from model phase advances
+        verbose: bool
+            verbose flag
+        **kwargs:
+            passed to leastsq
+
+        Returns
+        -------
+        estimated parameters (torch.Tensor)
+
+        """
+        def objective(beta, probe, other, mux, muy, transport):
+            beta = torch.tensor(beta, dtype=self.dtype, device=self.device)
+            value = self.phase_objective_global(beta, probe, other, mux, muy, transport,
+                                                dtype=self.dtype, device=self.device)
+            if log_cosh:
+                value = self.log_cosh_residual(value, scale=log_cosh_scale)
+            return value.cpu().numpy()
+
+        monitor_count = self.model.monitor_count
+        pair_count = 2*limit
+
+        probe_model_table = []
+        other_model_table = []
+        other_location_table = []
+        transport_table = []
+        mux_table = []
+        muy_table = []
+        mux_model_table = []
+        muy_model_table = []
+        select_table = []
+
+        for probe in range(monitor_count):
+            others = [probe + index for index in range(-limit, limit + 1) if index != 0]
+            shifts = [(other - int(mod(other, monitor_count))) // monitor_count for other in others]
+            others = [int(mod(other, monitor_count)) for other in others]
+
+            index_probe = self.model.monitor_index[probe]
+            index_other = [self.model.monitor_index[other] + shift*self.model.size for other, shift in zip(others, shifts)]
+
+            index_other = torch.tensor(index_other, dtype=torch.int64, device=self.device)
+            index_probe = index_probe*torch.ones_like(index_other)
+
+            probe_model_table.append(index_probe)
+            other_model_table.append(index_other)
+            other_location_table.append(torch.tensor(others, dtype=torch.int64, device=self.device))
+            transport_table.append(matrix(index_probe, index_other))
+
+            mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, self.fx)
+            muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, self.fy)
+            mux_model, *_ = Decomposition.phase_advance(index_probe, index_other, self.model.nux, self.model.fx)
+            muy_model, *_ = Decomposition.phase_advance(index_probe, index_other, self.model.nuy, self.model.fy)
+
+            mux_table.append(mux)
+            muy_table.append(muy)
+            mux_model_table.append(mux_model)
+            muy_model_table.append(muy_model)
+
+            select = torch.arange(pair_count, dtype=torch.int64, device=self.device)
+            if phase_filter:
+                mask = self.phase_filter_mask(mux, muy, mux_model, muy_model,
+                                              phase_threshold=phase_threshold,
+                                              model_threshold=model_threshold)
+                pool = select[mask]
+                if len(pool):
+                    select = pool
+            select_table.append(select)
+
+        probe_model_table = torch.stack(probe_model_table)
+        other_model_table = torch.stack(other_model_table)
+        other_location_table = torch.stack(other_location_table)
+        transport_table = torch.stack(transport_table)
+        mux_table = torch.stack(mux_table)
+        muy_table = torch.stack(muy_table)
+        mux_model_table = torch.stack(mux_model_table)
+        muy_model_table = torch.stack(muy_model_table)
+
+        probe_location_table = torch.arange(monitor_count, dtype=torch.int64, device=self.device).unsqueeze(1)
+        probe_location_table = probe_location_table.expand(-1, pair_count)
+
+        beta = self.model.normal[self.model.monitor_index]
+        beta = beta[:, [0, 2, 1, 3, 0, 2, 0, 3], [0, 2, 0, 2, 2, 0, 3, 0]]
+        beta = beta.reshape(-1).cpu().numpy()
+
+        row = torch.arange(monitor_count, dtype=torch.int64, device=self.device).unsqueeze(1)
+        row = row.expand(-1, pair_count)
+
+        result = []
+        for sample in range(count):
+
+            if verbose:
+                print(f'{sample + 1}/{count}')
+
+            index = []
+            for select in select_table:
+                local = select[torch.randint(len(select), (pair_count,), dtype=torch.int64, device=self.device)]
+                index.append(local)
+            index = torch.stack(index)
+
+            probe_model = probe_model_table[row, index].reshape(-1)
+            other_model = other_model_table[row, index].reshape(-1)
+            probe_location = probe_location_table[row, index].reshape(-1)
+            other_location = other_location_table[row, index].reshape(-1)
+            transport = transport_table[row, index].reshape(-1, 4, 4)
+
+            if mc_phase:
+                fx = mod(self.fx + self.sigma_fx*torch.randn_like(self.fx), 2.0*numpy.pi, -numpy.pi)
+                fy = mod(self.fy + self.sigma_fy*torch.randn_like(self.fy), 2.0*numpy.pi, -numpy.pi)
+                mux, *_ = Decomposition.phase_advance(probe_model, other_model, self.table.nux, fx)
+                muy, *_ = Decomposition.phase_advance(probe_model, other_model, self.table.nuy, fy)
+            else:
+                mux = mux_table[row, index].reshape(-1)
+                muy = muy_table[row, index].reshape(-1)
+
+            if phase_filter and mc_phase:
+                mux_model = mux_model_table[row, index].reshape(-1)
+                muy_model = muy_model_table[row, index].reshape(-1)
+                mask = self.phase_filter_mask(mux, muy, mux_model, muy_model,
+                                              phase_threshold=phase_threshold,
+                                              model_threshold=model_threshold)
+                # Keep enough equations for stable least-squares.
+                if mask.sum() >= 8*monitor_count:
+                    probe_location = probe_location[mask]
+                    other_location = other_location[mask]
+                    mux = mux[mask]
+                    muy = muy[mask]
+                    transport = transport[mask]
+
+            fit, *_ = leastsq(objective, beta,
+                              args=(probe_location, other_location, mux, muy, transport),
+                              full_output=1, **kwargs)
+
+            result.append(fit)
+
+        result = torch.tensor(numpy.array(result), dtype=self.dtype, device=self.device)
+        result = result.reshape(count, monitor_count, 8).swapaxes(0, -1).swapaxes(0, 1)
+
+        return result
 
 
     def process(self,
