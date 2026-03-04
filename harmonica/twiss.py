@@ -2876,7 +2876,7 @@ class Twiss():
                         muy:torch.Tensor,
                         matrix:torch.Tensor) -> torch.Tensor:
         """
-        Evaluate phase objective.
+        Evaluate phase objective residuals.
 
         Parameters
         ----------
@@ -2889,42 +2889,31 @@ class Twiss():
 
         Returns
         -------
-        objective value (torch.Tensor)
+        flattened residual vector (torch.Tensor)
 
         """
-        n11, n33, n21, n43, n13, n31, n14, n41 = beta
+        normal = parametric_normal(*beta, dtype=beta.dtype, device=beta.device)
 
-        m11, m12, m13, m14 = matrix[:, 0].T
-        m21, m22, m23, m24 = matrix[:, 1].T
-        m31, m32, m33, m34 = matrix[:, 2].T
-        m41, m42, m43, m44 = matrix[:, 3].T
+        count = len(mux)
+        rotation_inverse = torch.zeros((count, 4, 4), dtype=matrix.dtype, device=matrix.device)
 
-        x_sin  = - m11*n11
-        x_sin += - m12*n21
-        x_sin += - m13*n31
-        x_sin += - m14*n41
-        x_sin *= torch.sin(mux)
+        cos_mux, sin_mux = torch.cos(mux), torch.sin(mux)
+        cos_muy, sin_muy = torch.cos(muy), torch.sin(muy)
 
-        x_cos  = m12*n33*(n11 + n14*(n33*n41 - n31*n43))/(n11*(n11*n33 - n13*n31))
-        x_cos += m13*n14*n33/n11
-        x_cos += m14*(n13*n14*n33*n41 + n11*(n13 - n14*n33*n43))/(n11*(n13*n31 - n11*n33))
-        x_cos *= torch.cos(mux)
+        rotation_inverse[:, 0, 0] = cos_mux
+        rotation_inverse[:, 0, 1] = -sin_mux
+        rotation_inverse[:, 1, 0] = sin_mux
+        rotation_inverse[:, 1, 1] = cos_mux
 
-        y_sin  = - m31*n13
-        y_sin += - m32*(n13*n21 + n33*n41 - n31*n43)/n11
-        y_sin += - m33*n33
-        y_sin += - m34*n43
-        y_sin *= torch.sin(muy)
+        rotation_inverse[:, 2, 2] = cos_muy
+        rotation_inverse[:, 2, 3] = -sin_muy
+        rotation_inverse[:, 3, 2] = sin_muy
+        rotation_inverse[:, 3, 3] = cos_muy
 
-        y_cos  = m31*n14
-        y_cos += m32*(-n31 + n14*n21*n33 + n14*n31*(-n13*n21 - n33*n41 + n31*n43)/n11)/(n11*n33 - n13*n31)
-        y_cos += m34*(n11 + n14*(n33*n41 - n31*n43))/(n11*n33 - n13*n31)
-        y_cos *= torch.cos(muy)
+        estimate = matrix @ normal.unsqueeze(0) @ rotation_inverse
+        residual = torch.stack([estimate[:, 0, 1], estimate[:, 2, 3]]).T.reshape(-1)
 
-        x_sum = x_cos + x_sin
-        y_sum = y_cos + y_sin
-
-        return (x_sum**2 * y_sum**2).sqrt()
+        return residual.nan_to_num(posinf=1.0E+12, neginf=-1.0E+12)
 
 
     @staticmethod
@@ -2979,6 +2968,53 @@ class Twiss():
         ax = torch.abs(x)
         loss = ax + torch.log1p(torch.exp(-2.0*ax)) - numpy.log(2.0)
         return torch.sqrt(2.0*scale**2*loss.clamp(min=0.0))
+
+
+    def phase_unroll_monotonic(self,
+                               phase:torch.Tensor) -> torch.Tensor:
+        """
+        Unroll monitor phases to a monotonic sequence and map back to full table.
+        """
+        phase = torch.clone(phase)
+        index = self.model.monitor_index
+
+        table = torch.clone(phase[index])
+        table = table - table[0]
+
+        period = torch.tensor(2.0*numpy.pi, dtype=self.dtype, device=self.device)
+        for i in range(1, len(table)):
+            while table[i] < table[i - 1]:
+                table[i] += period
+
+        phase[index] = table
+
+        return phase
+
+
+    @staticmethod
+    def phase_advance_unrolled(probe:torch.Tensor,
+                               other:torch.Tensor,
+                               frequency:float,
+                               phase:torch.Tensor) -> torch.Tensor:
+        """
+        Compute phase advance from unrolled phases without local phase wrapping.
+        """
+        count, *_ = phase.shape
+        dtype, device = phase.dtype, phase.device
+
+        probe = probe.to(dtype).to(device)
+        other = other.to(dtype).to(device)
+
+        probe_index = mod(probe, count).to(torch.int64)
+        other_index = mod(other, count).to(torch.int64)
+
+        probe_shift = torch.div(probe - probe_index, count, rounding_mode='floor')
+        other_shift = torch.div(other - other_index, count, rounding_mode='floor')
+
+        probe_phase = phase[probe_index] + probe_shift*2.0*numpy.pi*frequency
+        other_phase = phase[other_index] + other_shift*2.0*numpy.pi*frequency
+
+        return other_phase - probe_phase
 
 
     def get_twiss_from_phase_fit(self,
@@ -3041,6 +3077,9 @@ class Twiss():
             return value.cpu().numpy()
 
         result = []
+        fx_unrolled = self.phase_unroll_monotonic(self.fx)
+        fy_unrolled = self.phase_unroll_monotonic(self.fy)
+
         for location in range(self.model.monitor_count):
 
             if verbose:
@@ -3085,10 +3124,10 @@ class Twiss():
             table = []
             for i in index:
                 if mc_phase:
-                    fx = mod(self.fx + self.sigma_fx*torch.randn_like(self.fx), 2.0*numpy.pi, -numpy.pi)
-                    fy = mod(self.fy + self.sigma_fy*torch.randn_like(self.fy), 2.0*numpy.pi, -numpy.pi)
-                    mux, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nux, fx)
-                    muy, *_ = Decomposition.phase_advance(index_probe, index_other, self.table.nuy, fy)
+                    fx = fx_unrolled + self.sigma_fx*torch.randn_like(self.fx)
+                    fy = fy_unrolled + self.sigma_fy*torch.randn_like(self.fy)
+                    mux = self.phase_advance_unrolled(index_probe, index_other, self.table.nux, fx)
+                    muy = self.phase_advance_unrolled(index_probe, index_other, self.table.nuy, fy)
 
                 fit_index = i
                 if phase_filter and mc_phase:
@@ -3146,31 +3185,30 @@ class Twiss():
         normal = [parametric_normal(*value, dtype=dtype, device=device) for value in beta]
         normal = torch.stack(normal)
         try:
-            inverse = torch.linalg.inv(normal)
+            _ = torch.linalg.inv(normal)
         except RuntimeError:
             return torch.full((matrix.numel(),), 1.0E+12, dtype=dtype, device=device)
 
         count = len(mux)
 
-        rotation = torch.zeros((count, 4, 4), dtype=dtype, device=device)
+        rotation_inverse = torch.zeros((count, 4, 4), dtype=dtype, device=device)
 
         cos_mux, sin_mux = torch.cos(mux), torch.sin(mux)
         cos_muy, sin_muy = torch.cos(muy), torch.sin(muy)
 
-        rotation[:, 0, 0] = cos_mux
-        rotation[:, 0, 1] = sin_mux
-        rotation[:, 1, 0] = -sin_mux
-        rotation[:, 1, 1] = cos_mux
+        rotation_inverse[:, 0, 0] = cos_mux
+        rotation_inverse[:, 0, 1] = -sin_mux
+        rotation_inverse[:, 1, 0] = sin_mux
+        rotation_inverse[:, 1, 1] = cos_mux
 
-        rotation[:, 2, 2] = cos_muy
-        rotation[:, 2, 3] = sin_muy
-        rotation[:, 3, 2] = -sin_muy
-        rotation[:, 3, 3] = cos_muy
+        rotation_inverse[:, 2, 2] = cos_muy
+        rotation_inverse[:, 2, 3] = -sin_muy
+        rotation_inverse[:, 3, 2] = sin_muy
+        rotation_inverse[:, 3, 3] = cos_muy
 
-        estimate = normal[other] @ rotation @ inverse[probe]
-        residual = (matrix - estimate).reshape(-1)
-
-        return residual
+        estimate = matrix @ normal[probe] @ rotation_inverse
+        residual = (normal[other] - estimate).reshape(-1)
+        return residual.nan_to_num(posinf=1.0E+12, neginf=-1.0E+12)
 
 
     def get_twiss_from_phase_fit_global(self,
@@ -3300,6 +3338,9 @@ class Twiss():
         row = row.expand(-1, pair_count)
 
         result = []
+        fx_unrolled = self.phase_unroll_monotonic(self.fx)
+        fy_unrolled = self.phase_unroll_monotonic(self.fy)
+
         for sample in range(count):
 
             if verbose:
@@ -3318,10 +3359,10 @@ class Twiss():
             transport = transport_table[row, index].reshape(-1, 4, 4)
 
             if mc_phase:
-                fx = mod(self.fx + self.sigma_fx*torch.randn_like(self.fx), 2.0*numpy.pi, -numpy.pi)
-                fy = mod(self.fy + self.sigma_fy*torch.randn_like(self.fy), 2.0*numpy.pi, -numpy.pi)
-                mux, *_ = Decomposition.phase_advance(probe_model, other_model, self.table.nux, fx)
-                muy, *_ = Decomposition.phase_advance(probe_model, other_model, self.table.nuy, fy)
+                fx = fx_unrolled + self.sigma_fx*torch.randn_like(self.fx)
+                fy = fy_unrolled + self.sigma_fy*torch.randn_like(self.fy)
+                mux = self.phase_advance_unrolled(probe_model, other_model, self.table.nux, fx)
+                muy = self.phase_advance_unrolled(probe_model, other_model, self.table.nuy, fy)
             else:
                 mux = mux_table[row, index].reshape(-1)
                 muy = muy_table[row, index].reshape(-1)
